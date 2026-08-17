@@ -61,6 +61,65 @@ def load_json(path: Path) -> dict[str, Any]:
         return {}
 
 
+HEALTH_LABELS = {
+    "gateway": "OpenClaw-gateway",
+    "database": "database",
+    "email": "e-post",
+    "email_pipeline": "e-postbehandling",
+    "delivery_outbox": "meldingslevering",
+    "scheduler": "planlagte jobber",
+    "spond": "Spond",
+    "telegram": "meldingskanal",
+    "disk": "diskplass",
+    "calendar_hygiene": "kalenderkontroll",
+}
+
+
+def health_summary(workspace: Path) -> dict[str, Any]:
+    """Curate deterministic health state into dashboard-safe semantics.
+
+    Only a critical gateway or database failure means FamilyBot has stopped.
+    Other integration failures are reported as degraded, so a working bot is
+    never presented as completely unavailable.
+    """
+    snapshot_path = workspace / "db/health_status.json"
+    snapshot = load_json(snapshot_path)
+    legacy_path = workspace / "db/health_failures.json"
+    legacy = load_json(legacy_path)
+    raw_results = snapshot.get("results")
+    issues = []
+    if isinstance(raw_results, list):
+        for item in raw_results:
+            if not isinstance(item, dict) or item.get("status") not in {"warn", "critical"}:
+                continue
+            service = str(item.get("service") or "unknown")
+            issues.append({
+                "service": service,
+                "label": HEALTH_LABELS.get(service, service.replace("_", " ")),
+                "severity": item["status"],
+            })
+    elif legacy:
+        for service, count in legacy.items():
+            if isinstance(count, (int, float)) and count > 0:
+                issues.append({
+                    "service": service,
+                    "label": HEALTH_LABELS.get(service, service.replace("_", " ")),
+                    "severity": "critical" if service in {"gateway", "database"} else "warn",
+                })
+
+    stopped = any(
+        item["severity"] == "critical" and item["service"] in {"gateway", "database"}
+        for item in issues
+    )
+    state = "stopped" if stopped else "degraded" if issues else "ok"
+    return {
+        "status": state,
+        "ok": not stopped,
+        "issues": issues,
+        "checked_at": snapshot.get("checked_at") or file_timestamp(snapshot_path) or file_timestamp(legacy_path),
+    }
+
+
 WEATHER_LABELS = {
     "clearsky": "klart",
     "fair": "lettskyet",
@@ -432,12 +491,12 @@ class FamilyRepository:
             )) if self.table_exists(connection, "reward_goals") else []
 
         spond_state = load_json(self.workspace / "db/spond_sync_state.json")
-        health = load_json(self.workspace / "db/health_failures.json")
         vacation = load_json(self.workspace / "memory/vacation-mode.json")
         evidence = {
             "familybot.email": email_overview.get("latest_processed"),
             "familybot.spond": spond_state.get("checked_at"),
-            "familybot.health": file_timestamp(self.workspace / "db/health_failures.json"),
+            "familybot.health": file_timestamp(self.workspace / "db/health_status.json")
+                                or file_timestamp(self.workspace / "db/health_failures.json"),
             "familybot.status": file_timestamp(self.workspace / "STATUS.md"),
             "familybot.tbane": file_timestamp(self.workspace / "db/tbane_alert_state.json"),
             "familybot.briefing.weekday": file_timestamp(self.workspace / "logs/briefing.log"),
@@ -534,7 +593,7 @@ class FamilyRepository:
                     "new": spond_state.get("new", 0),
                     "changed": spond_state.get("changed", 0),
                 },
-                "health": {"failures": health, "ok": all(value == 0 for value in health.values()) if health else None},
+                "health": health_summary(self.workspace),
             },
             "vacation_mode": bool(vacation.get("enabled", False)),
             "hardening": hardening,

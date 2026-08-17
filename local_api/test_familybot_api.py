@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from dashboard_migration import clear_active_setup, migrate
-from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, transport_summary, trusted_portal_origin, weather_summary
+from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, health_summary, transport_summary, trusted_portal_origin, weather_summary
 
 
 SCHEMA = """
@@ -85,6 +85,32 @@ class RepositoryTests(unittest.TestCase):
         child_one = next(item for item in dashboard["week_plan_status"] if item["member"] == "Child One")
         self.assertTrue(child_one["inbox_candidate"])
         self.assertFalse(child_one["received"])
+
+    def test_health_status_only_stops_for_core_failure(self):
+        root = Path(self.temp.name)
+        status_path = root / "db/health_status.json"
+        status_path.write_text(json.dumps({
+            "checked_at": "2026-08-17T18:00:00+02:00",
+            "results": [{"service": "telegram", "status": "warn", "msg": "unavailable"}],
+        }), encoding="utf-8")
+        degraded = health_summary(root)
+        self.assertEqual(degraded["status"], "degraded")
+        self.assertTrue(degraded["ok"])
+        self.assertEqual(degraded["issues"][0]["label"], "meldingskanal")
+
+        status_path.write_text(json.dumps({
+            "checked_at": "2026-08-17T18:01:00+02:00",
+            "results": [{"service": "gateway", "status": "critical", "msg": "down"}],
+        }), encoding="utf-8")
+        stopped = health_summary(root)
+        self.assertEqual(stopped["status"], "stopped")
+        self.assertFalse(stopped["ok"])
+
+        status_path.write_text(json.dumps({
+            "checked_at": "2026-08-17T18:02:00+02:00",
+            "results": [{"service": "gateway", "status": "ok", "msg": "running"}],
+        }), encoding="utf-8")
+        self.assertEqual(health_summary(root)["status"], "ok")
 
     def test_chore_create_move_archive_and_restore(self):
         chore = self.repo.create_chore({"title":"Pakke gymtøy","assigned_to":"child one","priority":"important","due_date":"2026-08-18"})

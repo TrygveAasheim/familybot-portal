@@ -83,7 +83,7 @@ ENTUR_ENDPOINT = "https://api.entur.io/journey-planner/v3/graphql"
 
 
 def weather_summary(workspace: Path) -> dict[str, Any]:
-    """Return a 30-minute cached MET forecast for the family's Oslo area."""
+    """Return a 30-minute cached MET forecast for the configured home location."""
     cache_path = workspace / "db/dashboard_weather.json"
     cached = load_json(cache_path)
     checked = cached.get("updated_at")
@@ -94,9 +94,18 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
                 return cached
         except (TypeError, ValueError):
             pass
-    endpoint = "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=59.96&lon=10.66"
-    request = urllib.request.Request(endpoint, headers={"User-Agent": "FamilyBot-local/1.0"})
     try:
+        weather = integration(workspace, "weather")
+        latitude = float(weather["home_lat"])
+        longitude = float(weather["home_lon"])
+        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+            raise ValueError("Configured weather coordinates are outside valid ranges")
+        user_agent = str(weather.get("user_agent") or "FamilyBot-local/1.0")
+        endpoint = (
+            "https://api.met.no/weatherapi/locationforecast/2.0/compact"
+            f"?lat={latitude:.5f}&lon={longitude:.5f}"
+        )
+        request = urllib.request.Request(endpoint, headers={"User-Agent": user_agent})
         with urllib.request.urlopen(request, timeout=4) as response:
             payload = json.load(response)
         series = payload["properties"]["timeseries"][:6]

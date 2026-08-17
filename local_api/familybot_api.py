@@ -417,7 +417,7 @@ class FamilyRepository:
                           k.title,m.icon,f.name AS member
                    FROM chore_completions c
                    JOIN kanban_cards k ON k.id=c.card_id
-                   LEFT JOIN family_chore_meta m ON m.card_id=k.id
+                   JOIN family_chore_meta m ON m.card_id=k.id AND m.visible_to_kids=1
                    JOIN family_members f ON f.id=c.member_id
                    ORDER BY c.completed_at DESC,c.id DESC LIMIT 40"""
             )) if self.table_exists(connection, "chore_completions") else []

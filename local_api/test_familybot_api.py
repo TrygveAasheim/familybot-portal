@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from dashboard_migration import migrate
+from dashboard_migration import clear_active_setup, migrate
 from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, transport_summary, trusted_portal_origin, weather_summary
 
 
@@ -172,6 +172,25 @@ class RepositoryTests(unittest.TestCase):
         second = migrate(self.db, seed=True)
         self.assertEqual(first, {"chores": 6, "rewards": 2})
         self.assertEqual(second, {"chores": 0, "rewards": 0})
+
+    def test_clear_setup_preserves_history_but_hides_active_setup(self):
+        migrate(self.db, seed=True)
+        with sqlite3.connect(self.db) as connection:
+            card_id = connection.execute(
+                """SELECT k.id FROM kanban_cards k
+                   JOIN family_chore_meta m ON m.card_id=k.id
+                   WHERE lower(k.assigned_to)='child one' LIMIT 1"""
+            ).fetchone()[0]
+        self.repo.complete_chore(card_id, {
+            "member_id": 3, "idempotency_key": "preserved-history-key",
+        })
+        result = clear_active_setup(self.db)
+        self.assertEqual(result, {"archived_chores": 6, "deactivated_rewards": 2})
+        with sqlite3.connect(self.db) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM chore_completions").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM reward_goals WHERE active=1").fetchone()[0], 0)
+        dashboard = self.repo.dashboard(dt.date(2026, 8, 15))
+        self.assertTrue(all(not child["chores"] and child["reward"] is None and not child["history"] for child in dashboard["children"]))
 
     def test_parent_token_must_not_be_empty(self):
         server = FamilyApiServer(("127.0.0.1", 0), self.repo, "1234")

@@ -22,10 +22,11 @@ test("server-renders the iPad family dashboard shell", async () => {
 });
 
 test("source keeps the data boundary and functional surfaces explicit", async () => {
-  const [page, consoleSource, apiSource] = await Promise.all([
+  const [page, consoleSource, apiSource, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/FamilyConsole.tsx", import.meta.url), "utf8"),
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(page, /codex-preview/);
   assert.match(consoleSource, /Familiens oversikt/);
@@ -34,6 +35,11 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /function completionKey/);
   assert.match(consoleSource, /Skolen denne uken/);
   assert.match(consoleSource, /function TransportCountdown/);
+  assert.match(consoleSource, /Familiebot fungerer/);
+  assert.match(consoleSource, /Familiebot har stoppet/);
+  assert.doesNotMatch(consoleSource, /Spør FamilyBot i Telegram/);
+  assert.match(styles, /\.realtime-badge\{[^}]*white-space:nowrap/);
+  assert.match(styles, /\.departure-countdown\{[^}]*white-space:nowrap/);
   assert.match(consoleSource, /setInterval\(\(\)=>setNow\(Date\.now\(\)\),1_000\)/);
   assert.match(consoleSource, /Neste mot sentrum|transport\.status/);
   assert.match(apiSource, /centre_quay_id/);

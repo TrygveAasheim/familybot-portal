@@ -61,7 +61,8 @@ def main() -> None:
             for index in connection.execute("PRAGMA index_list('chore_completions')")
         )
     source=(ROOT/"app/_components/FamilyConsole.tsx").read_text()
-    record("AC-03",child_cards>=6 and completion_unique and 'className="mission-card"' in source and 'onClick={()=>void complete(chore)}' in source,f"{child_cards} kid cards; unique idempotency key; one-tap handler",started)
+    empty_ready="Klar for nye oppdrag" in source and "Lag de første oppdragene sammen" in source
+    record("AC-03",completion_unique and 'className="mission-card"' in source and 'onClick={()=>void complete(chore)}' in source and empty_ready,f"{child_cards} active kid cards; durable one-tap handler and guided empty state",started)
 
     started=time.monotonic()
     with sqlite3.connect(DB) as connection:
@@ -77,8 +78,8 @@ def main() -> None:
 
     started=time.monotonic()
     rewards=[child.get("reward") for child in dashboard["children"]]
-    reward_ok=all(reward and all(key in reward for key in ("earned","remaining","percent","target_value","title")) for reward in rewards)
-    record("AC-06",reward_ok,f"reward calculations present for {len(dashboard['children'])} configured children",started)
+    reward_ok=all(reward is None or all(key in reward for key in ("earned","remaining","percent","target_value","title")) for reward in rewards)
+    record("AC-06",reward_ok and "Sett nytt mål" in source,f"reward contract valid; {sum(reward is not None for reward in rewards)} active target(s)",started)
 
     started=time.monotonic()
     pin=ROOT/"runtime/parent-pin.txt"; mode=pin.stat().st_mode & 0o777

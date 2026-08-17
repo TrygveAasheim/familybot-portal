@@ -142,20 +142,58 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
     return {"chores": created_chores, "rewards": created_rewards}
 
 
+def clear_active_setup(db_path: Path) -> dict[str, int]:
+    """Hide and archive the current kid setup without deleting its history."""
+    now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.executescript(SCHEMA)
+        active_chores = connection.execute(
+            """SELECT COUNT(*) FROM kanban_cards k
+               JOIN family_chore_meta m ON m.card_id=k.id
+               WHERE k.archived_at IS NULL AND m.visible_to_kids=1"""
+        ).fetchone()[0]
+        active_rewards = connection.execute(
+            "SELECT COUNT(*) FROM reward_goals WHERE active=1"
+        ).fetchone()[0]
+        connection.execute(
+            """UPDATE kanban_cards SET archived_at=?,updated_at=?
+               WHERE archived_at IS NULL AND id IN (
+                   SELECT card_id FROM family_chore_meta WHERE visible_to_kids=1
+               )""",
+            (now, now),
+        )
+        connection.execute(
+            "UPDATE family_chore_meta SET visible_to_kids=0,updated_at=? WHERE visible_to_kids=1",
+            (now,),
+        )
+        connection.execute("UPDATE reward_goals SET active=0 WHERE active=1")
+    return {"archived_chores": int(active_chores), "deactivated_rewards": int(active_rewards)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--backup-root", type=Path, default=DEFAULT_BACKUPS)
-    parser.add_argument("--seed", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--seed", action="store_true")
+    mode.add_argument("--clear-active-setup", action="store_true")
     parser.add_argument("--no-backup", action="store_true")
     args = parser.parse_args()
     if not args.db.is_file():
         raise SystemExit(f"Database not found: {args.db}")
     backup = None if args.no_backup else backup_database(args.db, args.backup_root)
     result = migrate(args.db, seed=args.seed)
+    cleared = clear_active_setup(args.db) if args.clear_active_setup else None
     if backup:
         print(f"[backup] {backup}")
     print(f"[migration] chores={result['chores']} rewards={result['rewards']}")
+    if cleared:
+        print(
+            "[cleared] "
+            f"archived_chores={cleared['archived_chores']} "
+            f"deactivated_rewards={cleared['deactivated_rewards']}"
+        )
 
 
 if __name__ == "__main__":

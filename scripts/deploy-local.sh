@@ -14,6 +14,11 @@ npm run lint
 npm test
 python3 local_api/dashboard_migration.py
 
+# Stop the managed service before replacing its runtime tree. Updating files
+# underneath a running Node process can otherwise trigger a restart against a
+# half-copied node_modules directory.
+launchctl bootout "gui/$UID_VALUE/ai.familybot.portal" 2>/dev/null || true
+
 mkdir -p "$TARGET/local_api" "$TARGET/local_service" "$TARGET/runtime"
 rsync -a --delete dist/standalone/ "$TARGET/dist/standalone/"
 rsync -a node_modules/react node_modules/react-dom node_modules/scheduler "$TARGET/dist/standalone/node_modules/"
@@ -25,8 +30,6 @@ fi
 chmod 600 "$TARGET/runtime/parent-pin.txt"
 sed "s|/Users/YOUR_ACCOUNT|$HOME|g" launchd/ai.familybot.portal.plist > "$PLIST_TEMP"
 install -m 600 "$PLIST_TEMP" "$PLIST"
-
-launchctl bootout "gui/$UID_VALUE/ai.familybot.portal" 2>/dev/null || true
 for attempt in 1 2 3; do
   if launchctl bootstrap "gui/$UID_VALUE" "$PLIST"; then
     break

@@ -26,6 +26,12 @@ Outside Norway, the chores, rewards, approvals, responsive UI and local data
 boundary can be reused. Weather, transit, school-calendar and school-message
 adapters need to be replaced or reconfigured.
 
+## Development model
+
+`dev` is the normal working branch; `main` is the tested production and
+deployment branch. The lightweight promotion procedure is documented in
+[`docs/BRANCHES.md`](docs/BRANCHES.md).
+
 ## Home-network service
 
 - Web: `http://familie.local:3000/`

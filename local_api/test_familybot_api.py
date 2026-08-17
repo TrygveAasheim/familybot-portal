@@ -39,8 +39,8 @@ class RepositoryTests(unittest.TestCase):
              "default_reward": {"title": "Cinema", "emoji": "🎬", "target_value": 30}},
         ], "integrations": {
             "transport": {
-                "stop_name": "Local Station", "stop_id": "NSR:StopPlace:test",
-                "centre_quay_id": "NSR:Quay:test", "line": "2",
+                "transport_mode": "metro", "stop_name": "Local Station", "stop_id": "NSR:StopPlace:test",
+                "direction_quay_id": "NSR:Quay:test", "line": "2",
                 "direction_label": "Next toward centre", "client_name": "familybot-test",
             },
             "weather": {
@@ -263,6 +263,27 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(transport["departures"][0]["destination"], "City Terminus")
         self.assertEqual(transport["departures"][0]["platform"], "1")
         self.assertNotIn("serviceJourney", json.dumps(transport))
+
+    def test_transport_contract_supports_configured_non_metro_mode(self):
+        root = Path(self.temp.name)
+        config_path = root / "config/family.local.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["integrations"]["transport"].update({"transport_mode": "bus", "line": "31"})
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        (root / "db/dashboard_departures.json").unlink()
+        payload = {"data": {"stopPlace": {"estimatedCalls": [{
+            "realtime": True,
+            "aimedDepartureTime": "2026-08-17T20:00:00+02:00",
+            "expectedDepartureTime": "2026-08-17T20:01:00+02:00",
+            "destinationDisplay": {"frontText": "City centre"},
+            "quay": {"id": "NSR:Quay:test", "publicCode": "B"},
+            "serviceJourney": {"journeyPattern": {"line": {"publicCode": "31", "transportMode": "bus"}}},
+        }]}}}
+        response = io.BytesIO(json.dumps(payload).encode("utf-8"))
+        with patch("familybot_api.urllib.request.urlopen", return_value=response):
+            result = transport_summary(root)
+        self.assertEqual(result["departures"][0]["line"], "31")
+        self.assertEqual(result["departures"][0]["platform"], "B")
 
     def test_weather_request_uses_local_configuration(self):
         root = Path(self.temp.name)

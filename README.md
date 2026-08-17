@@ -32,6 +32,10 @@ template and all installation documentation live in the sibling
 Both services read the same owner-only local file at
 `$HOME/.openclaw/workspace/config/family.local.json`.
 
+Transport setup is documented in `familybot-core/CONFIGURATION.md`. The current
+Ruter display uses Entur data and needs the family's departure StopPlace, the
+exact Quay for the wanted direction, transport mode and public line number.
+
 ## Parent PIN
 
 Create an ignored local PIN before deployment. Four to eight digits are

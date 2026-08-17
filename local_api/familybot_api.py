@@ -136,6 +136,7 @@ WEATHER_LABELS = {
     "snowshowers": "snøbyger",
     "thunder": "torden",
 }
+TRANSPORT_MODES = {"metro", "bus", "tram", "rail", "water"}
 
 ENTUR_ENDPOINT = "https://api.entur.io/journey-planner/v3/graphql"
 
@@ -192,10 +193,11 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
 
 
 def transport_summary(workspace: Path) -> dict[str, Any]:
-    """Return configured centre-bound metro departures with a short local cache."""
+    """Return configured line/direction departures with a short local cache."""
     transport = integration(workspace, "transport")
     stop_id = str(transport.get("stop_id") or "")
-    centre_quay_id = str(transport.get("centre_quay_id") or "")
+    direction_quay_id = str(transport.get("direction_quay_id") or transport.get("centre_quay_id") or "")
+    transport_mode = str(transport.get("transport_mode") or "metro")
     line_code = str(transport.get("line") or "")
     stop_name = str(transport.get("stop_name") or "Lokalt stopp")
     direction_label = str(transport.get("direction_label") or "Neste avgang")
@@ -211,7 +213,7 @@ def transport_summary(workspace: Path) -> dict[str, Any]:
         except (TypeError, ValueError):
             pass
 
-    if not stop_id or not centre_quay_id or not line_code:
+    if not stop_id or not direction_quay_id or not line_code or transport_mode not in TRANSPORT_MODES:
         return {"ok": False, "status": "Kollektivtransport er ikke konfigurert", "stop": stop_name,
                 "updated_at": None, "source": "Entur Journey Planner", "stale": True, "departures": []}
     query = """
@@ -248,18 +250,18 @@ def transport_summary(workspace: Path) -> dict[str, Any]:
             line = call.get("serviceJourney", {}).get("journeyPattern", {}).get("line", {})
             quay = call.get("quay") or {}
             expected = call.get("expectedDepartureTime") or call.get("aimedDepartureTime")
-            if line.get("transportMode") != "metro" or str(line.get("publicCode")) != line_code or quay.get("id") != centre_quay_id or not expected:
+            if line.get("transportMode") != transport_mode or str(line.get("publicCode")) != line_code or quay.get("id") != direction_quay_id or not expected:
                 continue
             departures.append({
                 "expected_departure": expected,
                 "aimed_departure": call.get("aimedDepartureTime"),
-                "destination": call.get("destinationDisplay", {}).get("frontText") or "mot sentrum",
+                "destination": call.get("destinationDisplay", {}).get("frontText") or direction_label,
                 "line": line.get("publicCode") or line_code,
                 "platform": quay.get("publicCode") or "",
                 "realtime": bool(call.get("realtime")),
             })
         if not departures:
-            raise ValueError("Entur returned no centre-bound metro departures")
+            raise ValueError("Entur returned no departures for the configured line and direction")
         result = {
             "ok": True,
             "status": direction_label,

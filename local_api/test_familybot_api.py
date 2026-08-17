@@ -187,11 +187,25 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(child_two["reward"]["percent"], 50)
 
     def test_lan_origin_boundary(self):
-        self.assertTrue(trusted_portal_origin("http://familie.local:3000"))
-        self.assertTrue(trusted_portal_origin("http://192.168.1.20:3000"))
+        allowed = {"http://familie.local:3000", "http://localhost:3000"}
+        self.assertTrue(trusted_portal_origin("http://familie.local:3000", allowed))
+        self.assertFalse(trusted_portal_origin("http://192.168.1.20:3000", allowed))
         self.assertFalse(trusted_portal_origin("https://evil.example:3000"))
         self.assertFalse(trusted_portal_origin("http://8.8.8.8:3000"))
         self.assertFalse(trusted_portal_origin("http://localhost:9999"))
+        self.assertFalse(trusted_portal_origin(None, allowed))
+
+    def test_parent_pin_attempts_are_rate_limited(self):
+        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        try:
+            for _ in range(5):
+                self.assertTrue(server.parent_login_allowed("192.168.1.20"))
+                server.record_parent_login("192.168.1.20", succeeded=False)
+            self.assertFalse(server.parent_login_allowed("192.168.1.20"))
+            server.record_parent_login("192.168.1.20", succeeded=True)
+            self.assertTrue(server.parent_login_allowed("192.168.1.20"))
+        finally:
+            server.server_close()
 
     def test_dashboard_migration_is_idempotent(self):
         first = migrate(self.db, seed=True)

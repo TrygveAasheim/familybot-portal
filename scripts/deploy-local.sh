@@ -9,6 +9,7 @@ PLIST_TEMP="$(mktemp -t familybot-portal-plist)"
 trap 'rm -f "$PLIST_TEMP"' EXIT
 
 cd "$ROOT"
+npm run preflight
 npm run lint
 npm test
 python3 local_api/dashboard_migration.py

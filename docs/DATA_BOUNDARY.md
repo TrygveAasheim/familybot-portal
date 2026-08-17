@@ -7,9 +7,12 @@ a general-purpose OpenClaw administration surface.
 
 - Development defaults to `127.0.0.1`. The managed service deliberately binds
   to the LAN only when started with the explicit `--lan` flag.
-- Browser requests are accepted only from loopback, `.local` names and private
-  LAN addresses serving the configured portal port.
-- Mutations require a random, in-memory session token in a custom header.
+- Browser requests are accepted only from the exact origins listed in
+  `portal.allowed_origins` in the canonical local configuration.
+- Health is readable without an Origin header for local supervision; all
+  dashboard/session endpoints require an allowed browser origin.
+- Mutations require a random, in-memory session token in a custom header;
+  parent PIN attempts are rate-limited.
 - The portal is deployed by launchd and advertised through Bonjour. It is not
   connected to public Sites hosting; the live SQLite file stays on the Mac.
 
@@ -42,7 +45,7 @@ Telegram messages, edit email processing state or change OpenClaw configuration.
 
 ## Source and runtime separation
 
-Reviewed source lives in the private `familybot-portal` repository. Deployment
+Reviewed, non-private source lives in the `familybot-portal` repository. Deployment
 creates a separate runtime under `$HOME/.openclaw/runtime/familybot-portal` and
 installs `ai.familybot.portal` as a LaunchAgent. Private configuration, SQLite,
 PIN, logs and backups are never copied into Git.

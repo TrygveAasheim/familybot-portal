@@ -102,8 +102,8 @@ Evidence: computed-layout browser checks at both viewports and zoom.
 
 - Mutations require a short-lived session token; parent mutations additionally
   require a valid parent session.
-- The API rejects unsupported/foreign origins and accepts only loopback or
-  private-LAN origins on the configured portal port.
+- The API rejects missing/foreign origins and accepts only the exact origins in
+  the canonical local configuration.
 - The child-facing contract exposes no API keys, auth tokens, Telegram IDs,
   email bodies, raw Spond data or filesystem paths.
 - Secrets and runtime state are excluded from git and owner-readable only.
@@ -122,7 +122,7 @@ Evidence: migration-twice test, backup check, supervisor health and full suite.
 
 ## Release measurement
 
-The acceptance runner writes `tests/acceptance-results.json` with one record per
+The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
 criterion (`pass`, `fail`, evidence, duration). Release requires **11/11 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.

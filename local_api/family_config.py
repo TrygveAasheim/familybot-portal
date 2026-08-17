@@ -21,7 +21,7 @@ def load_family_config(workspace: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(
             f"Local family configuration is missing or invalid: {path}. "
-            "Copy config/family.example.json and fill it locally."
+            "Copy the canonical familybot-core/config/family.example.json and fill it locally."
         ) from exc
     if not isinstance(value, dict) or not isinstance(value.get("members"), list):
         raise RuntimeError(f"Local family configuration has no members list: {path}")
@@ -50,4 +50,9 @@ def child_profiles(workspace: Path) -> list[dict[str, Any]]:
 
 def integration(workspace: Path, name: str) -> dict[str, Any]:
     value = load_family_config(workspace).get("integrations", {}).get(name, {})
+    return value if isinstance(value, dict) else {}
+
+
+def portal_settings(workspace: Path) -> dict[str, Any]:
+    value = load_family_config(workspace).get("portal", {})
     return value if isinstance(value, dict) else {}

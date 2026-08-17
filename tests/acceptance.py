@@ -18,8 +18,16 @@ WORKSPACE = Path(
     os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
 ).expanduser()
 DB = WORKSPACE / "db/family.db"
-HOST = "familie.local"
-ORIGIN = f"http://{HOST}:3000"
+CONFIG = Path(os.environ.get("FAMILYBOT_FAMILY_CONFIG", WORKSPACE / "config/family.local.json")).expanduser()
+SETTINGS = json.loads(CONFIG.read_text(encoding="utf-8"))
+PORTAL = SETTINGS["portal"]
+HOST = str(PORTAL["hostname"])
+WEB_PORT = int(PORTAL["web_port"])
+API_PORT = int(PORTAL["api_port"])
+BONJOUR_NAME = str(PORTAL["bonjour_name"])
+ORIGIN = f"http://{HOST}:{WEB_PORT}"
+CONFIGURED_LINE = str(SETTINGS["integrations"]["transport"]["line"])
+EXPECTED_CHILDREN = sum(member.get("role") == "child" for member in SETTINGS["members"])
 results: list[dict[str, object]] = []
 
 
@@ -39,16 +47,16 @@ def request(port: int, method: str, path: str, headers: dict[str,str] | None=Non
 
 def main() -> None:
     started=time.monotonic()
-    web_status,_=request(3000,"GET","/")
-    api_status,api_raw=request(8788,"GET","/api/health")
+    web_status,_=request(WEB_PORT,"GET","/")
+    api_status,api_raw=request(API_PORT,"GET","/api/health")
     launch=subprocess.run(["launchctl","print",f"gui/{os.getuid()}/ai.familybot.portal"],capture_output=True,text=True)
-    lookup=subprocess.Popen(["/usr/bin/dns-sd","-L","Familieportalen","_http._tcp","local"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    lookup=subprocess.Popen(["/usr/bin/dns-sd","-L",BONJOUR_NAME,"_http._tcp","local"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
     time.sleep(2); lookup.terminate(); dns_output=lookup.communicate(timeout=3)[0]
-    record("AC-01",web_status==200 and api_status==200 and launch.returncode==0 and f"{HOST}.:3000" in dns_output,f"web={web_status}, api={api_status}, Bonjour resolved, launchd={launch.returncode}",started)
+    record("AC-01",web_status==200 and api_status==200 and launch.returncode==0 and f"{HOST}.:{WEB_PORT}" in dns_output,f"web={web_status}, api={api_status}, Bonjour resolved, launchd={launch.returncode}",started)
 
     browser=json.loads((ROOT/"tests/browser-acceptance.json").read_text())
     direct=browser["direct_child_link"]; portrait=browser["portrait"]
-    started=time.monotonic(); record("AC-02",direct["survived_reload"] and portrait["family_information_cards"]==4 and portrait["child_entry_controls"]==2,"family home=4 cards; one-tap child URL survived reload",started)
+    started=time.monotonic(); record("AC-02",direct["survived_reload"] and portrait["family_information_cards"]==4 and portrait["child_entry_controls"]==EXPECTED_CHILDREN,f"family home=4 cards; {EXPECTED_CHILDREN} configured child entry controls; direct child URL survived reload",started)
 
     started=time.monotonic()
     with sqlite3.connect(DB) as connection:
@@ -70,10 +78,10 @@ def main() -> None:
     record("AC-04",durable and "history-list" in source,"SQLite tables present; history surface rendered",started)
 
     started=time.monotonic()
-    status,session_raw=request(8788,"GET","/api/session"); session=json.loads(session_raw); local=session.get("token","")
-    _,dashboard_raw=request(8788,"GET","/api/dashboard"); dashboard=json.loads(dashboard_raw)
+    status,session_raw=request(API_PORT,"GET","/api/session"); session=json.loads(session_raw); local=session.get("token","")
+    _,dashboard_raw=request(API_PORT,"GET","/api/dashboard"); dashboard=json.loads(dashboard_raw)
     first_child=dashboard["children"][0]["name"].lower()
-    rejected,_=request(8788,"POST","/api/chores",{"X-FamilyBot-Local-Token":local},{"title":"must reject","assigned_to":first_child,"points":1})
+    rejected,_=request(API_PORT,"POST","/api/chores",{"X-FamilyBot-Local-Token":local},{"title":"must reject","assigned_to":first_child,"points":1})
     record("AC-05",status==200 and rejected==403 and "decide_completion" in (ROOT/"local_api/familybot_api.py").read_text(),f"child admin attempt={rejected}; approval transition implemented",started)
 
     started=time.monotonic()
@@ -88,17 +96,18 @@ def main() -> None:
     started=time.monotonic()
     encoded=dashboard_raw.decode("utf-8",errors="replace").lower(); forbidden=[term for term in ("telegram_id","raw_json","source_ref","attachment","api_key") if term in encoded]
     departures=dashboard.get("transport",{}).get("departures",[])
-    live_transport=bool(departures) and all(item.get("line")=="2" and item.get("platform")=="1" for item in departures) and "TransportCountdown" in source and "1_000" in source
+    live_transport=bool(departures) and all(str(item.get("line"))==CONFIGURED_LINE for item in departures) and "TransportCountdown" in source and "1_000" in source
     family_surface=all(text in source for text in ("Viktigst nå","Vær og T-bane","Aktiviteter","FamilyBot","Skolen denne uken"))
     current_plans=[plan["member"] for plan in dashboard.get("week_plans",[])]
-    record("AC-08",family_surface and live_transport and bool(current_plans) and not forbidden,f"family surfaces; {len(departures)} centre-bound departures with countdown; {len(current_plans)} week plan(s); forbidden keys={forbidden}",started)
+    plan_state=dashboard.get("week_plan_status",[])
+    record("AC-08",family_surface and live_transport and len(plan_state)==EXPECTED_CHILDREN and not forbidden,f"family surfaces; {len(departures)} configured-line departures with countdown; {len(current_plans)} week plan(s), {len(plan_state)} explicit child plan states; forbidden keys={forbidden}",started)
 
     started=time.monotonic()
     responsive=not portrait["horizontal_overflow"] and not browser["landscape"]["horizontal_overflow"] and not browser["zoom_200_equivalent"]["horizontal_overflow"] and portrait["minimum_visible_button_height"]>=48 and min(size[1] for size in browser["landscape"]["mission_card_sizes"])>=56
     record("AC-09",responsive,"768x1024, 1024x768 and 384x512: no overflow; touch targets measured",started)
 
     started=time.monotonic()
-    foreign=http.client.HTTPConnection(HOST,8788,timeout=5);foreign.request("GET","/api/health",headers={"Origin":"https://evil.example:3000"});foreign_status=foreign.getresponse().status;foreign.close()
+    foreign=http.client.HTTPConnection(HOST,API_PORT,timeout=5);foreign.request("GET","/api/session",headers={"Origin":"https://evil.example:3000"});foreign_status=foreign.getresponse().status;foreign.close()
     record("AC-10",foreign_status==403 and rejected==403 and not forbidden,f"foreign origin={foreign_status}; parent auth={rejected}; PIN={oct(mode)}",started)
 
     started=time.monotonic()
@@ -111,7 +120,8 @@ def main() -> None:
 
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}
-    target=ROOT/"tests/acceptance-results.json"; target.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+    result_dir=ROOT/"tests/results"; result_dir.mkdir(parents=True,exist_ok=True)
+    target=result_dir/"acceptance-results.json"; target.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps(report,ensure_ascii=False,indent=2))
     raise SystemExit(0 if report["release_ready"] else 1)
 

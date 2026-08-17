@@ -1,17 +1,30 @@
-# FamilyBot prototype feature map
+# Feature map
 
-The integrated portal exposes the first five surfaces and a `/lab` route that
-keeps later experiments explicit. Proposed order:
+## Supported now
 
-1. Reliability and recovery in the FamilyBot lab clone.
-2. Read-only status contract and portal evaluation with fixtures.
-3. Canonical calendar plus optional ICS export.
-4. Corrections, uncertainty states and source provenance.
-5. Chore suggestions with adult approval.
-6. Notification policy, backups/restore drills and Spond fallback.
-7. Optional quality-of-life features such as meals only after their source and
-   family value are clear.
+- iPad-first family home with school, activity, weather, Entur and health cards;
+- configured child profiles and direct Home Screen URLs;
+- touch-first chores, immediate durable progress and completion history;
+- optional approval plus parent rejection of awarded or pending work;
+- parent creation/archive, reward goals and review queue;
+- curated read/write API, SQLite backup, audit and idempotency;
+- launchd supervision, Bonjour advertisement and local acceptance gate.
 
-Each backend experiment gets its own branch in `familybot-lab`; each UI
-experiment gets its own branch in `familybot-portal`. The integration branch is
-a review surface, not a deployment signal.
+## Supplied by FamilyBot Core
+
+- email ingestion and `ukeplan` PDF parsing;
+- Spond events;
+- Norwegian/Oslo school calendar;
+- scheduled briefings, Telegram delivery and health/freshness state.
+
+## Explicitly not supported yet
+
+- internet/cloud hosting of family data;
+- individual child/parent accounts or remote access;
+- HelloFresh, Nest camera, Xiaomi or Toshiba control;
+- automatic chore generation from school homework;
+- a clean-room core database installer and complete LaunchAgent installer.
+
+New features must preserve the data boundary in `DATA_BOUNDARY.md`, add an
+acceptance criterion when user-visible, and avoid putting private household
+state in Git.

@@ -4,8 +4,8 @@
 The service deliberately exposes a small view of the OpenClaw database. It
 never returns raw email bodies, Telegram identifiers, Spond JSON, or secrets.
 Child mutations require an in-memory session token. Parent operations also
-require a PIN-backed parent session. Origins are limited to loopback and RFC1918
-LAN hosts serving the portal on port 3000.
+require a PIN-backed, rate-limited parent session. Browser origins are an exact
+allowlist loaded from the canonical local family configuration.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hmac
-import ipaddress
 import json
 import os
 import re
@@ -21,6 +20,7 @@ import secrets
 import sqlite3
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,14 +28,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from family_config import integration, member_profiles
+from family_config import integration, member_profiles, portal_settings
 
 
 DEFAULT_WORKSPACE = Path(
     os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
 ).expanduser()
 DEFAULT_DB = DEFAULT_WORKSPACE / "db/family.db"
-LOCAL_ORIGIN = re.compile(r"^http://(?:127\.0\.0\.1|localhost)(?::\d+)?$")
 LANES = {"todo", "inprogress", "done"}
 PRIORITIES = {"must-do", "important", "nice-to"}
 CHORE_COLUMNS = "id,title,description,assigned_to,lane,priority,due_date,created_at,updated_at,archived_at"
@@ -295,19 +294,23 @@ class ValidationError(ValueError):
     pass
 
 
-def trusted_portal_origin(origin: str | None) -> bool:
-    if origin is None:
-        return True
-    try:
-        parsed = urlparse(origin)
-        if parsed.scheme != "http" or parsed.port != PORTAL_PORT or not parsed.hostname:
-            return False
-        hostname = parsed.hostname.lower()
-        if hostname in {"localhost", "127.0.0.1"} or hostname.endswith(".local"):
-            return True
-        return ipaddress.ip_address(hostname).is_private
-    except (ValueError, ipaddress.AddressValueError):
+def configured_origins(workspace: Path) -> set[str]:
+    configured = portal_settings(workspace).get("allowed_origins", [])
+    if isinstance(configured, list):
+        origins = {str(origin).rstrip("/") for origin in configured if isinstance(origin, str) and origin}
+        if origins:
+            return origins
+    return {
+        "http://familie.local:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    }
+
+
+def trusted_portal_origin(origin: str | None, allowed_origins: set[str] | None = None) -> bool:
+    if not origin:
         return False
+    return origin.rstrip("/") in (allowed_origins or configured_origins(DEFAULT_WORKSPACE))
 
 
 class FamilyRepository:
@@ -864,11 +867,11 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
 
     def trusted_origin(self) -> bool:
         origin = self.headers.get("Origin")
-        return trusted_portal_origin(origin)
+        return trusted_portal_origin(origin, self.app.allowed_origins)
 
     def cors(self) -> None:
         origin = self.headers.get("Origin")
-        if origin and trusted_portal_origin(origin):
+        if origin and trusted_portal_origin(origin, self.app.allowed_origins):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
 
@@ -880,6 +883,8 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(body)
 
@@ -895,13 +900,7 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802
-        if not self.trusted_origin():
-            self.respond(403, {"error": "Ukjent origin."})
-            return
         parsed = urlparse(self.path)
-        if parsed.path == "/api/session":
-            self.respond(200, {"token": self.app.session_token, "api": "familybot-local-v2"})
-            return
         if parsed.path == "/api/health":
             try:
                 with self.app.repository.connect() as connection:
@@ -910,18 +909,32 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             except sqlite3.Error:
                 self.respond(503, {"ok": False, "service": "familybot-dashboard-api"})
             return
+        if not self.trusted_origin():
+            self.respond(403, {"error": "Ukjent origin."})
+            return
+        if parsed.path == "/api/session":
+            self.respond(200, {"token": self.app.session_token, "api": "familybot-local-v2"})
+            return
         if parsed.path == "/api/dashboard":
             query = parse_qs(parsed.query)
             try:
                 requested = dt.date.fromisoformat(query["date"][0]) if query.get("date") else None
                 self.respond(200, self.app.repository.dashboard(requested))
-            except (ValueError, sqlite3.Error) as exc:
-                self.respond(400, {"error": str(exc)})
+            except ValueError:
+                self.respond(400, {"error": "Ugyldig dato."})
+            except sqlite3.Error as exc:
+                self.log_error("dashboard database error: %s", type(exc).__name__)
+                self.respond(503, {"error": "Familiedata er midlertidig utilgjengelig."})
             return
         self.respond(404, {"error": "Ikke funnet."})
 
     def read_payload(self) -> dict[str, Any]:
-        length = min(int(self.headers.get("Content-Length", "0")), 16_384)
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValidationError("Ugyldig Content-Length.") from exc
+        if not 0 <= length <= 16_384:
+            raise ValidationError("Innholdet er for stort.")
         try:
             value = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError as exc:
@@ -948,10 +961,15 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if method == "POST" and path == "/api/parent/session":
+                if not self.app.parent_login_allowed(self.client_address[0]):
+                    self.respond(429, {"error": "For mange forsøk. Vent fem minutter."})
+                    return
                 if hmac.compare_digest(str(self.read_payload().get("pin") or ""), self.app.parent_pin):
+                    self.app.record_parent_login(self.client_address[0], succeeded=True)
                     self.app.parent_token = secrets.token_urlsafe(32)
                     self.respond(200, {"parent_token": self.app.parent_token})
                 else:
+                    self.app.record_parent_login(self.client_address[0], succeeded=False)
                     self.respond(403, {"error": "Feil foreldrekode."})
                 return
             complete = re.fullmatch(r"/api/chores/(\d+)/complete", path)
@@ -1002,7 +1020,8 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         except KeyError:
             self.respond(404, {"error": "Gjøremålet finnes ikke eller har allerede denne statusen."})
         except sqlite3.Error as exc:
-            self.respond(500, {"error": f"Databasefeil: {exc}"})
+            self.log_error("mutation database error: %s", type(exc).__name__)
+            self.respond(503, {"error": "Endringen kunne ikke lagres akkurat nå."})
 
     def do_POST(self) -> None:  # noqa: N802
         self.mutate("POST")
@@ -1015,15 +1034,33 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
 
 
 class FamilyApiServer(ThreadingHTTPServer):
-    def __init__(self, address: tuple[str, int], repository: FamilyRepository, parent_pin: str):
+    def __init__(self, address: tuple[str, int], repository: FamilyRepository, parent_pin: str,
+                 allowed_origins: set[str] | None = None):
         super().__init__(address, FamilyApiHandler)
         self.repository = repository
         self.session_token = secrets.token_urlsafe(32)
         self.parent_pin = parent_pin
         self.parent_token = ""
+        self.allowed_origins = allowed_origins or configured_origins(repository.workspace)
+        self._parent_failures: dict[str, list[float]] = {}
+        self._parent_failure_lock = threading.Lock()
         with repository.connect() as connection:
             parent = connection.execute("SELECT id FROM family_members WHERE role='parent' ORDER BY id LIMIT 1").fetchone()
         self.parent_member_id = int(parent[0]) if parent else 1
+
+    def parent_login_allowed(self, client: str) -> bool:
+        cutoff = time.monotonic() - 300
+        with self._parent_failure_lock:
+            recent = [value for value in self._parent_failures.get(client, []) if value >= cutoff]
+            self._parent_failures[client] = recent
+            return len(recent) < 5
+
+    def record_parent_login(self, client: str, *, succeeded: bool) -> None:
+        with self._parent_failure_lock:
+            if succeeded:
+                self._parent_failures.pop(client, None)
+            else:
+                self._parent_failures.setdefault(client, []).append(time.monotonic())
 
 
 def main() -> None:

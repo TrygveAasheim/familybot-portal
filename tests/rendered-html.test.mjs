@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const developmentPreviewMeta = /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
-
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
@@ -15,7 +13,7 @@ test("server-renders the iPad family dashboard shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, developmentPreviewMeta);
+  assert.doesNotMatch(html, /codex-preview/i);
   assert.match(html, /<title>Familieportalen<\/title>/i);
   assert.match(html, /Familieportalen våkner/);
   assert.doesNotMatch(html, /example data|eksempeldata|react-loading-skeleton/i);
@@ -28,7 +26,7 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /codex-preview/);
+  assert.doesNotMatch(page, /codex-preview/);
   assert.match(consoleSource, /Familiens oversikt/);
   assert.match(consoleSource, /Hva vil du gjøre/);
   assert.match(consoleSource, /Legg til gjøremål/);

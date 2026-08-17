@@ -1,4 +1,4 @@
-# Familieportalen 🇳🇴
+# Familieportalen
 
 Familieportalen is the iPad-first touch surface for FamilyBot. It runs on an
 always-on Mac mini, is advertised with Bonjour and is reachable only on the home
@@ -6,8 +6,9 @@ LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
 mode manages chores, goals and approvals.
 
-> **Norway-first:** the UI and chores model are reusable, while the current data
-> assumes Norwegian `ukeplan`, Spond, MET Norway and Entur conventions.
+> **Custom-built for Norwegian households:** the UI and chores model are
+> reusable, while the included data adapters support Norwegian `ukeplan`, Spond,
+> MET Norway and Entur conventions.
 
 ## Network service
 

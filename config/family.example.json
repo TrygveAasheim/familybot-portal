@@ -1,0 +1,61 @@
+{
+  "family": {
+    "display_name": "FAMILY_DISPLAY_NAME"
+  },
+  "members": [
+    {
+      "member_id": 1,
+      "role": "parent",
+      "name": "PARENT_1_NAME",
+      "slug": "parent_1",
+      "telegram_target": "PARENT_1_TELEGRAM_ID"
+    },
+    {
+      "member_id": 2,
+      "role": "parent",
+      "name": "PARENT_2_NAME",
+      "slug": "parent_2",
+      "telegram_target": "PARENT_2_TELEGRAM_ID"
+    },
+    {
+      "member_id": 3,
+      "role": "child",
+      "name": "CHILD_1_NAME",
+      "slug": "child_1",
+      "avatar": "🧑‍🚀",
+      "grade": "CHILD_1_GRADE",
+      "default_reward": {
+        "title": "CHILD_1_REWARD",
+        "emoji": "🎯",
+        "target_value": 30,
+        "goal_type": "points",
+        "unit_label": "poeng"
+      }
+    },
+    {
+      "member_id": 4,
+      "role": "child",
+      "name": "CHILD_2_NAME",
+      "slug": "child_2",
+      "avatar": "🦋",
+      "grade": "CHILD_2_GRADE",
+      "default_reward": {
+        "title": "CHILD_2_REWARD",
+        "emoji": "🎯",
+        "target_value": 30,
+        "goal_type": "points",
+        "unit_label": "poeng"
+      }
+    }
+  ],
+  "integrations": {
+    "transport": {
+      "stop_name": "LOCAL_TRANSIT_STOP_NAME",
+      "stop_id": "ENTUR_STOP_PLACE_ID",
+      "centre_quay_id": "ENTUR_CENTRE_BOUND_QUAY_ID",
+      "line": "TRANSIT_LINE",
+      "direction_label": "DIRECTION_LABEL",
+      "client_name": "familybot-local"
+    }
+  }
+}

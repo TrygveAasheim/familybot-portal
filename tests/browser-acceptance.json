@@ -1,0 +1,35 @@
+{
+  "tested_at": "2026-08-16T09:06:00+02:00",
+  "browser": "Codex in-app browser",
+  "portrait": {
+    "viewport": [768, 1024],
+    "scroll_width": 768,
+    "horizontal_overflow": false,
+    "minimum_visible_button_height": 52,
+    "family_information_cards": 4,
+    "child_entry_controls": 2
+  },
+  "landscape": {
+    "viewport": [1024, 768],
+    "scroll_width": 1024,
+    "horizontal_overflow": false,
+    "mission_card_sizes": [[481, 277], [481, 277], [481, 277]]
+  },
+  "zoom_200_equivalent": {
+    "viewport": [384, 512],
+    "scroll_width": 384,
+    "horizontal_overflow": false,
+    "mission_card_width": 356
+  },
+  "direct_child_link": {
+    "url": "http://localhost:3000/?child=3",
+    "heading": "configured child",
+    "mission_count": 3,
+    "survived_reload": true
+  },
+  "parent_gate": {
+    "heading": "Oppsett og godkjenning",
+    "pin_input_count": 1,
+    "horizontal_overflow": false
+  }
+}

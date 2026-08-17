@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="no">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Drift — Familieportalen</title>
+    <link rel="stylesheet" href="/app/globals.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="#top"><span class="brand-mark">F</span><span>Familieportalen</span></a>
+        <span class="prototype-label">ISOLERT PROTOTYPE</span>
+      </header>
+      <div class="workspace" id="top">
+        <nav class="side-nav" aria-label="Hovedmeny">
+          <p class="eyebrow">Oversikt</p><a class="nav-item active" href="#drift">Drift</a><a class="nav-item" href="#today">I dag</a><a class="nav-item" href="#week">Uken</a><a class="nav-item" href="#chores">Gjøremål</a><a class="nav-item" href="#inbox">Innboks</a>
+        </nav>
+        <section class="content" id="drift">
+          <div class="page-heading"><div><p class="eyebrow">Lørdag 15. august · 21:20</p><h1>FamilyBot har kontroll</h1><p class="lead">En rolig, lesbar oversikt over det som faktisk virker — og det som trenger oppmerksomhet.</p></div><span class="status status-positive"><span class="status-dot"></span>Normal drift</span></div>
+          <div class="notice"><div><strong>Ingen endringer gjøres her.</strong><p>Prototypen bruker eksempeldata og en fremtidig read-only-adapter.</p></div><a href="#architecture">Se datagrensen</a></div>
+          <div class="metric-grid">
+            <article class="metric"><span class="metric-label">Telegram-kø</span><strong>0</strong><span class="metric-note positive">Alt levert</span></article>
+            <article class="metric"><span class="metric-label">E-postløp</span><strong>96</strong><span class="metric-note">95 ferdige · 1 reparert</span></article>
+            <article class="metric"><span class="metric-label">Ukeplan uke 34</span><strong>1 av 2</strong><span class="metric-note warning">Ett barn mangler</span></article>
+            <article class="metric"><span class="metric-label">Sist sjekket</span><strong class="metric-time">21:19</strong><span class="metric-note positive">14 kontroller bestått</span></article>
+          </div>
+          <div class="panel-grid"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">Kritisk flyt</p><h2>Fra kilde til familie</h2></div><span class="status status-positive">Robust</span></div><ol class="pipeline"><li><span class="step-number">1</span><div><strong>E-post hentes</strong><p>Himalaya · hvert 15. minutt</p></div><span class="step-state">OK</span></li><li><span class="step-number">2</span><div><strong>Innhold lagres</strong><p>Ruting, vedlegg og ukeplan får egen status</p></div><span class="step-state">OK</span></li><li><span class="step-number">3</span><div><strong>Fakta settes sammen</strong><p>Kalender, vær, Spond og oppgaver</p></div><span class="step-state">OK</span></li><li><span class="step-number">4</span><div><strong>Tekst formuleres</strong><p>Inference med deterministisk reserve</p></div><span class="step-state">Reserve klar</span></li><li><span class="step-number">5</span><div><strong>Begge mottar</strong><p>Separat leveringsstatus og automatisk retry</p></div><span class="step-state">OK</span></li></ol></article><aside class="panel attention-panel"><p class="eyebrow">Trenger oppmerksomhet</p><h2>Én kjent åpning</h2><div class="attention-item"><span class="status status-warning">Venter</span><h3>Ukeplan mangler</h3><p>Ingen plan for uke 34 er registrert ennå. Bot-en skal si «ikke mottatt» uten å gjette.</p></div><a class="text-link" href="#inbox">Åpne behandlingsloggen →</a></aside></div>
+          <section class="architecture" id="architecture"><p class="eyebrow">Sikker prototypegrense</p><h2>Portal uten tilgang til kjernen</h2><div class="boundary"><div><strong>Eksempeldata nå</strong><p>Ingen persondata, tokens eller databasekopi bygges inn i nettsiden.</p></div><span>→</span><div><strong>Read-only adapter senere</strong><p>Et eksplisitt, filtrert JSON-grensesnitt kan legges til etter godkjenning.</p></div><span>→</span><div><strong>Skrivehandlinger sist</strong><p>Gjøremål og rettelser får egne API-er, tilgangskontroll og revisjonslogg.</p></div></div></section>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

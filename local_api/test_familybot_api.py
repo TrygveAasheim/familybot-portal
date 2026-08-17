@@ -1,12 +1,14 @@
 import datetime as dt
+import io
 import json
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from dashboard_migration import migrate
-from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, transport_summary, trusted_portal_origin
+from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, transport_summary, trusted_portal_origin, weather_summary
 
 
 SCHEMA = """
@@ -35,11 +37,17 @@ class RepositoryTests(unittest.TestCase):
              "default_reward": {"title": "Card pack", "emoji": "🃏", "target_value": 30}},
             {"member_id": 4, "role": "child", "name": "Child Two", "slug": "child_2", "avatar": "🦋", "grade": 6,
              "default_reward": {"title": "Cinema", "emoji": "🎬", "target_value": 30}},
-        ], "integrations": {"transport": {
-            "stop_name": "Local Station", "stop_id": "NSR:StopPlace:test",
-            "centre_quay_id": "NSR:Quay:test", "line": "2",
-            "direction_label": "Next toward centre", "client_name": "familybot-test",
-        }}}), encoding="utf-8")
+        ], "integrations": {
+            "transport": {
+                "stop_name": "Local Station", "stop_id": "NSR:StopPlace:test",
+                "centre_quay_id": "NSR:Quay:test", "line": "2",
+                "direction_label": "Next toward centre", "client_name": "familybot-test",
+            },
+            "weather": {
+                "home_lat": 1.25, "home_lon": 2.5,
+                "user_agent": "FamilyBot-test/1.0 contact@example.invalid",
+            },
+        }}), encoding="utf-8")
         with sqlite3.connect(self.db) as connection:
             connection.executescript(SCHEMA)
             connection.executemany("INSERT INTO family_members(id,name,role,grade) VALUES(?,?,?,?)", [(1,"Parent One","parent",None),(3,"Child One","child",3),(4,"Child Two","child",6)])
@@ -196,6 +204,31 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(transport["departures"][0]["destination"], "City Terminus")
         self.assertEqual(transport["departures"][0]["platform"], "1")
         self.assertNotIn("serviceJourney", json.dumps(transport))
+
+    def test_weather_request_uses_local_configuration(self):
+        root = Path(self.temp.name)
+        (root / "db/dashboard_weather.json").unlink()
+        payload = {
+            "properties": {
+                "meta": {"updated_at": "2026-08-17T10:00:00Z"},
+                "timeseries": [{
+                    "data": {
+                        "instant": {"details": {"air_temperature": 12}},
+                        "next_1_hours": {
+                            "summary": {"symbol_code": "cloudy"},
+                            "details": {"precipitation_amount": 0},
+                        },
+                    },
+                }],
+            },
+        }
+        response = io.BytesIO(json.dumps(payload).encode("utf-8"))
+        with patch("familybot_api.urllib.request.urlopen", return_value=response) as opened:
+            result = weather_summary(root)
+        request = opened.call_args.args[0]
+        self.assertIn("lat=1.25000&lon=2.50000", request.full_url)
+        self.assertEqual(request.get_header("User-agent"), "FamilyBot-test/1.0 contact@example.invalid")
+        self.assertEqual(result["temperature"], 12)
 
 
 if __name__ == "__main__":

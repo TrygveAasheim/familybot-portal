@@ -1,10 +1,30 @@
-# Familieportalen
+# Familieportalen 🇳🇴
 
-An iPad-first family dashboard running only on the Mac mini and home LAN. The
-default page is a DNB/Eufemia-inspired family overview for today's school items,
-activities, weather, T-bane and FamilyBot source status. Each configured child has
-one-tap child pages with large chores, durable points, concrete rewards and
-completion history. Parent mode adds chores, sets goals and handles approvals.
+> **Norway-first deployment.** This is an iPad-first, self-hosted family
+> dashboard built for a Norwegian household. The UI and chores system are
+> reusable, but the current data adapters assume Norwegian services and school
+> conventions.
+
+The dashboard runs on a Mac mini and the home LAN. Its default page gives the
+family a glanceable view of school, activities, weather, public transport and
+FamilyBot status. Each configured child has a one-tap page with large chores,
+durable points, concrete rewards and completion history. Parent mode manages
+chores, goals and approvals.
+
+## Norwegian integration profile
+
+| Area | Current assumption |
+| --- | --- |
+| Public transport | Entur Journey Planner, configured stop/quay IDs and Norwegian transit terminology |
+| Weather | MET Norway Locationforecast, using home coordinates stored only in local configuration |
+| School | Norwegian `ukeplan` email/PDF conventions and school-year data produced by FamilyBot Core |
+| Activities | Spond events synchronized into the local FamilyBot database |
+| Language | Norwegian Bokmål UI, dates and family-facing status text |
+| Hosting | Always-on macOS host, launchd, Bonjour and a private home LAN |
+
+Outside Norway, the chores, rewards, approvals, responsive UI and local data
+boundary can be reused. Weather, transit, school-calendar and school-message
+adapters need to be replaced or reconfigured.
 
 ## Home-network service
 
@@ -12,54 +32,75 @@ completion history. Parent mode adds chores, sets goals and handles approvals.
 - Bonjour: `Familieportalen._http._tcp.local`
 - Child shortcuts: `/?child=<member_id>`
 - LaunchAgent: `ai.familybot.portal`
-- Deployed runtime: `$HOME/.openclaw/runtime/familybot-portal`
-- Development source: this repository
+- Runtime: `$HOME/.openclaw/runtime/familybot-portal`
+- Source: this repository
 
-The parent PIN is generated locally, kept outside git at
-`runtime/parent-pin.txt`, deployed with owner-only (`0600`) permissions, and can
-be changed by editing that source file followed by a deploy.
+## Local family configuration
 
-Household identities are loaded from the owner-readable, ignored file
-`$HOME/.openclaw/workspace/config/family.local.json`. Git contains only
-[`config/family.example.json`](config/family.example.json) with input
-parameters; real names and delivery identifiers must never be committed.
-
-## Data model and safety
-
-Existing `kanban_cards` remain the shared task source used by Telegram and the
-portal. The idempotent migration adds:
-
-- `family_chore_meta` for child visibility, icon, points and approval policy;
-- `chore_completions` for durable, idempotent history;
-- `reward_goals` for concrete per-child progress.
-
-The browser receives no email bodies, sender addresses, Telegram IDs, raw Spond
-JSON, tokens or filesystem paths. Child writes require a short-lived local
-session; administrative writes additionally require a PIN-backed parent
-session. Origins are restricted to loopback and private/Bonjour LAN hosts on the
-portal port. A consistent SQLite backup is created before migration and before
-the first mutation in each API process.
-
-## Develop and verify
+Real names and household identifiers are never stored in Git. Both FamilyBot
+repositories carry the same placeholder template at
+[`config/family.example.json`](config/family.example.json). Install it once as
+the shared, owner-readable local configuration:
 
 ```bash
+install -d -m 700 "$HOME/.openclaw/workspace/config"
+install -m 600 config/family.example.json \
+  "$HOME/.openclaw/workspace/config/family.local.json"
+${EDITOR:-nano} "$HOME/.openclaw/workspace/config/family.local.json"
+```
+
+Replace every applicable uppercase placeholder. Remove unused optional
+second-location fields instead of leaving placeholder strings. The portal needs
+member IDs, roles, names, child avatars/grades/rewards, MET coordinates and
+Entur stop/quay settings. FamilyBot Core additionally uses Telegram recipients,
+email routing and Spond groups.
+
+The complete field reference is in
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+
+The default path can be changed with `FAMILYBOT_FAMILY_CONFIG`; the complete
+workspace can be moved with `FAMILYBOT_WORKSPACE`. Neither setting makes it
+safe to commit the populated file.
+
+## Parent PIN
+
+The PIN is a separate local secret at `runtime/parent-pin.txt` and is deployed
+with mode `0600`. Create or replace it before deployment:
+
+```bash
+install -d -m 700 runtime
+read -r -s -p "Parent PIN: " FAMILYBOT_PARENT_PIN
+printf '\n'
+printf '%s\n' "$FAMILYBOT_PARENT_PIN" > runtime/parent-pin.txt
+unset FAMILYBOT_PARENT_PIN
+chmod 600 runtime/parent-pin.txt
+```
+
+## Develop, verify and deploy
+
+```bash
+npm ci
 npm run dev:family
 npm run lint
 npm test
 python3 tests/acceptance.py
-```
-
-Acceptance criteria are in
-`docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md`. The measured report is written to
-`tests/acceptance-results.json`; release requires 11/11.
-
-## Deploy
-
-```bash
 bash scripts/deploy-local.sh
 ```
 
-The deploy runs verification, backs up and migrates SQLite, copies the
-standalone runtime out of macOS-protected `Documents`, then restarts the
-LaunchAgent. Its supervisor owns the web server, API and Bonjour registration;
-if any child process exits, launchd restarts the whole group.
+Deployment builds the portal, backs up and migrates SQLite, copies the runtime
+outside macOS-protected `Documents`, installs the LaunchAgent and registers the
+Bonjour service. Release requires all
+[11 acceptance criteria](docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md) to pass.
+
+For a clean Mac or disaster recovery, follow
+[`docs/REDEPLOY.md`](docs/REDEPLOY.md). Architecture and privacy boundaries are
+described in [`docs/DATA_BOUNDARY.md`](docs/DATA_BOUNDARY.md).
+
+## Privacy boundary
+
+The browser receives no email bodies, sender addresses, Telegram IDs, raw Spond
+JSON, tokens or filesystem paths. The populated family config, SQLite database,
+attachments, PIN, logs, caches and backups remain local and ignored. Child
+writes require a short-lived local session; parent writes additionally require
+the PIN. A consistent SQLite backup is created before migration and before the
+first mutation in each API process.

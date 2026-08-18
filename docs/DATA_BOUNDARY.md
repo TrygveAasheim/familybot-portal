@@ -43,6 +43,18 @@ The bridge creates a consistent SQLite backup before the first mutation in each
 session and appends a local audit record. It cannot trigger scheduled jobs, send
 Telegram messages, edit email processing state or change OpenClaw configuration.
 
+## Planned add-on boundary
+
+Smart Home will use a server-side provider adapter with an entity/action
+allowlist. The browser will receive normalized state, locality/freshness and
+explicit safe actions; it will not receive a Home Assistant token, arbitrary
+entity access, raw camera credentials or a generic service-call proxy. Cameras
+and consequential controls require a parent session and audit record.
+
+Smart Home may own separate state/cache tables. It cannot reuse
+`email_processing_state`, `delivery_outbox` or raw source columns. Its failure
+must leave `/api/dashboard`, chores and school information available.
+
 ## Source and runtime separation
 
 Reviewed, non-private source lives in the `familybot-portal` repository. Deployment

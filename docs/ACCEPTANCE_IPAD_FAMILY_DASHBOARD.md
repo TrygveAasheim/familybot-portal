@@ -126,3 +126,9 @@ The acceptance runner writes ignored `tests/results/acceptance-results.json` wit
 criterion (`pass`, `fail`, evidence, duration). Release requires **11/11 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
+
+These 11 criteria cover the currently deployed family dashboard. A new
+user-visible add-on such as Smart Home must add provider failure isolation,
+authorization, freshness/locality and touch-control criteria before it can be
+declared supported; planned criteria live in the core repository's
+`specs/SMART_HOME.md`.

@@ -10,6 +10,20 @@ mode manages chores, goals and approvals.
 > reusable, while the included data adapters support Norwegian `ukeplan`, Spond,
 > MET Norway and Entur conventions.
 
+## Start here
+
+A coding agent or session without prior context starts at
+[`AGENTS.md`](AGENTS.md), followed by:
+
+1. [Development guide and ownership map](docs/DEVELOPMENT_GUIDE.md)
+2. [Local data boundary](docs/DATA_BOUNDARY.md)
+3. [iPad acceptance criteria](docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md)
+4. [Supported/planned feature map](docs/FEATURE_MAP.md)
+5. [New-session verification](docs/NEW_SESSION_VERIFICATION.md)
+
+The sibling `familybot-core` repository owns the canonical system architecture,
+configuration, reliability invariants and Smart Home specification.
+
 ## Network service
 
 - Web: `http://familie.local:3000/`
@@ -61,6 +75,7 @@ Clone `familybot-core` and `familybot-portal` as sibling directories, then:
 
 ```bash
 npm ci
+npm run docs:check
 npm run preflight
 npm run dev:family
 npm run lint

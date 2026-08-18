@@ -21,7 +21,10 @@
 
 - internet/cloud hosting of family data;
 - individual child/parent accounts or remote access;
-- HelloFresh, Nest camera, Xiaomi or Toshiba control;
+- Smart Home device control. Home Assistant, Xiaomi-first rollout, Nest and
+  climate/appliance research are documented in the sibling core repository's
+  `specs/SMART_HOME.md`, but are not deployed;
+- HelloFresh/menu integration;
 - automatic chore generation from school homework;
 - a clean-room core database installer and complete LaunchAgent installer.
 

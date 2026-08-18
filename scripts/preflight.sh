@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE="${FAMILYBOT_WORKSPACE:-$HOME/.openclaw/workspace}"
 PIN_FILE="$ROOT/runtime/parent-pin.txt"
 
+python3 "$ROOT/scripts/validate_docs.py"
+
 if [[ -n "${FAMILYBOT_CONFIG_VALIDATOR:-}" ]]; then
   VALIDATOR="$FAMILYBOT_CONFIG_VALIDATOR"
 elif [[ -f "$ROOT/../familybot-core/scripts/validate_config.py" ]]; then

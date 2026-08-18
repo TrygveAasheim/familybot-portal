@@ -6,6 +6,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "docs:check": "python3 scripts/validate_docs.py",
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "dev:web": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "dev:api": "python3 local_api/familybot_api.py",
@@ -15,7 +16,7 @@
     "start:lan": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start --hostname 0.0.0.0 --port 3000",
     "start:service": "python3 local_service/run_service.py",
     "preflight": "bash scripts/preflight.sh",
-    "test": "python3 -m unittest discover -s local_api -p 'test_*.py' && npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "python3 -m unittest discover -s local_api -p 'test_*.py' && npm run docs:check && npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {

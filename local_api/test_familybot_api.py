@@ -356,18 +356,24 @@ class RepositoryTests(unittest.TestCase):
     def test_weather_request_uses_local_configuration(self):
         root = Path(self.temp.name)
         (root / "db/dashboard_weather.json").unlink()
+        local_now = dt.datetime.now().astimezone()
+        forecast_date = local_now.date()
+        forecast_rows = []
+        for hour, temperature, rain, symbol in ((8, 12, 0.4, "cloudy"), (12, 15, 0.0, "fair"), (16, 14, 0.2, "lightrain")):
+            forecast_rows.append({
+                "time": dt.datetime.combine(forecast_date, dt.time(hour=hour), tzinfo=local_now.tzinfo).isoformat(),
+                "data": {
+                    "instant": {"details": {"air_temperature": temperature}},
+                    "next_1_hours": {
+                        "summary": {"symbol_code": symbol},
+                        "details": {"precipitation_amount": rain},
+                    },
+                },
+            })
         payload = {
             "properties": {
                 "meta": {"updated_at": "2026-08-17T10:00:00Z"},
-                "timeseries": [{
-                    "data": {
-                        "instant": {"details": {"air_temperature": 12}},
-                        "next_1_hours": {
-                            "summary": {"symbol_code": "cloudy"},
-                            "details": {"precipitation_amount": 0},
-                        },
-                    },
-                }],
+                "timeseries": forecast_rows,
             },
         }
         response = io.BytesIO(json.dumps(payload).encode("utf-8"))
@@ -377,6 +383,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("lat=1.25000&lon=2.50000", request.full_url)
         self.assertEqual(request.get_header("User-agent"), "FamilyBot-test/1.0 contact@example.invalid")
         self.assertEqual(result["temperature"], 12)
+        self.assertEqual([period["label"] for period in result["periods"]], ["08–12", "12–16", "16–20"])
+        self.assertEqual(result["periods"][0]["precipitation_mm"], 0.4)
 
 
 if __name__ == "__main__":

@@ -56,7 +56,7 @@ def main() -> None:
 
     browser=json.loads((ROOT/"tests/browser-acceptance.json").read_text())
     direct=browser["direct_child_link"]; portrait=browser["portrait"]
-    started=time.monotonic(); record("AC-02",direct["survived_reload"] and portrait["family_information_cards"]==4 and portrait["child_entry_controls"]==EXPECTED_CHILDREN,f"family home=4 cards; {EXPECTED_CHILDREN} configured child entry controls; direct child URL survived reload",started)
+    started=time.monotonic(); record("AC-02",direct["survived_reload"] and portrait["family_information_cards"]==5 and portrait["child_entry_controls"]==EXPECTED_CHILDREN,f"family home=5 cards; {EXPECTED_CHILDREN} configured child entry controls; direct child URL survived reload",started)
 
     started=time.monotonic()
     with sqlite3.connect(DB) as connection:
@@ -97,7 +97,7 @@ def main() -> None:
     encoded=dashboard_raw.decode("utf-8",errors="replace").lower(); forbidden=[term for term in ("telegram_id","raw_json","source_ref","attachment","api_key") if term in encoded]
     departures=dashboard.get("transport",{}).get("departures",[])
     live_transport=bool(departures) and all(str(item.get("line"))==CONFIGURED_LINE for item in departures) and "TransportCountdown" in source and "1_000" in source
-    family_surface=all(text in source for text in ("Viktigst nå","Vær og T-bane","Aktiviteter","FamilyBot","Skolen denne uken"))
+    family_surface=all(text in source for text in ("Viktigst nå","WeatherForecast","T-bane","Aktiviteter","FamilyBot","Skolen denne uken"))
     current_plans=[plan["member"] for plan in dashboard.get("week_plans",[])]
     plan_state=dashboard.get("week_plan_status",[])
     record("AC-08",family_surface and live_transport and len(plan_state)==EXPECTED_CHILDREN and not forbidden,f"family surfaces; {len(departures)} configured-line departures with countdown; {len(current_plans)} week plan(s), {len(plan_state)} explicit child plan states; forbidden keys={forbidden}",started)

@@ -27,6 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 from family_config import integration, member_profiles, portal_settings
 
@@ -167,6 +168,8 @@ WEATHER_LABELS = {
     "thunder": "torden",
 }
 TRANSPORT_MODES = {"metro", "bus", "tram", "rail", "water"}
+WEATHER_CACHE_VERSION = 2
+WEATHER_TZ = ZoneInfo("Europe/Oslo")
 
 ENTUR_ENDPOINT = "https://api.entur.io/journey-planner/v3/graphql"
 
@@ -176,7 +179,7 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
     cache_path = workspace / "db/dashboard_weather.json"
     cached = load_json(cache_path)
     checked = cached.get("updated_at")
-    if checked:
+    if checked and cached.get("forecast_version") == WEATHER_CACHE_VERSION:
         try:
             age = dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(checked.replace("Z", "+00:00"))
             if age < dt.timedelta(minutes=30):
@@ -197,17 +200,20 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
         request = urllib.request.Request(endpoint, headers={"User-Agent": user_agent})
         with urllib.request.urlopen(request, timeout=4) as response:
             payload = json.load(response)
-        series = payload["properties"]["timeseries"][:6]
+        series = payload["properties"]["timeseries"]
         first = series[0]["data"]
         temperature = round(float(first["instant"]["details"]["air_temperature"]))
         symbol = str(first.get("next_1_hours", {}).get("summary", {}).get("symbol_code", "cloudy")).split("_")[0]
         label = next((text for key, text in WEATHER_LABELS.items() if symbol.startswith(key)), "skiftende vær")
-        precipitation = round(sum(float(item["data"].get("next_1_hours", {}).get("details", {}).get("precipitation_amount", 0)) for item in series), 1)
+        precipitation = round(sum(float(item["data"].get("next_1_hours", {}).get("details", {}).get("precipitation_amount", 0)) for item in series[:6]), 1)
+        periods = weather_periods(series, dt.datetime.now(dt.timezone.utc).astimezone(WEATHER_TZ))
         result = {
             "status": f"{temperature} °C · {label} · {precipitation:g} mm neste 6 t",
             "temperature": temperature,
             "precipitation_6h": precipitation,
             "symbol": symbol,
+            "forecast_version": WEATHER_CACHE_VERSION,
+            "periods": periods,
             "updated_at": payload["properties"].get("meta", {}).get("updated_at") or iso_now(),
             "source": "MET Locationforecast",
             "stale": False,
@@ -220,6 +226,42 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
             cached["stale"] = True
             return cached
         return {"status": "Værvarsel er midlertidig utilgjengelig", "updated_at": None, "source": "MET Locationforecast", "stale": True}
+
+
+def weather_periods(series: list[dict[str, Any]], now: dt.datetime) -> list[dict[str, Any]]:
+    """Aggregate the hourly MET forecast into the three daytime bands shown in the UI."""
+    target_date = now.date()
+    parsed: list[tuple[dt.datetime, dict[str, Any]]] = []
+    for item in series:
+        try:
+            timestamp = dt.datetime.fromisoformat(str(item["time"]).replace("Z", "+00:00"))
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=dt.timezone.utc)
+            parsed.append((timestamp.astimezone(WEATHER_TZ), item["data"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    if not parsed:
+        return []
+    if not any(timestamp.date() == target_date for timestamp, _ in parsed):
+        target_date = parsed[0][0].date()
+
+    periods: list[dict[str, Any]] = []
+    for start, end in ((8, 12), (12, 16), (16, 20)):
+        rows = [(timestamp, data) for timestamp, data in parsed if timestamp.date() == target_date and start <= timestamp.hour < end]
+        temperatures = [float(data["instant"]["details"]["air_temperature"]) for _, data in rows if data.get("instant", {}).get("details", {}).get("air_temperature") is not None]
+        rain_values = [float(data.get("next_1_hours", {}).get("details", {}).get("precipitation_amount", 0)) for _, data in rows]
+        symbols = [str(data.get("next_1_hours", {}).get("summary", {}).get("symbol_code", "")).split("_")[0] for _, data in rows]
+        symbol = next((value for value in symbols if value), "cloudy")
+        label = next((text for key, text in WEATHER_LABELS.items() if symbol.startswith(key)), "skiftende vær")
+        periods.append({
+            "label": f"{start:02d}–{end:02d}",
+            "temperature_min": round(min(temperatures)) if temperatures else None,
+            "temperature_max": round(max(temperatures)) if temperatures else None,
+            "precipitation_mm": round(sum(rain_values), 1),
+            "symbol": symbol,
+            "summary": label,
+        })
+    return periods
 
 
 def transport_summary(workspace: Path) -> dict[str, Any]:

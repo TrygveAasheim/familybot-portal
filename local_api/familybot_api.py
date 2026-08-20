@@ -168,7 +168,8 @@ WEATHER_LABELS = {
     "thunder": "torden",
 }
 TRANSPORT_MODES = {"metro", "bus", "tram", "rail", "water"}
-WEATHER_CACHE_VERSION = 2
+WEATHER_CACHE_VERSION = 3
+WEATHER_CACHE_TTL = dt.timedelta(minutes=10)
 WEATHER_TZ = ZoneInfo("Europe/Oslo")
 
 ENTUR_ENDPOINT = "https://api.entur.io/journey-planner/v3/graphql"
@@ -182,7 +183,7 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
     if checked and cached.get("forecast_version") == WEATHER_CACHE_VERSION:
         try:
             age = dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(checked.replace("Z", "+00:00"))
-            if age < dt.timedelta(minutes=30):
+            if age < WEATHER_CACHE_TTL:
                 return cached
         except (TypeError, ValueError):
             pass
@@ -210,13 +211,14 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
         period_date = weather_period_date(series, weather_now)
         periods = weather_periods(series, weather_now)
         result = {
-            "status": f"{temperature} °C · {label} · {precipitation:g} mm neste 6 t",
+            "status": f"{temperature} °C · {label}",
             "temperature": temperature,
             "precipitation_6h": precipitation,
             "symbol": symbol,
             "forecast_version": WEATHER_CACHE_VERSION,
             "period_date": period_date.isoformat() if period_date else None,
             "periods": periods,
+            "advice": weather_advice(series, period_date, periods),
             "updated_at": payload["properties"].get("meta", {}).get("updated_at") or iso_now(),
             "source": "MET Locationforecast",
             "stale": False,
@@ -286,6 +288,48 @@ def weather_period_date(series: list[dict[str, Any]], now: dt.datetime) -> dt.da
     if today in dates and band_count(today):
         return today
     return next((candidate for candidate in dates if candidate > today and band_count(candidate) == 3), next((candidate for candidate in dates if candidate > today), dates[0]))
+
+
+def weather_advice(series: list[dict[str, Any]], period_date: dt.date | None, periods: list[dict[str, Any]]) -> str:
+    """Generate a short, child-focused recommendation from the displayed forecast."""
+    if period_date is None or not periods:
+        return "Sjekk værvarselet før dere går."
+    rows: list[tuple[dt.datetime, dict[str, Any]]] = []
+    for item in series:
+        try:
+            timestamp = dt.datetime.fromisoformat(str(item["time"]).replace("Z", "+00:00"))
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=dt.timezone.utc)
+            local_timestamp = timestamp.astimezone(WEATHER_TZ)
+            if local_timestamp.date() == period_date:
+                rows.append((local_timestamp, item["data"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    outdoor_rows = [(timestamp, data) for timestamp, data in rows if 6 <= timestamp.hour < 19] or rows
+    temperatures = [float(data["instant"]["details"]["air_temperature"]) for _, data in outdoor_rows if data.get("instant", {}).get("details", {}).get("air_temperature") is not None]
+    symbols = [str(data.get("next_1_hours", {}).get("summary", {}).get("symbol_code", "")).lower() for _, data in outdoor_rows]
+    rain_values = [float(data.get("next_1_hours", {}).get("details", {}).get("precipitation_amount", 0)) for _, data in outdoor_rows]
+    max_wind = max((float(data.get("instant", {}).get("details", {}).get("wind_speed", 0)) for _, data in outdoor_rows), default=0)
+    minimum = min(temperatures) if temperatures else min((period["temperature_min"] for period in periods if period["temperature_min"] is not None), default=None)
+    total_rain = sum(rain_values) if rain_values else sum(float(period["precipitation_mm"]) for period in periods)
+    peak_rain = max(rain_values, default=0)
+    if any("thunder" in symbol for symbol in symbols):
+        advice = "Vanntett jakke og sko; gå inn når tordenværet kommer."
+    elif any("heavyrain" in symbol for symbol in symbols) or peak_rain >= 3:
+        advice = "Regnjakke og vanntette sko; en tynn jakke alene er ikke nok."
+    elif any(key in symbol for symbol in symbols for key in ("snow", "sleet")):
+        advice = "Varmt, vanntett ytterlag og sko som tåler vintervær."
+    elif total_rain > 0.5:
+        advice = "Ta med regnjakke og sko som tåler regn."
+    elif minimum is not None and minimum < 10:
+        advice = "Kle dere lagvis for en kjølig morgen."
+    elif minimum is not None and minimum < 15:
+        advice = "En lett jakke kan være nyttig tidlig og sent."
+    else:
+        advice = "Lette klær passer; ta med et tynt lag til ettermiddagen."
+    if max_wind >= 10 and "vind" not in advice.lower():
+        advice += " Velg også et vindtett ytterlag."
+    return advice
 
 
 def transport_summary(workspace: Path) -> dict[str, Any]:

@@ -56,7 +56,9 @@ class RepositoryTests(unittest.TestCase):
         migrate(self.db)
         (root / "db/health_failures.json").write_text('{"database":0}', encoding="utf-8")
         (root / "db/dashboard_weather.json").write_text(json.dumps({
-            "status": "16 °C · delvis skyet · 0 mm neste 6 t",
+            "status": "16 °C · delvis skyet",
+            "forecast_version": 3,
+            "advice": "En lett jakke kan være nyttig tidlig og sent.",
             "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "source": "MET Locationforecast", "stale": False,
         }), encoding="utf-8")
@@ -383,8 +385,10 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("lat=1.25000&lon=2.50000", request.full_url)
         self.assertEqual(request.get_header("User-agent"), "FamilyBot-test/1.0 contact@example.invalid")
         self.assertEqual(result["temperature"], 12)
+        self.assertNotIn("neste 6 t", result["status"])
         self.assertEqual([period["label"] for period in result["periods"]], ["08–12", "12–16", "16–20"])
         self.assertEqual(result["periods"][0]["precipitation_mm"], 0.4)
+        self.assertIn("regnjakke", result["advice"])
 
 
 if __name__ == "__main__":

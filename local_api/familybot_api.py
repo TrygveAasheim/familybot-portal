@@ -206,13 +206,16 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
         symbol = str(first.get("next_1_hours", {}).get("summary", {}).get("symbol_code", "cloudy")).split("_")[0]
         label = next((text for key, text in WEATHER_LABELS.items() if symbol.startswith(key)), "skiftende vær")
         precipitation = round(sum(float(item["data"].get("next_1_hours", {}).get("details", {}).get("precipitation_amount", 0)) for item in series[:6]), 1)
-        periods = weather_periods(series, dt.datetime.now(dt.timezone.utc).astimezone(WEATHER_TZ))
+        weather_now = dt.datetime.now(dt.timezone.utc).astimezone(WEATHER_TZ)
+        period_date = weather_period_date(series, weather_now)
+        periods = weather_periods(series, weather_now)
         result = {
             "status": f"{temperature} °C · {label} · {precipitation:g} mm neste 6 t",
             "temperature": temperature,
             "precipitation_6h": precipitation,
             "symbol": symbol,
             "forecast_version": WEATHER_CACHE_VERSION,
+            "period_date": period_date.isoformat() if period_date else None,
             "periods": periods,
             "updated_at": payload["properties"].get("meta", {}).get("updated_at") or iso_now(),
             "source": "MET Locationforecast",
@@ -230,7 +233,9 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
 
 def weather_periods(series: list[dict[str, Any]], now: dt.datetime) -> list[dict[str, Any]]:
     """Aggregate the hourly MET forecast into the three daytime bands shown in the UI."""
-    target_date = now.date()
+    target_date = weather_period_date(series, now)
+    if target_date is None:
+        return []
     parsed: list[tuple[dt.datetime, dict[str, Any]]] = []
     for item in series:
         try:
@@ -240,11 +245,6 @@ def weather_periods(series: list[dict[str, Any]], now: dt.datetime) -> list[dict
             parsed.append((timestamp.astimezone(WEATHER_TZ), item["data"]))
         except (KeyError, TypeError, ValueError):
             continue
-    if not parsed:
-        return []
-    if not any(timestamp.date() == target_date for timestamp, _ in parsed):
-        target_date = parsed[0][0].date()
-
     periods: list[dict[str, Any]] = []
     for start, end in ((8, 12), (12, 16), (16, 20)):
         rows = [(timestamp, data) for timestamp, data in parsed if timestamp.date() == target_date and start <= timestamp.hour < end]
@@ -262,6 +262,30 @@ def weather_periods(series: list[dict[str, Any]], now: dt.datetime) -> list[dict
             "summary": label,
         })
     return periods
+
+
+def weather_period_date(series: list[dict[str, Any]], now: dt.datetime) -> dt.date | None:
+    """Choose today while a daytime band remains; otherwise choose the next forecast day."""
+    local_times: list[dt.datetime] = []
+    for item in series:
+        try:
+            timestamp = dt.datetime.fromisoformat(str(item["time"]).replace("Z", "+00:00"))
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=dt.timezone.utc)
+            local_times.append(timestamp.astimezone(WEATHER_TZ))
+        except (KeyError, TypeError, ValueError):
+            continue
+    dates = list(dict.fromkeys(timestamp.date() for timestamp in local_times))
+    if not dates:
+        return None
+
+    def band_count(target: dt.date) -> int:
+        return sum(any(timestamp.date() == target and start <= timestamp.hour < end for timestamp in local_times) for start, end in ((8, 12), (12, 16), (16, 20)))
+
+    today = now.date()
+    if today in dates and band_count(today):
+        return today
+    return next((candidate for candidate in dates if candidate > today and band_count(candidate) == 3), next((candidate for candidate in dates if candidate > today), dates[0]))
 
 
 def transport_summary(workspace: Path) -> dict[str, Any]:

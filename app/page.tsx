@@ -3,7 +3,7 @@ import { FamilyConsole } from "./_components/FamilyConsole";
 
 export const metadata: Metadata = {
   title: "Familieportalen",
-  description: "Familiens felles skjerm for uke, gjøremål og FamilyBot-drift.",
+  description: "A shared family dashboard for schedules, chores, rewards, and FamilyBot status.",
 };
 
 export default function Home() {

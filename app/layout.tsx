@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Familieportalen",
-  description: "Familiens lokale skjerm for uke, gjøremål og FamilyBot-drift.",
+  description: "A local family dashboard for schedules, chores, rewards, and FamilyBot status.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

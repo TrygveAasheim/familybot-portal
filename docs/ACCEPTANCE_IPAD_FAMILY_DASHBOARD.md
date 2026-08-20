@@ -120,10 +120,33 @@ Evidence: negative authorization/CORS tests, response scan, file-mode check.
 
 Evidence: migration-twice test, backup check, supervisor health and full suite.
 
+### AC-12 — Recurring chores
+
+- A parent can create a weekly chore with one or more selected weekdays.
+- A child can complete the recurring chore once on each selected day; a repeat
+  tap on the same day cannot create another occurrence.
+- The child sees a compact `completed/required` progress bar on the chore.
+- Points are awarded, or the cycle enters parent approval, only after all
+  selected occurrences are complete. The next weekly cycle starts at zero.
+
+Evidence: API cycle tests, duplicate-day test, dashboard contract and rendered
+child-card assertions.
+
+### AC-13 — Child routine reset
+
+- A parent can reset chores, points, or both for one selected child.
+- Resetting chores removes the active routine without deleting historical rows.
+- Resetting points starts a fresh reward cycle at zero while retaining the old
+  goal and completion history.
+- Reset actions require the parent session, create a backup, and are safe to
+  repeat with the same idempotency key.
+
+Evidence: authorization, backup, history-retention and reset idempotency tests.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **11/11 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **13/13 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 

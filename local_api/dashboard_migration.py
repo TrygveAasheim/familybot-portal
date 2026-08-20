@@ -47,6 +47,22 @@ CREATE INDEX IF NOT EXISTS idx_chore_completions_member_time
 CREATE INDEX IF NOT EXISTS idx_chore_completions_status
     ON chore_completions(status, completed_at);
 
+CREATE TABLE IF NOT EXISTS chore_cycles (
+    id INTEGER PRIMARY KEY,
+    card_id INTEGER NOT NULL REFERENCES kanban_cards(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL REFERENCES family_members(id),
+    cycle_key TEXT NOT NULL,
+    required_count INTEGER NOT NULL CHECK(required_count >= 1 AND required_count <= 31),
+    completed_count INTEGER NOT NULL DEFAULT 0 CHECK(completed_count >= 0 AND completed_count <= 31),
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','pending','awarded','rejected','reset')),
+    points INTEGER NOT NULL CHECK(points >= 0 AND points <= 1000),
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    UNIQUE(card_id, member_id, cycle_key)
+);
+CREATE INDEX IF NOT EXISTS idx_chore_cycles_member_status
+    ON chore_cycles(member_id, status, cycle_key);
+
 CREATE TABLE IF NOT EXISTS reward_goals (
     id INTEGER PRIMARY KEY,
     member_id INTEGER NOT NULL REFERENCES family_members(id),
@@ -61,6 +77,15 @@ CREATE TABLE IF NOT EXISTS reward_goals (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reward_goals_one_active
     ON reward_goals(member_id) WHERE active=1;
+
+CREATE TABLE IF NOT EXISTS dashboard_reset_operations (
+    id INTEGER PRIMARY KEY,
+    member_id INTEGER NOT NULL REFERENCES family_members(id),
+    scope TEXT NOT NULL CHECK(scope IN ('chores','points','both')),
+    idempotency_key TEXT NOT NULL UNIQUE,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 DEFAULT_CHORES = [
@@ -91,6 +116,20 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
     with sqlite3.connect(db_path) as connection:
         connection.execute("PRAGMA foreign_keys=ON")
         connection.executescript(SCHEMA)
+        for table, column, definition in (
+            ("family_chore_meta", "repeat_mode", "TEXT NOT NULL DEFAULT 'once'"),
+            ("family_chore_meta", "repeat_weekdays", "TEXT NOT NULL DEFAULT ''"),
+            ("family_chore_meta", "repeat_target", "INTEGER NOT NULL DEFAULT 1"),
+            ("chore_completions", "cycle_id", "INTEGER REFERENCES chore_cycles(id)"),
+            ("chore_completions", "occurrence_date", "TEXT"),
+        ):
+            columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+            if column not in columns:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chore_completions_cycle_date "
+            "ON chore_completions(card_id, member_id, cycle_id, occurrence_date)"
+        )
         if seed:
             workspace = db_path.parent.parent
             for profile in child_profiles(workspace):

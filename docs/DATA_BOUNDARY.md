@@ -38,10 +38,13 @@ Writes are limited to the dashboard's chores and rewards model:
 - restore an archived chore;
 - register a child completion and approve or reject it as a parent;
 - set an active reward goal.
+- reset a selected child's active chore list, points cycle, or both.
 
 The bridge creates a consistent SQLite backup before the first mutation in each
-session and appends a local audit record. It cannot trigger scheduled jobs, send
-Telegram messages, edit email processing state or change OpenClaw configuration.
+session and appends a local audit record. Resetting a child archives/hides active
+portal chores and starts a new reward cycle; historical completion and reward
+rows are retained. It cannot trigger scheduled jobs, send Telegram messages,
+edit email processing state or change OpenClaw configuration.
 
 ## Planned add-on boundary
 

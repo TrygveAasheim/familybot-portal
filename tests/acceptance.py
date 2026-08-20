@@ -118,6 +118,18 @@ def main() -> None:
     backup_evidence = f"<workspace>/backups/{backups[-1].parent.name}/family.db" if backups else None
     record("AC-11",bool(backups) and tables_ok and supervisor and launch.returncode==0,f"backup={backup_evidence}; integrity={tables_ok}; supervisor+launchd active",started)
 
+    started=time.monotonic()
+    recurring_contract=all(text in source for text in ("repeat_weekdays","mission-progress","repeat_completed"))
+    with sqlite3.connect(DB) as connection:
+        cycle_table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chore_cycles'").fetchone()
+    record("AC-12",recurring_contract and bool(cycle_table),"recurring chore fields, child progress bar and cycle table present",started)
+
+    started=time.monotonic()
+    reset_contract=all(text in source for text in ("Nullstill oppgaver","Nullstill poeng","Nullstill begge")) and "reset_child" in (ROOT/"local_api/familybot_api.py").read_text()
+    with sqlite3.connect(DB) as connection:
+        reset_table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dashboard_reset_operations'").fetchone()
+    record("AC-13",reset_contract and bool(reset_table),"parent reset controls and idempotency table present",started)
+
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}
     result_dir=ROOT/"tests/results"; result_dir.mkdir(parents=True,exist_ok=True)

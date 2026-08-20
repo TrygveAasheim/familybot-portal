@@ -6,9 +6,9 @@ LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
 mode manages chores, goals and approvals.
 
-> **Custom-built for Norwegian households:** the UI and chores model are
-> reusable, while the included data adapters support Norwegian `ukeplan`, Spond,
-> MET Norway and Entur conventions.
+> **Built for local family life:** the UI and chores model are reusable, while
+> the included adapters can be configured for local school, activity, weather
+> and transport services.
 
 ## Start here
 

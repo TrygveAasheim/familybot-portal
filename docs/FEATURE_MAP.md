@@ -5,8 +5,9 @@
 - iPad-first family home with school, activity, weather, Entur and health cards;
 - configured child profiles and direct Home Screen URLs;
 - touch-first chores, immediate durable progress and completion history;
+- weekly recurring chores with per-day progress and cycle completion;
 - optional approval plus parent rejection of awarded or pending work;
-- parent creation/archive, reward goals and review queue;
+- parent creation/archive, reward goals, review queue and child routine resets;
 - curated read/write API, SQLite backup, audit and idempotency;
 - launchd supervision, Bonjour advertisement and local acceptance gate.
 

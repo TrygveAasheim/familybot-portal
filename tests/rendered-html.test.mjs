@@ -30,6 +30,9 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Familiens oversikt/);
   assert.match(consoleSource, /Hva vil du gjøre/);
   assert.match(consoleSource, /Legg til gjøremål/);
+  assert.match(consoleSource, /repeat_weekdays/);
+  assert.match(consoleSource, /mission-progress/);
+  assert.match(consoleSource, /Nullstill begge/);
   assert.match(consoleSource, /function completionKey/);
   assert.match(consoleSource, /Skolen denne uken/);
   assert.match(consoleSource, /function TransportCountdown/);
@@ -60,5 +63,7 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /X-FamilyBot-Local-Token/);
   assert.match(apiSource, /X-FamilyBot-Parent-Token/);
   assert.match(apiSource, /archived_at=datetime\('now'\)/);
+  assert.match(apiSource, /chore_cycles/);
+  assert.match(apiSource, /reset_child/);
   assert.doesNotMatch(apiSource, /SELECT \*/i);
 });

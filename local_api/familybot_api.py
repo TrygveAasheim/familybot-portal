@@ -37,12 +37,42 @@ DEFAULT_WORKSPACE = Path(
 DEFAULT_DB = DEFAULT_WORKSPACE / "db/family.db"
 LANES = {"todo", "inprogress", "done"}
 PRIORITIES = {"must-do", "important", "nice-to"}
+REPEAT_MODES = {"once", "weekly"}
+WEEKDAY_NAMES = {
+    1: "mandag",
+    2: "tirsdag",
+    3: "onsdag",
+    4: "torsdag",
+    5: "fredag",
+    6: "lørdag",
+    7: "søndag",
+}
 CHORE_COLUMNS = "id,title,description,assigned_to,lane,priority,due_date,created_at,updated_at,archived_at"
 PORTAL_PORT = 3000
 
 
 def iso_now() -> str:
     return dt.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def cycle_key_for_date(repeat_mode: str, value: dt.date) -> str:
+    if repeat_mode == "weekly":
+        return (value - dt.timedelta(days=value.weekday())).isoformat()
+    return "once"
+
+
+def parse_weekdays(value: Any) -> list[int]:
+    if isinstance(value, (list, tuple, set)):
+        raw = list(value)
+    else:
+        raw = str(value or "").split(",")
+    try:
+        weekdays = sorted({int(item) for item in raw if str(item).strip()})
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Velg gyldige ukedager.") from exc
+    if any(day not in WEEKDAY_NAMES for day in weekdays):
+        raise ValidationError("Velg gyldige ukedager.")
+    return weekdays
 
 
 def file_timestamp(path: Path) -> str | None:
@@ -383,6 +413,51 @@ class FamilyRepository:
         except (OSError, subprocess.TimeoutExpired):
             return {"loaded": False, "running": False, "last_exit": None}
 
+    def chore_view(self, connection: sqlite3.Connection, row: sqlite3.Row, member_id: int, today: dt.date) -> dict[str, Any]:
+        result = dict(row)
+        mode = result.get("repeat_mode") or "once"
+        weekdays = parse_weekdays(result.get("repeat_weekdays")) if mode == "weekly" else []
+        target = int(result.get("repeat_target") or (len(weekdays) if weekdays else 1))
+        result.update({
+            "repeat_mode": mode,
+            "repeat_weekdays": weekdays,
+            "repeat_target": target,
+            "repeat_completed": 0,
+            "repeat_percent": 0,
+            "repeat_status": "open",
+            "available_today": True,
+        })
+        if mode != "weekly":
+            return result
+        key = cycle_key_for_date(mode, today)
+        cycle = connection.execute(
+            """SELECT id,status,required_count,completed_count
+               FROM chore_cycles WHERE card_id=? AND member_id=? AND cycle_key=?""",
+            (result["id"], member_id, key),
+        ).fetchone()
+        completed = connection.execute(
+            """SELECT COUNT(*) FROM chore_completions
+               WHERE card_id=? AND member_id=? AND cycle_id=(
+                   SELECT id FROM chore_cycles WHERE card_id=? AND member_id=? AND cycle_key=?
+               ) AND status != 'rejected'""",
+            (result["id"], member_id, result["id"], member_id, key),
+        ).fetchone()[0]
+        status = cycle["status"] if cycle else "open"
+        required = int(cycle["required_count"] if cycle else target)
+        result.update({
+            "repeat_target": required,
+            "repeat_completed": int(completed),
+            "repeat_percent": min(100, round(int(completed) * 100 / required)),
+            "repeat_status": status,
+            "available_today": today.isoweekday() in weekdays and status == "open" and not connection.execute(
+                """SELECT 1 FROM chore_completions c JOIN chore_cycles x ON x.id=c.cycle_id
+                   WHERE c.card_id=? AND c.member_id=? AND x.cycle_key=?
+                     AND c.occurrence_date=? AND c.status != 'rejected'""",
+                (result["id"], member_id, key, today.isoformat()),
+            ).fetchone(),
+        })
+        return result
+
     def dashboard(self, today: dt.date | None = None) -> dict[str, Any]:
         today = today or dt.date.today()
         monday = today + dt.timedelta(days=(7 - today.weekday()) % 7)
@@ -470,19 +545,25 @@ class FamilyRepository:
             }
             child_chores = self._rows(connection.execute(
                 """SELECT k.id,k.title,k.description,k.assigned_to,k.lane,k.due_date,
-                          m.icon,m.points,m.requires_approval
+                          m.icon,m.points,m.requires_approval,m.repeat_mode,m.repeat_weekdays,m.repeat_target
                    FROM kanban_cards k JOIN family_chore_meta m ON m.card_id=k.id
-                   WHERE k.archived_at IS NULL AND m.visible_to_kids=1 AND k.lane IN ('todo','inprogress')
+                   WHERE k.archived_at IS NULL AND m.visible_to_kids=1
+                     AND (k.lane IN ('todo','inprogress') OR m.repeat_mode='weekly')
                    ORDER BY CASE k.priority WHEN 'must-do' THEN 0 WHEN 'important' THEN 1 ELSE 2 END,
                             COALESCE(k.due_date,'9999-12-31'),k.id"""
             )) if self.table_exists(connection, "family_chore_meta") else []
             histories = self._rows(connection.execute(
                 """SELECT c.id,c.card_id,c.member_id,c.status,c.points,c.completed_at,
-                          k.title,m.icon,f.name AS member
+                          k.title,m.icon,f.name AS member,
+                          x.id AS cycle_id,x.status AS cycle_status,
+                          x.completed_count AS cycle_completed,x.required_count AS cycle_required,x.points AS cycle_points,
+                          CASE WHEN x.id IS NULL OR c.id=(SELECT MAX(last.id) FROM chore_completions last WHERE last.cycle_id=x.id)
+                               THEN 1 ELSE 0 END AS reviewable
                    FROM chore_completions c
                    JOIN kanban_cards k ON k.id=c.card_id
                    JOIN family_chore_meta m ON m.card_id=k.id AND m.visible_to_kids=1
                    JOIN family_members f ON f.id=c.member_id
+                   LEFT JOIN chore_cycles x ON x.id=c.cycle_id
                    ORDER BY c.completed_at DESC,c.id DESC LIMIT 40"""
             )) if self.table_exists(connection, "chore_completions") else []
             goals = self._rows(connection.execute(
@@ -494,6 +575,19 @@ class FamilyRepository:
                    FROM reward_goals g JOIN family_members f ON f.id=g.member_id
                    WHERE g.active=1 ORDER BY f.id"""
             )) if self.table_exists(connection, "reward_goals") else []
+            chore_views_by_member = {}
+            for child in members:
+                if child["role"] != "child":
+                    continue
+                views = []
+                for item in child_chores:
+                    if item["assigned_to"].lower() != child["name"].lower():
+                        continue
+                    view = self.chore_view(connection, item, child["id"], today)
+                    if view["repeat_mode"] == "weekly" and view["repeat_status"] == "awarded":
+                        continue
+                    views.append(view)
+                chore_views_by_member[child["id"]] = views
 
         spond_state = load_json(self.workspace / "db/spond_sync_state.json")
         vacation = load_json(self.workspace / "memory/vacation-mode.json")
@@ -570,7 +664,7 @@ class FamilyRepository:
                 "name": profile.get("name") or name,
                 "avatar": profile.get("avatar") or "✨",
                 "grade": profile.get("grade", child.get("grade")),
-                "chores": [item for item in child_chores if item["assigned_to"].lower() == name.lower()],
+                "chores": chore_views_by_member.get(child["id"], []),
                 "history": [item for item in histories if item["member_id"] == child["id"]][:10],
                 "reward": matching_goal,
             })
@@ -604,8 +698,8 @@ class FamilyRepository:
             "hardening": hardening,
             "processes": processes,
             "children": dashboard_children,
-            "approval_queue": [item for item in histories if item["status"] == "pending"],
-            "review_queue": [item for item in histories if item["status"] in {"pending", "awarded"}][:20],
+            "approval_queue": [item for item in histories if item["reviewable"] and item["status"] == "pending" and item.get("cycle_status") in {None, "pending"}],
+            "review_queue": [item for item in histories if item["reviewable"] and item["status"] in {"pending", "awarded"} and item.get("cycle_status") in {None, "pending", "awarded"}][:20],
             "transport": transport_summary(self.workspace),
             "weather": weather_summary(self.workspace),
         }
@@ -735,6 +829,13 @@ class FamilyRepository:
         if not 1 <= len(icon) <= 12:
             raise ValidationError("Velg ett kort ikon.")
         points = self._integer(payload.get("points", 1), "Poeng", 0, 1000)
+        repeat_mode = str(payload.get("repeat_mode") or "once")
+        if repeat_mode not in REPEAT_MODES:
+            raise ValidationError("Ukjent gjentakelse.")
+        repeat_weekdays = parse_weekdays(payload.get("repeat_weekdays")) if repeat_mode == "weekly" else []
+        if repeat_mode == "weekly" and not repeat_weekdays:
+            raise ValidationError("Velg minst én ukedag.")
+        repeat_target = len(repeat_weekdays) if repeat_mode == "weekly" else 1
         base = {
             "title": payload.get("title"),
             "description": payload.get("description"),
@@ -751,17 +852,61 @@ class FamilyRepository:
                 (values["title"], values.get("description"), values["assigned_to"], values["priority"], values.get("due_date")),
             )
             connection.execute(
-                """INSERT INTO family_chore_meta(card_id,icon,points,requires_approval)
-                   VALUES(?,?,?,?)""",
-                (cursor.lastrowid, icon, points, int(bool(payload.get("requires_approval")))),
+                """INSERT INTO family_chore_meta(
+                       card_id,icon,points,requires_approval,repeat_mode,repeat_weekdays,repeat_target
+                   ) VALUES(?,?,?,?,?,?,?)""",
+                (
+                    cursor.lastrowid,
+                    icon,
+                    points,
+                    int(bool(payload.get("requires_approval"))),
+                    repeat_mode,
+                    ",".join(str(day) for day in repeat_weekdays),
+                    repeat_target,
+                ),
             )
             row = dict(connection.execute(
-                """SELECT k.id,k.title,k.assigned_to,k.lane,m.icon,m.points,m.requires_approval
+                """SELECT k.id,k.title,k.assigned_to,k.lane,m.icon,m.points,m.requires_approval,
+                          m.repeat_mode,m.repeat_weekdays,m.repeat_target
                    FROM kanban_cards k JOIN family_chore_meta m ON m.card_id=k.id WHERE k.id=?""",
                 (cursor.lastrowid,),
             ).fetchone())
+        row["repeat_weekdays"] = repeat_weekdays
         self.audit("child_chore.created", {"id": row["id"], "assigned_to": assigned, "points": points})
         return row
+
+    def _cycle_for_completion(
+        self,
+        connection: sqlite3.Connection,
+        chore_id: int,
+        member_id: int,
+        repeat_mode: str,
+        repeat_weekdays: list[int],
+        repeat_target: int,
+        points: int,
+        today: dt.date,
+    ) -> sqlite3.Row:
+        if repeat_mode == "weekly" and today.isoweekday() not in repeat_weekdays:
+            days = ", ".join(WEEKDAY_NAMES[day] for day in repeat_weekdays)
+            raise ValidationError(f"Dette oppdraget kan gjøres {days}.")
+        key = cycle_key_for_date(repeat_mode, today)
+        cycle = connection.execute(
+            """SELECT id,card_id,member_id,cycle_key,required_count,completed_count,status,points,created_at,decided_at
+               FROM chore_cycles WHERE card_id=? AND member_id=? AND cycle_key=?""",
+            (chore_id, member_id, key),
+        ).fetchone()
+        if cycle:
+            return cycle
+        cursor = connection.execute(
+            """INSERT INTO chore_cycles(card_id,member_id,cycle_key,required_count,points,created_at)
+               VALUES(?,?,?,?,?,?)""",
+            (chore_id, member_id, key, repeat_target, points, iso_now()),
+        )
+        return connection.execute(
+            """SELECT id,card_id,member_id,cycle_key,required_count,completed_count,status,points,created_at,decided_at
+               FROM chore_cycles WHERE id=?""",
+            (cursor.lastrowid,),
+        ).fetchone()
 
     def complete_chore(self, chore_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         member_id = self._integer(payload.get("member_id"), "Barn", 1, 1000000)
@@ -776,7 +921,8 @@ class FamilyRepository:
             if existing:
                 return {**dict(existing), "duplicate": True}
             row = connection.execute(
-                """SELECT k.id,k.assigned_to,k.lane,m.points,m.requires_approval,f.name
+                """SELECT k.id,k.assigned_to,k.lane,m.points,m.requires_approval,
+                          m.repeat_mode,m.repeat_weekdays,m.repeat_target,f.name
                    FROM kanban_cards k JOIN family_chore_meta m ON m.card_id=k.id
                    JOIN family_members f ON f.id=? AND f.role='child'
                    WHERE k.id=? AND k.archived_at IS NULL AND m.visible_to_kids=1""",
@@ -784,19 +930,67 @@ class FamilyRepository:
             ).fetchone()
             if not row or row["assigned_to"].lower() != row["name"].lower():
                 raise KeyError(chore_id)
-            if row["lane"] not in {"todo", "inprogress"}:
+            repeat_mode = row["repeat_mode"] or "once"
+            if repeat_mode == "once" and row["lane"] not in {"todo", "inprogress"}:
                 raise ValidationError("Gjøremålet er allerede ferdig.")
-            status = "pending" if row["requires_approval"] else "awarded"
+            today = dt.date.today()
             completed_at = iso_now()
-            cursor = connection.execute(
-                """INSERT INTO chore_completions(card_id,member_id,idempotency_key,status,points,completed_at)
-                   VALUES(?,?,?,?,?,?)""",
-                (chore_id, member_id, key, status, row["points"], completed_at),
-            )
-            connection.execute(
-                "UPDATE kanban_cards SET lane='done',updated_at=datetime('now') WHERE id=?", (chore_id,)
-            )
-            result = {"id": cursor.lastrowid, "status": status, "points": row["points"], "duplicate": False}
+            if repeat_mode == "weekly":
+                repeat_weekdays = parse_weekdays(row["repeat_weekdays"])
+                cycle = self._cycle_for_completion(
+                    connection,
+                    chore_id,
+                    member_id,
+                    repeat_mode,
+                    repeat_weekdays,
+                    int(row["repeat_target"] or len(repeat_weekdays)),
+                    int(row["points"]),
+                    today,
+                )
+                if cycle["status"] != "open":
+                    raise ValidationError("Dette oppdraget venter allerede på godkjenning eller er ferdig for uken.")
+                if connection.execute(
+                    """SELECT 1 FROM chore_completions
+                       WHERE card_id=? AND member_id=? AND cycle_id=? AND occurrence_date=?
+                         AND status != 'rejected'""",
+                    (chore_id, member_id, cycle["id"], today.isoformat()),
+                ).fetchone():
+                    raise ValidationError("Dette oppdraget er allerede registrert i dag.")
+                completed_count = int(cycle["completed_count"]) + 1
+                final = completed_count >= int(cycle["required_count"])
+                status = "pending" if row["requires_approval"] else "awarded"
+                awarded_points = int(row["points"]) if final and not row["requires_approval"] else 0
+                cursor = connection.execute(
+                    """INSERT INTO chore_completions(
+                           card_id,member_id,idempotency_key,status,points,completed_at,cycle_id,occurrence_date
+                       ) VALUES(?,?,?,?,?,?,?,?)""",
+                    (chore_id, member_id, key, status, awarded_points, completed_at, cycle["id"], today.isoformat()),
+                )
+                cycle_status = "pending" if final and row["requires_approval"] else ("awarded" if final else "open")
+                connection.execute(
+                    """UPDATE chore_cycles SET completed_count=?,status=?,decided_at=? WHERE id=?""",
+                    (completed_count, cycle_status, completed_at if final and not row["requires_approval"] else None, cycle["id"]),
+                )
+                result = {
+                    "id": cursor.lastrowid,
+                    "status": status,
+                    "points": awarded_points,
+                    "duplicate": False,
+                    "repeat_completed": completed_count,
+                    "repeat_target": int(cycle["required_count"]),
+                    "repeat_status": cycle_status,
+                }
+            else:
+                status = "pending" if row["requires_approval"] else "awarded"
+                cursor = connection.execute(
+                    """INSERT INTO chore_completions(card_id,member_id,idempotency_key,status,points,completed_at)
+                       VALUES(?,?,?,?,?,?)""",
+                    (chore_id, member_id, key, status, row["points"], completed_at),
+                )
+                connection.execute(
+                    "UPDATE kanban_cards SET lane='done',updated_at=datetime('now') WHERE id=?", (chore_id,)
+                )
+                result = {"id": cursor.lastrowid, "status": status, "points": row["points"], "duplicate": False}
         self.audit("chore.completed", {"card_id": chore_id, "member_id": member_id, "status": status})
         return result
 
@@ -807,10 +1001,45 @@ class FamilyRepository:
         self.backup_before_write()
         with self.connect() as connection:
             current = connection.execute(
-                "SELECT id,card_id,status,points FROM chore_completions WHERE id=?", (completion_id,)
+                "SELECT id,card_id,status,points,cycle_id FROM chore_completions WHERE id=?", (completion_id,)
             ).fetchone()
             if not current:
                 raise KeyError(completion_id)
+            if current["cycle_id"]:
+                cycle = connection.execute(
+                    """SELECT id,card_id,member_id,cycle_key,required_count,completed_count,status,points,created_at,decided_at
+                       FROM chore_cycles WHERE id=?""", (current["cycle_id"],)
+                ).fetchone()
+                if not cycle or cycle["status"] != "pending":
+                    raise ValidationError("Denne gjentakelsen er ikke klar for godkjenning.")
+                now = iso_now()
+                if decision == "awarded":
+                    final_id = connection.execute(
+                        "SELECT id FROM chore_completions WHERE cycle_id=? ORDER BY id DESC LIMIT 1",
+                        (cycle["id"],),
+                    ).fetchone()[0]
+                    connection.execute(
+                        "UPDATE chore_completions SET status='awarded',points=CASE WHEN id=? THEN ? ELSE 0 END,approved_by=?,decided_at=? WHERE cycle_id=?",
+                        (final_id, cycle["points"], parent_id, now, cycle["id"]),
+                    )
+                    connection.execute(
+                        "UPDATE chore_cycles SET status='awarded',decided_at=? WHERE id=?", (now, cycle["id"])
+                    )
+                else:
+                    connection.execute(
+                        "UPDATE chore_completions SET status='rejected',points=0,approved_by=?,decided_at=? WHERE cycle_id=?",
+                        (parent_id, now, cycle["id"]),
+                    )
+                    connection.execute(
+                        "UPDATE chore_cycles SET status='open',completed_count=0,decided_at=? WHERE id=?",
+                        (now, cycle["id"]),
+                    )
+                result = dict(connection.execute(
+                    "SELECT id,card_id,status,points,completed_at,decided_at FROM chore_completions WHERE id=?",
+                    (completion_id,),
+                ).fetchone())
+                self.audit("completion.decided", {"id": completion_id, "status": decision, "parent_id": parent_id, "cycle_id": cycle["id"]})
+                return result
             if current["status"] == "rejected" or (current["status"] == "awarded" and decision == "awarded"):
                 return {**dict(current), "unchanged": True}
             connection.execute(
@@ -855,6 +1084,79 @@ class FamilyRepository:
             ).fetchone())
         self.audit("reward.created", {"id": result["id"], "member_id": member_id, "target": target})
         return result
+
+    def reset_child(self, member_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        member_id = self._integer(member_id, "Barn", 1, 1000000)
+        scope = str(payload.get("scope") or "both")
+        if scope not in {"chores", "points", "both"}:
+            raise ValidationError("Velg hva som skal nullstilles.")
+        key = str(payload.get("idempotency_key") or "").strip()
+        if not 8 <= len(key) <= 128:
+            raise ValidationError("Ugyldig nullstillingsnøkkel.")
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT result_json FROM dashboard_reset_operations WHERE idempotency_key=?", (key,)
+            ).fetchone()
+            if existing:
+                return {**json.loads(existing[0]), "duplicate": True}
+            child = connection.execute(
+                "SELECT id,name FROM family_members WHERE id=? AND role='child'", (member_id,)
+            ).fetchone()
+            if not child:
+                raise ValidationError("Ukjent barn.")
+        self.backup_before_write()
+        now = iso_now()
+        archived_chores = 0
+        reset_points = False
+        with self.connect() as connection:
+            if scope in {"chores", "both"}:
+                cursor = connection.execute(
+                    """UPDATE kanban_cards SET archived_at=?,updated_at=?
+                       WHERE archived_at IS NULL AND lower(assigned_to)=lower(?)
+                         AND id IN (SELECT card_id FROM family_chore_meta WHERE visible_to_kids=1)""",
+                    (now, now, child["name"]),
+                )
+                archived_chores = cursor.rowcount
+                connection.execute(
+                    """UPDATE family_chore_meta SET visible_to_kids=0,updated_at=?
+                       WHERE visible_to_kids=1 AND card_id IN (
+                           SELECT id FROM kanban_cards WHERE lower(assigned_to)=lower(?)
+                       )""",
+                    (now, child["name"]),
+                )
+                connection.execute(
+                    """UPDATE chore_cycles SET status='reset',decided_at=?
+                       WHERE member_id=? AND status IN ('open','pending')""",
+                    (now, member_id),
+                )
+            if scope in {"points", "both"}:
+                goal = connection.execute(
+                    """SELECT title,emoji,goal_type,target_value,unit_label
+                       FROM reward_goals WHERE member_id=? AND active=1""",
+                    (member_id,),
+                ).fetchone()
+                if goal:
+                    connection.execute("UPDATE reward_goals SET active=0 WHERE member_id=? AND active=1", (member_id,))
+                    goal_started = dt.datetime.now().astimezone().isoformat(timespec="microseconds")
+                    connection.execute(
+                        """INSERT INTO reward_goals(member_id,title,emoji,goal_type,target_value,unit_label,created_at)
+                           VALUES(?,?,?,?,?,?,?)""",
+                        (member_id, goal["title"], goal["emoji"], goal["goal_type"], goal["target_value"], goal["unit_label"], goal_started),
+                    )
+                    reset_points = True
+            result = {
+                "member_id": member_id,
+                "scope": scope,
+                "archived_chores": archived_chores,
+                "reset_points": reset_points,
+            }
+            connection.execute(
+                """INSERT INTO dashboard_reset_operations(member_id,scope,idempotency_key,result_json,created_at)
+                   VALUES(?,?,?,?,?)""",
+                (member_id, scope, key, json.dumps(result, ensure_ascii=False), now),
+            )
+        self.audit("child.reset", {**result, "idempotency_key": key})
+        return {**result, "duplicate": False}
 
 
 class FamilyApiHandler(BaseHTTPRequestHandler):
@@ -1000,6 +1302,13 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                     self.respond(403, {"error": "Foreldremodus kreves."})
                     return
                 self.respond(201, {"reward": self.app.repository.set_reward(self.read_payload())})
+                return
+            reset = re.fullmatch(r"/api/children/(\d+)/reset", path)
+            if method == "POST" and reset:
+                if not self.authorize_parent():
+                    self.respond(403, {"error": "Foreldremodus kreves."})
+                    return
+                self.respond(200, {"reset": self.app.repository.reset_child(int(reset.group(1)), self.read_payload())})
                 return
             match = re.fullmatch(r"/api/chores/(\d+)(/restore)?", path)
             if not match:

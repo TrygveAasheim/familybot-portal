@@ -186,6 +186,74 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(child_two["reward"]["earned"], 5)
         self.assertEqual(child_two["reward"]["percent"], 50)
 
+    def test_weekly_chore_requires_all_selected_days_before_approval(self):
+        chore = self.repo.create_child_chore({
+            "title": "Lekser hver ukedag", "assigned_to": "child one", "icon": "📖", "points": 10,
+            "requires_approval": True, "repeat_mode": "weekly", "repeat_weekdays": [1, 2, 3, 4, 5],
+        })
+        weekdays = [dt.date(2026, 8, day) for day in range(17, 22)]
+        with patch("familybot_api.dt.date") as date_class:
+            date_class.today.side_effect = weekdays + [weekdays[-1]]
+            for index in range(5):
+                result = self.repo.complete_chore(
+                    chore["id"], {"member_id": 3, "idempotency_key": f"weekday-key-{index:02d}"}
+                )
+                self.assertEqual(result["repeat_completed"], index + 1)
+                self.assertEqual(result["points"], 0)
+            with self.assertRaises(ValidationError):
+                self.repo.complete_chore(
+                    chore["id"], {"member_id": 3, "idempotency_key": "weekday-duplicate"}
+                )
+        dashboard = self.repo.dashboard(weekdays[-1])
+        child = next(item for item in dashboard["children"] if item["id"] == 3)
+        self.assertEqual(child["chores"][0]["repeat_completed"], 5)
+        self.assertEqual(child["chores"][0]["repeat_percent"], 100)
+        self.assertEqual(len(dashboard["approval_queue"]), 1)
+        awarded = self.repo.decide_completion(
+            dashboard["approval_queue"][0]["id"], {"decision": "awarded"}, 1
+        )
+        self.assertEqual(awarded["status"], "awarded")
+        with sqlite3.connect(self.db) as connection:
+            self.assertEqual(connection.execute("SELECT SUM(points) FROM chore_completions").fetchone()[0], 10)
+        next_week = self.repo.dashboard(dt.date(2026, 8, 24))
+        next_child = next(item for item in next_week["children"] if item["id"] == 3)
+        self.assertEqual(next_child["chores"][0]["repeat_completed"], 0)
+
+    def test_weekly_chore_awards_once_without_approval(self):
+        chore = self.repo.create_child_chore({
+            "title": "Vask hendene", "assigned_to": "child two", "icon": "🧼", "points": 3,
+            "repeat_mode": "weekly", "repeat_weekdays": [1, 2],
+        })
+        dates = [dt.date(2026, 8, 17), dt.date(2026, 8, 18)]
+        with patch("familybot_api.dt.date") as date_class:
+            date_class.today.side_effect = dates
+            first = self.repo.complete_chore(chore["id"], {"member_id": 4, "idempotency_key": "wash-day-001"})
+            second = self.repo.complete_chore(chore["id"], {"member_id": 4, "idempotency_key": "wash-day-002"})
+        self.assertEqual(first["points"], 0)
+        self.assertEqual(second["points"], 3)
+        self.assertEqual(second["repeat_status"], "awarded")
+
+    def test_parent_can_reset_child_chores_and_points_idempotently(self):
+        self.repo.set_reward({"member_id": 3, "title": "Ny premie", "emoji": "🎯", "target_value": 20})
+        chore = self.repo.create_child_chore({
+            "title": "Ferdig rutine", "assigned_to": "child one", "icon": "✅", "points": 6,
+        })
+        self.repo.complete_chore(chore["id"], {"member_id": 3, "idempotency_key": "reset-complete-01"})
+        result = self.repo.reset_child(3, {"scope": "both", "idempotency_key": "reset-child-001"})
+        duplicate = self.repo.reset_child(3, {"scope": "both", "idempotency_key": "reset-child-001"})
+        self.assertEqual(result["archived_chores"], 1)
+        self.assertTrue(result["reset_points"])
+        self.assertTrue(duplicate["duplicate"])
+        with sqlite3.connect(self.db) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM chore_completions").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM reward_goals WHERE member_id=3 AND active=1").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM reward_goals WHERE member_id=3").fetchone()[0], 2)
+            self.assertEqual(connection.execute("SELECT archived_at FROM kanban_cards WHERE id=?", (chore["id"],)).fetchone()[0] is not None, True)
+        dashboard = self.repo.dashboard(dt.date(2026, 8, 15))
+        child = next(item for item in dashboard["children"] if item["id"] == 3)
+        self.assertEqual(child["chores"], [])
+        self.assertEqual(child["reward"]["earned"], 0)
+
     def test_lan_origin_boundary(self):
         allowed = {"http://familie.local:3000", "http://localhost:3000"}
         self.assertTrue(trusted_portal_origin("http://familie.local:3000", allowed))

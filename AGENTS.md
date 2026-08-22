@@ -50,3 +50,11 @@ Extend the acceptance contract before shipping a new user-visible capability.
 Normal work lands on `dev`; verified commits are fast-forwarded to `main` and
 deployed from there. Runtime files, PINs, audit logs and databases never enter
 Git.
+
+## Deployment invariant
+
+Every deployment must force a client-side web refresh for all open dashboards.
+The managed service restart must rotate the API session generation, and the
+browser must compare that generation during its normal poll and call
+`window.location.reload()` when it changes. Do not remove this behavior or
+deploy a web-only change that bypasses it.

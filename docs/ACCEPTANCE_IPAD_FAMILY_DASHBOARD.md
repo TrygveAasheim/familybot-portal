@@ -163,7 +163,7 @@ criterion (`pass`, `fail`, evidence, duration). Release requires **14/14 critica
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
-These 11 criteria cover the currently deployed family dashboard. A new
+These 14 criteria cover the currently deployed family dashboard. A new
 user-visible add-on such as Smart Home must add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be
 declared supported; planned criteria live in the core repository's

@@ -20,6 +20,7 @@ a general-purpose OpenClaw administration surface.
 
 `GET /api/dashboard` returns selected fields for family members, upcoming
 events, Spond events, activities, chores, current week plans, school dates,
+weekly achievement progress, configured surprise levels, redemption history,
 source freshness and scheduled-job state. It does not return raw week-plan text,
 email sender addresses, Telegram IDs, Spond `raw_json`, message bodies, secrets
 or attachments.
@@ -44,9 +45,10 @@ Writes are limited to the dashboard's chores and rewards model:
 
 The bridge creates a consistent SQLite backup before the first mutation in each
 session and appends a local audit record. Resetting a child archives/hides active
-portal chores and starts a new reward cycle; historical completion and reward
-rows are retained. It cannot trigger scheduled jobs, send Telegram messages,
-edit email processing state or change OpenClaw configuration.
+portal chores and starts a new reward cycle; achievement resets also preserve
+completed cycles and redemption history. Historical completion and reward rows
+are retained. It cannot trigger scheduled jobs, send Telegram messages, edit
+email processing state or change OpenClaw configuration.
 
 ## Planned add-on boundary
 

@@ -8,7 +8,8 @@ FamilyBot's reliability core.
 
 Familieportalen is the direct iPad-first interface for the household. Its first
 screen is a calm family overview. Children can open their own profiles and use
-chores/rewards without adult help. Parents can review and manage those features.
+chores/rewards without adult help. Parents can review and manage chores, reward
+goals, weekly full-week achievements and surprise redemptions.
 OpenClaw remains available for complex questions and operations.
 
 The sibling `familybot-core` repository owns ingestion, parsing, normalized
@@ -38,7 +39,7 @@ the web service. The API and database remain on the Mac mini.
 | Main family/child/parent UI | `app/_components/FamilyConsole.tsx` | User-visible; touch, accessibility and state-transition risk |
 | Global layout and responsive design | `app/globals.css` | Verify portrait, landscape, 200% zoom and no hover dependency |
 | Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist |
-| Dashboard schema and backup | `local_api/dashboard_migration.py` | Data-critical; idempotent migration and pre-migration backup required |
+| Dashboard schema and backup | `local_api/dashboard_migration.py` | Data-critical; idempotent migration and pre-migration backup required, including weekly achievement history |
 | Config reader | `local_api/family_config.py` | Must match the one core-owned configuration contract |
 | Process supervision | `local_service/run_service.py` | Operational; both processes fail/restart as a group |
 | Local deployment | `scripts/deploy-local.sh`, `launchd/` | Production mutation; preflight and rollback required |
@@ -52,9 +53,17 @@ because those directories exist.
 ## Data ownership
 
 Core-owned tables are read through explicit queries. Portal-owned chores,
-completions and reward tables are created idempotently by the portal migration.
+completions, reward goals and weekly achievement tables are created idempotently
+by the portal migration.
 The portal may add a separate add-on schema, but it cannot reuse core ledgers or
 raw payload columns as a convenient storage area.
+
+Weekly achievement progress is derived from approved portal completion points:
+30 points in one ISO calendar week count as one full week, and each week is
+counted at most once per active achievement cycle. A parent redemption reset
+ends the active cycle, starts a new one and retains the old cycle and
+redemption record for history. See [the weekly achievement specification](WEEKLY_ACHIEVEMENTS.md)
+for the contract and state transitions.
 
 The browser is not entitled to every field returned by SQLite. New response
 fields require an explicit privacy decision in `docs/DATA_BOUNDARY.md` and
@@ -74,7 +83,8 @@ negative tests for raw/private material.
 ## Core versus add-on changes
 
 A school fact or delivery rule belongs in core. Its visual presentation belongs
-here. Chores and rewards are portal-owned add-ons. Smart Home is another add-on:
+here. Chores, rewards and weekly achievement surprises are portal-owned
+add-ons. Smart Home is another add-on:
 Home Assistant owns vendor integrations, a server-side adapter exposes an
 allowlist, and the UI renders a separate `/smart-home` page. A Smart Home outage
 must leave the family overview and child pages usable.

@@ -22,6 +22,7 @@ A new session starts at `AGENTS.md` and must identify:
 | Which fields/actions may reach the browser? | `docs/DATA_BOUNDARY.md` |
 | What makes an iPad release acceptable? | `docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md` |
 | Which features exist versus remain planned? | `docs/FEATURE_MAP.md` |
+| How are full weeks and surprise redemptions counted? | `docs/WEEKLY_ACHIEVEMENTS.md` |
 | Where is family configuration defined? | `config/README.md` and sibling core |
 | How is production deployed? | `README.md`, `scripts/deploy-local.sh` |
 

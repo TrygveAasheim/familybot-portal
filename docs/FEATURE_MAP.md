@@ -8,7 +8,7 @@
 - weekly recurring chores with per-day progress and cycle completion;
 - optional approval plus parent rejection of awarded or pending work;
 - parent creation/archive, reward goals, review queue and child routine resets;
-- approved 30-point full-week counting with configurable surprise levels and parent redemption resets;
+- approved 30-point full-week counting with configurable surprise levels and parent redemption resets; see [the weekly achievement specification](WEEKLY_ACHIEVEMENTS.md);
 - curated read/write API, SQLite backup, audit and idempotency;
 - launchd supervision, Bonjour advertisement and local acceptance gate.
 

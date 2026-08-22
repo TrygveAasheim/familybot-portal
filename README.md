@@ -4,7 +4,7 @@ Familieportalen is the iPad-first touch surface for FamilyBot. It runs on an
 always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
-mode manages chores, goals and approvals.
+mode manages chores, goals, approvals and weekly achievement surprises.
 
 > **Built for local family life:** the UI and chores model are reusable, while
 > the included adapters can be configured for local school, activity, weather
@@ -68,6 +68,18 @@ chmod 600 runtime/parent-pin.txt
 The PIN is never sent to the browser after login. Failed parent logins are
 rate-limited in memory. Parent and child tokens are random and expire when the
 API process restarts.
+
+## Weekly chores and surprises
+
+Weekly chore cycles use the selected weekdays and award points only when the
+required occurrences are complete. A child reaches a full week at 30 approved
+points in an ISO calendar week. Full weeks are counted once and continue across
+weeks until a parent records a surprise as taken.
+
+Parents can configure several surprise levels (for example, 4, 8 and 12 full
+weeks). Recording a surprise starts a new achievement cycle for that child;
+the redemption and previous cycle remain in the portal's local history. This
+feature is portal-owned and does not alter FamilyBot Core's source ledgers.
 
 ## Develop and verify
 

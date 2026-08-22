@@ -88,6 +88,20 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(child_one["inbox_candidate"])
         self.assertFalse(child_one["received"])
 
+    def test_dashboard_separates_parent_kanban_from_child_chores(self):
+        child_chore = self.repo.create_child_chore({
+            "title": "Les lekse", "assigned_to": "child one", "icon": "📖", "points": 2,
+        })
+        parent_task = self.repo.create_chore({
+            "title": "Bestill billetter", "assigned_to": "both", "priority": "important",
+        })
+        dashboard = self.repo.dashboard(dt.date(2026, 8, 15))
+        kanban_ids = {item["id"] for item in dashboard["chores"]}
+        child = next(item for item in dashboard["children"] if item["name"] == "Child One")
+        self.assertIn(parent_task["id"], kanban_ids)
+        self.assertNotIn(child_chore["id"], kanban_ids)
+        self.assertIn(child_chore["id"], {item["id"] for item in child["chores"]})
+
     def test_health_status_only_stops_for_core_failure(self):
         root = Path(self.temp.name)
         status_path = root / "db/health_status.json"

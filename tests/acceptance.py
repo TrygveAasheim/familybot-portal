@@ -139,8 +139,8 @@ def main() -> None:
     started=time.monotonic()
     api_source=(ROOT/"local_api/familybot_api.py").read_text()
     kanban_source=all(text in source for text in ("Kanban","New","In Progress","Pause","Done","/api/kanban"))
-    kanban_api=all(text in api_source for text in ("LANES = {\"todo\", \"inprogress\", \"onhold\", \"done\"}","/api/kanban"))
-    record("AC-15",kanban_source and kanban_api and "updated_at.localeCompare" in source,"Kanban tab, four lanes, parent-gated CRUD and newest-first card ordering present",started)
+    kanban_api=all(text in api_source for text in ("LANES = {\"todo\", \"inprogress\", \"onhold\", \"done\"}","/api/kanban","NOT EXISTS (SELECT 1 FROM family_chore_meta"))
+    record("AC-15",kanban_source and kanban_api and "updated_at.localeCompare" in source and "Kanban er skrivebeskyttet" in source,"Parent-only Kanban separation, four lanes, CRUD and newest-first card ordering present",started)
 
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}

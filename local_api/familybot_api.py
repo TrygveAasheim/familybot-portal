@@ -701,7 +701,9 @@ class FamilyRepository:
             ))
             chores = self._rows(connection.execute(
                 """SELECT id, title, description, assigned_to, lane, priority, due_date, created_at, updated_at
-                   FROM kanban_cards WHERE archived_at IS NULL
+                   FROM kanban_cards k
+                   WHERE k.archived_at IS NULL
+                     AND NOT EXISTS (SELECT 1 FROM family_chore_meta m WHERE m.card_id=k.id)
                    ORDER BY CASE lane WHEN 'inprogress' THEN 0 WHEN 'todo' THEN 1 ELSE 2 END,
                             CASE priority WHEN 'must-do' THEN 0 WHEN 'important' THEN 1 ELSE 2 END,
                             COALESCE(due_date,'9999-12-31'), id"""

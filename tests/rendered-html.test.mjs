@@ -48,6 +48,7 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Pause/);
   assert.match(consoleSource, /Done/);
   assert.match(consoleSource, /api\/kanban/);
+  assert.match(consoleSource, /Kanban er skrivebeskyttet/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /Familiebot fungerer/);
   assert.match(consoleSource, /Familiebot har stoppet/);
@@ -81,6 +82,7 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /reset_child/);
   assert.match(apiSource, /LANES = \{"todo", "inprogress", "onhold", "done"\}/);
   assert.match(apiSource, /api\/kanban/);
+  assert.match(apiSource, /NOT EXISTS \(SELECT 1 FROM family_chore_meta/);
   assert.match(apiSource, /weekly_achievement_cycles/);
   assert.match(apiSource, /weekly_surprise_levels/);
   assert.doesNotMatch(apiSource, /SELECT \*/i);

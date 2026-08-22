@@ -158,8 +158,10 @@ child progress rendering.
 
 ### AC-15 — Family Kanban board
 
-- A Kanban tab is available beside Parent mode and reads the curated active task
-  list from `kanban_cards`.
+- A Kanban tab is available beside Parent mode, is parent-gated, and reads the
+  curated active parent task list from `kanban_cards`.
+- Child chores linked through `family_chore_meta` do not appear on the Kanban
+  board and remain available only on the assigned child's chore page.
 - The board exposes New, In Progress, Pause and Done lanes, and a parent can
   create, move or archive a task.
 - Mutations require the parent session, create a backup and keep archived tasks

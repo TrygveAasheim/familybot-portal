@@ -41,6 +41,7 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Familiebot fungerer/);
   assert.match(consoleSource, /Familiebot har stoppet/);
   assert.match(consoleSource, /Familiebot fungerer med avvik/);
+  assert.doesNotMatch(consoleSource, /<p className="eyebrow">Hjemme<\/p><h2>FamilyBot<\/h2>/);
   assert.match(consoleSource, /God morgen/);
   assert.match(consoleSource, /God dag/);
   assert.match(consoleSource, /God ettermiddag/);

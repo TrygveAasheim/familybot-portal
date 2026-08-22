@@ -119,6 +119,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(chore["lane"], "todo")
         moved = self.repo.update_chore(chore["id"], {"lane":"done"})
         self.assertEqual(moved["lane"], "done")
+        paused = self.repo.update_chore(chore["id"], {"lane":"onhold"})
+        self.assertEqual(paused["lane"], "onhold")
         archived = self.repo.archive_chore(chore["id"])
         self.assertIsNotNone(archived["archived_at"])
         restored = self.repo.restore_chore(chore["id"])

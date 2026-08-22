@@ -36,10 +36,18 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Fullførte uker/);
   assert.match(consoleSource, /weekly-achievement/);
   assert.match(consoleSource, /function completionKey/);
+  assert.match(consoleSource, /sessionToken\.current&&sessionToken\.current!==nextToken/);
+  assert.match(consoleSource, /window\.location\.reload\(\)/);
   assert.match(consoleSource, /Skolen denne uken/);
   assert.match(consoleSource, /Neste 5 dager/);
   assert.match(consoleSource, /function upcomingEventsFor/);
   assert.match(consoleSource, /slice\(0,4\)/);
+  assert.match(consoleSource, /Kanban/);
+  assert.match(consoleSource, /New/);
+  assert.match(consoleSource, /In Progress/);
+  assert.match(consoleSource, /Pause/);
+  assert.match(consoleSource, /Done/);
+  assert.match(consoleSource, /api\/kanban/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /Familiebot fungerer/);
   assert.match(consoleSource, /Familiebot har stoppet/);
@@ -71,6 +79,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /archived_at=datetime\('now'\)/);
   assert.match(apiSource, /chore_cycles/);
   assert.match(apiSource, /reset_child/);
+  assert.match(apiSource, /LANES = \{"todo", "inprogress", "onhold", "done"\}/);
+  assert.match(apiSource, /api\/kanban/);
   assert.match(apiSource, /weekly_achievement_cycles/);
   assert.match(apiSource, /weekly_surprise_levels/);
   assert.doesNotMatch(apiSource, /SELECT \*/i);

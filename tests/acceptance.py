@@ -136,6 +136,12 @@ def main() -> None:
         weekly_tables=all(connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone() for name in ("weekly_achievement_cycles","weekly_surprise_levels","weekly_achievement_redemptions","weekly_achievement_reset_operations"))
     record("AC-14",weekly_source and weekly_tables,"weekly full-week count, surprise ladder and parent redemption reset present",started)
 
+    started=time.monotonic()
+    api_source=(ROOT/"local_api/familybot_api.py").read_text()
+    kanban_source=all(text in source for text in ("Kanban","New","In Progress","Pause","Done","/api/kanban"))
+    kanban_api=all(text in api_source for text in ("LANES = {\"todo\", \"inprogress\", \"onhold\", \"done\"}","/api/kanban"))
+    record("AC-15",kanban_source and kanban_api and "updated_at.localeCompare" in source,"Kanban tab, four lanes, parent-gated CRUD and newest-first card ordering present",started)
+
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}
     result_dir=ROOT/"tests/results"; result_dir.mkdir(parents=True,exist_ok=True)

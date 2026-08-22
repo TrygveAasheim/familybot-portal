@@ -36,7 +36,7 @@ DEFAULT_WORKSPACE = Path(
     os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
 ).expanduser()
 DEFAULT_DB = DEFAULT_WORKSPACE / "db/family.db"
-LANES = {"todo", "inprogress", "done"}
+LANES = {"todo", "inprogress", "onhold", "done"}
 PRIORITIES = {"must-do", "important", "nice-to"}
 REPEAT_MODES = {"once", "weekly"}
 WEEKDAY_NAMES = {
@@ -1636,6 +1636,23 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                     self.respond(403, {"error": "Foreldremodus kreves."})
                     return
                 self.respond(201, {"reward": self.app.repository.set_reward(self.read_payload())})
+                return
+            if method == "POST" and path == "/api/kanban":
+                if not self.authorize_parent():
+                    self.respond(403, {"error": "Foreldremodus kreves."})
+                    return
+                self.respond(201, {"card": self.app.repository.create_chore(self.read_payload())})
+                return
+            kanban = re.fullmatch(r"/api/kanban/(\d+)", path)
+            if kanban and method in {"PATCH", "DELETE"}:
+                if not self.authorize_parent():
+                    self.respond(403, {"error": "Foreldremodus kreves."})
+                    return
+                card_id = int(kanban.group(1))
+                if method == "PATCH":
+                    self.respond(200, {"card": self.app.repository.update_chore(card_id, self.read_payload())})
+                else:
+                    self.respond(200, {"card": self.app.repository.archive_chore(card_id)})
                 return
             weekly_surprise = re.fullmatch(r"/api/children/(\d+)/weekly-achievement/surprises", path)
             if method == "POST" and weekly_surprise:

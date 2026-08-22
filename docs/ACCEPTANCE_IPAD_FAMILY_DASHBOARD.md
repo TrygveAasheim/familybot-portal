@@ -156,14 +156,27 @@ Evidence: authorization, backup, history-retention and reset idempotency tests.
 Evidence: weekly achievement repository tests, schema checks, parent controls and
 child progress rendering.
 
+### AC-15 — Family Kanban board
+
+- A Kanban tab is available beside Parent mode and reads the curated active task
+  list from `kanban_cards`.
+- The board exposes New, In Progress, Pause and Done lanes, and a parent can
+  create, move or archive a task.
+- Mutations require the parent session, create a backup and keep archived tasks
+  out of the active board.
+- Done retains completed tasks and orders the newest status changes first.
+
+Evidence: curated API route checks, lane validation, parent authorization tests,
+rendered board assertions and live database ordering.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **14/14 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **15/15 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
-These 14 criteria cover the currently deployed family dashboard. A new
+These 15 criteria cover the currently deployed family dashboard. A new
 user-visible add-on such as Smart Home must add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be
 declared supported; planned criteria live in the core repository's

@@ -44,7 +44,7 @@ git diff --check
 ```
 
 Run `npm run preflight` before deployment with the real ignored config, PIN and
-database available. All 14 current critical acceptance criteria must pass.
+database available. All 15 current critical acceptance criteria must pass.
 Extend the acceptance contract before shipping a new user-visible capability.
 
 Normal work lands on `dev`; verified commits are fast-forwarded to `main` and

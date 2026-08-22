@@ -4,7 +4,8 @@ Familieportalen is the iPad-first touch surface for FamilyBot. It runs on an
 always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
-mode manages chores, goals, approvals and weekly achievement surprises.
+mode manages chores, goals, approvals, weekly achievement surprises and the
+family Kanban board.
 
 > **Built for local family life:** the UI and chores model are reusable, while
 > the included adapters can be configured for local school, activity, weather
@@ -110,7 +111,8 @@ Deployment runs preflight/tests first, backs up and migrates SQLite, builds an
 isolated runtime outside `Documents`, installs the LaunchAgent and registers
 Bonjour. Release requires every criterion in
 [docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md](docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md)
-to pass.
+to pass. Open dashboards detect the new API session generation after a service
+restart and perform a full browser refresh automatically.
 
 `dev` is the working branch; tested commits are fast-forwarded to `main` for
 deployment. See [docs/BRANCHES.md](docs/BRANCHES.md) and

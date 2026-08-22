@@ -9,7 +9,8 @@ FamilyBot's reliability core.
 Familieportalen is the direct iPad-first interface for the household. Its first
 screen is a calm family overview. Children can open their own profiles and use
 chores/rewards without adult help. Parents can review and manage chores, reward
-goals, weekly full-week achievements and surprise redemptions.
+goals, weekly full-week achievements, surprise redemptions and the family Kanban
+board.
 OpenClaw remains available for complex questions and operations.
 
 The sibling `familybot-core` repository owns ingestion, parsing, normalized
@@ -38,7 +39,7 @@ the web service. The API and database remain on the Mac mini.
 | --- | --- | --- |
 | Main family/child/parent UI | `app/_components/FamilyConsole.tsx` | User-visible; touch, accessibility and state-transition risk |
 | Global layout and responsive design | `app/globals.css` | Verify portrait, landscape, 200% zoom and no hover dependency |
-| Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist |
+| Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist, including parent-gated Kanban mutations |
 | Dashboard schema and backup | `local_api/dashboard_migration.py` | Data-critical; idempotent migration and pre-migration backup required, including weekly achievement history |
 | Config reader | `local_api/family_config.py` | Must match the one core-owned configuration contract |
 | Process supervision | `local_service/run_service.py` | Operational; both processes fail/restart as a group |

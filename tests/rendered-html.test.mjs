@@ -37,6 +37,9 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /weekly-achievement/);
   assert.match(consoleSource, /function completionKey/);
   assert.match(consoleSource, /Skolen denne uken/);
+  assert.match(consoleSource, /Neste 5 dager/);
+  assert.match(consoleSource, /function upcomingEventsFor/);
+  assert.match(consoleSource, /slice\(0,4\)/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /Familiebot fungerer/);
   assert.match(consoleSource, /Familiebot har stoppet/);

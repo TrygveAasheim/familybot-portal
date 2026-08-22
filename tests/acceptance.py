@@ -97,7 +97,7 @@ def main() -> None:
     encoded=dashboard_raw.decode("utf-8",errors="replace").lower(); forbidden=[term for term in ("telegram_id","raw_json","source_ref","attachment","api_key") if term in encoded]
     departures=dashboard.get("transport",{}).get("departures",[])
     live_transport=bool(departures) and all(str(item.get("line"))==CONFIGURED_LINE for item in departures) and "TransportCountdown" in source and "1_000" in source
-    family_surface=all(text in source for text in ("Viktigst nå","WeatherForecast","T-bane","Aktiviteter","FamilyBot","Skolen denne uken")) and "<h2>FamilyBot</h2>" not in source
+    family_surface=all(text in source for text in ("Viktigst nå","Neste 5 dager","upcomingEventsFor","WeatherForecast","T-bane","Aktiviteter","FamilyBot","Skolen denne uken")) and "<h2>FamilyBot</h2>" not in source
     current_plans=[plan["member"] for plan in dashboard.get("week_plans",[])]
     plan_state=dashboard.get("week_plan_status",[])
     record("AC-08",family_surface and live_transport and len(plan_state)==EXPECTED_CHILDREN and not forbidden,f"family surfaces; {len(departures)} configured-line departures with countdown; {len(current_plans)} week plan(s), {len(plan_state)} explicit child plan states; forbidden keys={forbidden}",started)

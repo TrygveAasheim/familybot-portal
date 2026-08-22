@@ -111,6 +111,16 @@ def load_json(path: Path) -> dict[str, Any]:
         return {}
 
 
+def curated_week_plan_summary(value: Any) -> str:
+    """Remove source-email headers and attachment references before browser delivery."""
+    text = str(value or "").strip()
+    if "Subject:" in text:
+        text = text.split("Subject:", 1)[1].lstrip()
+    text = re.sub(r"\[[^\]]*attachment:[^\]]*\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b", "", text)
+    return re.sub(r"\s{2,}", " ", text).strip()[:360]
+
+
 HEALTH_LABELS = {
     "gateway": "OpenClaw-gateway",
     "database": "database",
@@ -703,6 +713,8 @@ class FamilyRepository:
                    WHERE w.year=? AND w.week_number=? ORDER BY m.id, w.created_at DESC""",
                 (target_year, target_week),
             ))
+            for plan in plans:
+                plan["summary"] = curated_week_plan_summary(plan.get("summary"))
             plan_days = self._rows(connection.execute(
                 """SELECT d.id,d.week_plan_id,d.day,d.date,d.subject,d.note,d.homework,d.bring,
                           m.name AS member

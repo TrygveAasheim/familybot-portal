@@ -340,7 +340,7 @@ class RepositoryTests(unittest.TestCase):
         with sqlite3.connect(self.db) as connection:
             cursor = connection.execute(
                 """INSERT INTO week_plans(member_id,week_number,year,summary,teacher)
-                   VALUES(3,34,2026,'Leksefri. Onsdag er det tur til Holmen.','Ingrid')"""
+                   VALUES(3,34,2026,'From parent@example.invalid Subject: Ukeplan [Attachment: private.pdf] Leksefri.','Ingrid')"""
             )
             connection.execute(
                 """INSERT INTO week_plan_days(week_plan_id,day,date,subject,homework,bring)
@@ -350,6 +350,8 @@ class RepositoryTests(unittest.TestCase):
         dashboard = self.repo.dashboard(dt.date(2026, 8, 15))
         self.assertEqual(dashboard["week_plan_days"][0]["member"], "Child One")
         self.assertEqual(dashboard["week_plan_days"][0]["homework"], "Leksefri")
+        self.assertNotIn("attachment", json.dumps(dashboard).lower())
+        self.assertNotIn("parent@example.invalid", json.dumps(dashboard))
 
     def test_transport_cache_exposes_only_curated_departure_fields(self):
         transport = transport_summary(Path(self.temp.name))

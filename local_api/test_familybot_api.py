@@ -102,6 +102,23 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotIn(child_chore["id"], kanban_ids)
         self.assertIn(child_chore["id"], {item["id"] for item in child["chores"]})
 
+    def test_interview_child_chore_is_normalized_and_idempotent(self):
+        payload = {
+            "title": "Lekser på hverdager", "assigned_to": "child one", "icon": "📖",
+            "points": 4, "requires_approval": True, "repeat_mode": "weekly",
+            "repeat_weekdays": "1,2,3,4,5",
+        }
+        preview = self.repo.normalize_child_chore(payload)
+        self.assertEqual(preview["repeat_weekdays"], [1, 2, 3, 4, 5])
+        first = self.repo.create_child_chore(payload, idempotency_key="telegram-interview-001", source="telegram-interview")
+        duplicate = self.repo.create_child_chore({**payload, "title": "Should not duplicate"}, idempotency_key="telegram-interview-001", source="telegram-interview")
+        self.assertFalse(first["duplicate"])
+        self.assertTrue(duplicate["duplicate"])
+        self.assertEqual(first["id"], duplicate["id"])
+        with sqlite3.connect(self.db) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM child_chore_operations").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM family_chore_meta").fetchone()[0], 1)
+
     def test_health_status_only_stops_for_core_failure(self):
         root = Path(self.temp.name)
         status_path = root / "db/health_status.json"

@@ -142,6 +142,16 @@ def main() -> None:
     kanban_api=all(text in api_source for text in ("LANES = {\"todo\", \"inprogress\", \"onhold\", \"done\"}","/api/kanban","NOT EXISTS (SELECT 1 FROM family_chore_meta"))
     record("AC-15",kanban_source and kanban_api and "updated_at.localeCompare" in source and "Kanban er skrivebeskyttet" in source,"Parent-only Kanban separation, four lanes, CRUD and newest-first card ordering present",started)
 
+    started=time.monotonic()
+    interview=(ROOT/"scripts/child_chore.py").read_text()
+    core_bridge=Path(os.environ.get("FAMILYBOT_CORE_ROOT", ROOT.parent/"familybot-core"))/"scripts/kanban.py"
+    bridge_source=core_bridge.read_text() if core_bridge.is_file() else ""
+    with sqlite3.connect(DB) as connection:
+        operation_table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='child_chore_operations'").fetchone()
+    interview_contract=all(text in interview for text in ("confirmation_required", "--confirm", "idempotency_key", "telegram-interview"))
+    bridge_contract=all(text in bridge_source for text in ("chore-preview", "chore-create", "FAMILYBOT_PORTAL_ROOT"))
+    record("AC-16",bool(operation_table) and interview_contract and bridge_contract,"Telegram preview/confirmation bridge, portal-owned validation and idempotency table present",started)
+
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}
     result_dir=ROOT/"tests/results"; result_dir.mkdir(parents=True,exist_ok=True)

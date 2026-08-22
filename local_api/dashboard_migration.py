@@ -30,6 +30,14 @@ CREATE TABLE IF NOT EXISTS family_chore_meta (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS child_chore_operations (
+    id INTEGER PRIMARY KEY,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    result_json TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'dashboard',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS chore_completions (
     id INTEGER PRIMARY KEY,
     card_id INTEGER NOT NULL REFERENCES kanban_cards(id),

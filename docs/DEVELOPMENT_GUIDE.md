@@ -12,6 +12,9 @@ chores/rewards without adult help. Parents can review and manage chores, reward
 goals, weekly full-week achievements, surprise redemptions and the family Kanban
 board.
 OpenClaw remains available for complex questions and operations.
+For child-chore creation from Telegram, OpenClaw uses the two-step interview
+bridge documented in `docs/TELEGRAM_CHILD_CHORES.md`; the portal remains the
+owner of validation and writes.
 
 The sibling `familybot-core` repository owns ingestion, parsing, normalized
 facts, briefings, delivery and health. This repository presents a curated view;

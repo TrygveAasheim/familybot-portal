@@ -1031,7 +1031,7 @@ class FamilyRepository:
             raise ValidationError(f"{label} må være mellom {minimum} og {maximum}.")
         return number
 
-    def create_child_chore(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def normalize_child_chore(self, payload: dict[str, Any]) -> dict[str, Any]:
         assigned = str(payload.get("assigned_to", "")).lower()
         with self.connect() as connection:
             child = connection.execute(
@@ -1058,8 +1058,37 @@ class FamilyRepository:
             "due_date": payload.get("due_date"),
         }
         values = self.validate_chore(base)
+        return {
+            **values,
+            "icon": icon,
+            "points": points,
+            "requires_approval": bool(payload.get("requires_approval")),
+            "repeat_mode": repeat_mode,
+            "repeat_weekdays": repeat_weekdays,
+            "repeat_target": repeat_target,
+        }
+
+    def create_child_chore(
+        self,
+        payload: dict[str, Any],
+        *,
+        idempotency_key: str | None = None,
+        source: str = "dashboard",
+    ) -> dict[str, Any]:
+        values = self.normalize_child_chore(payload)
+        key = str(idempotency_key or "").strip() or None
+        if key and len(key) > 200:
+            raise ValidationError("Ugyldig opprettingsnøkkel.")
         self.backup_before_write()
         with self.connect() as connection:
+            if key:
+                existing = connection.execute(
+                    "SELECT result_json FROM child_chore_operations WHERE idempotency_key=?", (key,)
+                ).fetchone()
+                if existing:
+                    result = json.loads(existing[0])
+                    result["duplicate"] = True
+                    return result
             cursor = connection.execute(
                 """INSERT INTO kanban_cards(title,description,assigned_to,lane,priority,due_date)
                    VALUES(?,?,?,'todo',?,?)""",
@@ -1071,12 +1100,12 @@ class FamilyRepository:
                    ) VALUES(?,?,?,?,?,?,?)""",
                 (
                     cursor.lastrowid,
-                    icon,
-                    points,
-                    int(bool(payload.get("requires_approval"))),
-                    repeat_mode,
-                    ",".join(str(day) for day in repeat_weekdays),
-                    repeat_target,
+                    values["icon"],
+                    values["points"],
+                    int(values["requires_approval"]),
+                    values["repeat_mode"],
+                    ",".join(str(day) for day in values["repeat_weekdays"]),
+                    values["repeat_target"],
                 ),
             )
             row = dict(connection.execute(
@@ -1085,8 +1114,14 @@ class FamilyRepository:
                    FROM kanban_cards k JOIN family_chore_meta m ON m.card_id=k.id WHERE k.id=?""",
                 (cursor.lastrowid,),
             ).fetchone())
-        row["repeat_weekdays"] = repeat_weekdays
-        self.audit("child_chore.created", {"id": row["id"], "assigned_to": assigned, "points": points})
+            row["repeat_weekdays"] = values["repeat_weekdays"]
+            row["duplicate"] = False
+            if key:
+                connection.execute(
+                    "INSERT INTO child_chore_operations(idempotency_key,result_json,source) VALUES(?,?,?)",
+                    (key, json.dumps(row, ensure_ascii=False, sort_keys=True), source),
+                )
+        self.audit("child_chore.created", {"id": row["id"], "assigned_to": values["assigned_to"], "points": values["points"], "source": source})
         return row
 
     def _cycle_for_completion(

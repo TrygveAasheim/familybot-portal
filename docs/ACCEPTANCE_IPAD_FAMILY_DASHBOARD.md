@@ -171,15 +171,28 @@ child progress rendering.
 Evidence: curated API route checks, lane validation, parent authorization tests,
 rendered board assertions and live database ordering.
 
+### AC-16 — Telegram child-chore interview
+
+- The agent-facing command surface provides preview and confirmed-create
+  commands for real child chores, distinct from generic parent Kanban tasks.
+- Preview normalizes the child, points, repeat weekdays and approval settings
+  without writing; create requires explicit confirmation.
+- Creation is validated by the portal repository, backs up and audits the
+  mutation, writes child-chore metadata atomically and is idempotent by key.
+
+Evidence: core bridge command, portal CLI, repository tests, operation table and
+live deployed runtime script.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **15/15 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **16/16 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
-These 15 criteria cover the currently deployed family dashboard. A new
-user-visible add-on such as Smart Home must add provider failure isolation,
+These 16 criteria cover the currently deployed family dashboard and its
+Telegram child-chore add-on. A new user-visible add-on such as Smart Home must
+add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be
 declared supported; planned criteria live in the core repository's
 `specs/SMART_HOME.md`.

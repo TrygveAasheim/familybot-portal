@@ -78,6 +78,48 @@ CREATE TABLE IF NOT EXISTS reward_goals (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reward_goals_one_active
     ON reward_goals(member_id) WHERE active=1;
 
+CREATE TABLE IF NOT EXISTS weekly_achievement_cycles (
+    id INTEGER PRIMARY KEY,
+    member_id INTEGER NOT NULL REFERENCES family_members(id),
+    target_points INTEGER NOT NULL DEFAULT 30 CHECK(target_points > 0 AND target_points <= 1000),
+    started_at TEXT NOT NULL,
+    ended_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_achievement_one_active
+    ON weekly_achievement_cycles(member_id) WHERE ended_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS weekly_surprise_levels (
+    id INTEGER PRIMARY KEY,
+    member_id INTEGER NOT NULL REFERENCES family_members(id),
+    threshold_weeks INTEGER NOT NULL CHECK(threshold_weeks > 0 AND threshold_weeks <= 10000),
+    title TEXT NOT NULL,
+    emoji TEXT NOT NULL DEFAULT '🎁',
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(member_id, threshold_weeks)
+);
+
+CREATE TABLE IF NOT EXISTS weekly_achievement_redemptions (
+    id INTEGER PRIMARY KEY,
+    member_id INTEGER NOT NULL REFERENCES family_members(id),
+    cycle_id INTEGER NOT NULL REFERENCES weekly_achievement_cycles(id),
+    full_weeks INTEGER NOT NULL CHECK(full_weeks >= 0),
+    threshold_weeks INTEGER,
+    title TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_weekly_achievement_redemptions_member
+    ON weekly_achievement_redemptions(member_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS weekly_achievement_reset_operations (
+    id INTEGER PRIMARY KEY,
+    member_id INTEGER NOT NULL REFERENCES family_members(id),
+    idempotency_key TEXT NOT NULL UNIQUE,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS dashboard_reset_operations (
     id INTEGER PRIMARY KEY,
     member_id INTEGER NOT NULL REFERENCES family_members(id),
@@ -178,6 +220,15 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
                         (member[0], title, emoji, goal_type, target, unit, dt.datetime.now().astimezone().isoformat(timespec="seconds")),
                     )
                     created_rewards += 1
+        now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+        for member_id, in connection.execute("SELECT id FROM family_members WHERE role='child'"):
+            connection.execute(
+                """INSERT INTO weekly_achievement_cycles(member_id,target_points,started_at)
+                   SELECT ?,30,? WHERE NOT EXISTS (
+                       SELECT 1 FROM weekly_achievement_cycles WHERE member_id=? AND ended_at IS NULL
+                   )""",
+                (member_id, now, member_id),
+            )
     return {"chores": created_chores, "rewards": created_rewards}
 
 

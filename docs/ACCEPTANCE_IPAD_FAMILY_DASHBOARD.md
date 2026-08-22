@@ -143,10 +143,23 @@ child-card assertions.
 
 Evidence: authorization, backup, history-retention and reset idempotency tests.
 
+### AC-14 — Full-week achievement and surprise redemption
+
+- A child sees the current week's approved points toward the 30-point full-week target.
+- Each completed full week is counted once and the count continues across weeks.
+- Parents can configure multiple surprise levels, such as 4, 8 and 12 full weeks.
+- Reaching a surprise level does not reset the count; a parent can record the
+  surprise as taken and reset the active counter while retaining redemption history.
+- Achievement resets and surprise changes require the parent session and are
+  idempotent where a reset key is supplied.
+
+Evidence: weekly achievement repository tests, schema checks, parent controls and
+child progress rendering.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **13/13 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **14/14 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 

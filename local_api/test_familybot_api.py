@@ -235,6 +235,30 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(second["points"], 3)
         self.assertEqual(second["repeat_status"], "awarded")
 
+    def test_weekly_achievement_counts_full_week_and_preserves_redemption(self):
+        self.repo.set_weekly_surprise(3, {"threshold_weeks": 1, "title": "Liten overraskelse", "emoji": "🎁"})
+        self.repo.set_weekly_surprise(3, {"threshold_weeks": 2, "title": "Bedre overraskelse", "emoji": "🌟"})
+        first = self.repo.create_child_chore({"title": "Lekser", "assigned_to": "child one", "icon": "📖", "points": 20})
+        second = self.repo.create_child_chore({"title": "Rydde", "assigned_to": "child one", "icon": "🧹", "points": 10})
+        self.repo.complete_chore(first["id"], {"member_id": 3, "idempotency_key": "achievement-20"})
+        self.repo.complete_chore(second["id"], {"member_id": 3, "idempotency_key": "achievement-10"})
+        today = dt.date.today()
+        dashboard = self.repo.dashboard(today)
+        child = next(item for item in dashboard["children"] if item["id"] == 3)
+        achievement = child["weekly_achievement"]
+        self.assertEqual(achievement["current_points"], 30)
+        self.assertEqual(achievement["full_weeks"], 1)
+        self.assertEqual(achievement["ready_surprises"][0]["title"], "Liten overraskelse")
+        self.assertEqual(achievement["next_surprise"]["threshold_weeks"], 2)
+        reset = self.repo.reset_weekly_achievement(3, {"threshold_weeks": 1, "idempotency_key": "achievement-reset-1"})
+        duplicate = self.repo.reset_weekly_achievement(3, {"threshold_weeks": 1, "idempotency_key": "achievement-reset-1"})
+        self.assertEqual(reset["previous_full_weeks"], 1)
+        self.assertEqual(reset["claimed_surprise"]["title"], "Liten overraskelse")
+        self.assertTrue(duplicate["duplicate"])
+        after = next(item for item in self.repo.dashboard(today)["children"] if item["id"] == 3)["weekly_achievement"]
+        self.assertEqual(after["full_weeks"], 0)
+        self.assertEqual(after["redemptions"][0]["title"], "Liten overraskelse")
+
     def test_parent_can_reset_child_chores_and_points_idempotently(self):
         self.repo.set_reward({"member_id": 3, "title": "Ny premie", "emoji": "🎯", "target_value": 20})
         chore = self.repo.create_child_chore({

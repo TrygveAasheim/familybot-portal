@@ -33,6 +33,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /repeat_weekdays/);
   assert.match(consoleSource, /mission-progress/);
   assert.match(consoleSource, /Nullstill begge/);
+  assert.match(consoleSource, /Fullførte uker/);
+  assert.match(consoleSource, /weekly-achievement/);
   assert.match(consoleSource, /function completionKey/);
   assert.match(consoleSource, /Skolen denne uken/);
   assert.match(consoleSource, /function TransportCountdown/);
@@ -65,5 +67,7 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /archived_at=datetime\('now'\)/);
   assert.match(apiSource, /chore_cycles/);
   assert.match(apiSource, /reset_child/);
+  assert.match(apiSource, /weekly_achievement_cycles/);
+  assert.match(apiSource, /weekly_surprise_levels/);
   assert.doesNotMatch(apiSource, /SELECT \*/i);
 });

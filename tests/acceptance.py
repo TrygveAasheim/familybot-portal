@@ -130,6 +130,12 @@ def main() -> None:
         reset_table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dashboard_reset_operations'").fetchone()
     record("AC-13",reset_contract and bool(reset_table),"parent reset controls and idempotency table present",started)
 
+    started=time.monotonic()
+    weekly_source=all(text in source for text in ("Fullførte uker","weekly-achievement","Lagre nivå","Overraskelse tatt"))
+    with sqlite3.connect(DB) as connection:
+        weekly_tables=all(connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone() for name in ("weekly_achievement_cycles","weekly_surprise_levels","weekly_achievement_redemptions","weekly_achievement_reset_operations"))
+    record("AC-14",weekly_source and weekly_tables,"weekly full-week count, surprise ladder and parent redemption reset present",started)
+
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}
     result_dir=ROOT/"tests/results"; result_dir.mkdir(parents=True,exist_ok=True)

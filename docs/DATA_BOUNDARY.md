@@ -39,6 +39,8 @@ Writes are limited to the dashboard's chores and rewards model:
 - register a child completion and approve or reject it as a parent;
 - set an active reward goal.
 - reset a selected child's active chore list, points cycle, or both.
+- configure surprise levels for full-week achievements;
+- reset a selected child's full-week achievement counter after a surprise is taken.
 
 The bridge creates a consistent SQLite backup before the first mutation in each
 session and appends a local audit record. Resetting a child archives/hides active

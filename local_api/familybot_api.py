@@ -56,10 +56,30 @@ def iso_now() -> str:
     return dt.datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+def precise_iso_now() -> str:
+    return dt.datetime.now().astimezone().isoformat(timespec="microseconds")
+
+
 def cycle_key_for_date(repeat_mode: str, value: dt.date) -> str:
     if repeat_mode == "weekly":
         return (value - dt.timedelta(days=value.weekday())).isoformat()
     return "once"
+
+
+def achievement_week_key(value: dt.date) -> str:
+    year, week, _ = value.isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def local_date_from_timestamp(value: str) -> tuple[dt.datetime, dt.date] | None:
+    try:
+        timestamp = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=dt.datetime.now().astimezone().tzinfo)
+        local_timestamp = timestamp.astimezone()
+        return local_timestamp, local_timestamp.date()
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_weekdays(value: Any) -> list[int]:
@@ -568,6 +588,74 @@ class FamilyRepository:
         })
         return result
 
+    def _weekly_cycle(self, connection: sqlite3.Connection, member_id: int) -> sqlite3.Row:
+        cycle = connection.execute(
+            """SELECT id,member_id,target_points,started_at,ended_at
+               FROM weekly_achievement_cycles WHERE member_id=? AND ended_at IS NULL""",
+            (member_id,),
+        ).fetchone()
+        if cycle:
+            return cycle
+        now = precise_iso_now()
+        cursor = connection.execute(
+            """INSERT INTO weekly_achievement_cycles(member_id,target_points,started_at)
+               VALUES(?,30,?)""",
+            (member_id, now),
+        )
+        return connection.execute(
+            """SELECT id,member_id,target_points,started_at,ended_at
+               FROM weekly_achievement_cycles WHERE id=?""",
+            (cursor.lastrowid,),
+        ).fetchone()
+
+    def weekly_achievement_snapshot(self, connection: sqlite3.Connection, member_id: int, today: dt.date) -> dict[str, Any]:
+        cycle = self._weekly_cycle(connection, member_id)
+        target = int(cycle["target_points"])
+        started = local_date_from_timestamp(cycle["started_at"])
+        started_at = started[0] if started else None
+        points_by_week: dict[str, int] = {}
+        if started_at:
+            rows = connection.execute(
+                """SELECT points,completed_at FROM chore_completions
+                   WHERE member_id=? AND status='awarded' AND points>0""",
+                (member_id,),
+            ).fetchall()
+            for row in rows:
+                parsed = local_date_from_timestamp(row["completed_at"])
+                if not parsed or parsed[0] < started_at:
+                    continue
+                week = achievement_week_key(parsed[1])
+                points_by_week[week] = points_by_week.get(week, 0) + int(row["points"])
+        full_weeks = sum(points >= target for points in points_by_week.values())
+        levels = self._rows(connection.execute(
+            """SELECT id,threshold_weeks,title,emoji
+               FROM weekly_surprise_levels
+               WHERE member_id=? AND active=1
+               ORDER BY threshold_weeks,id""",
+            (member_id,),
+        ))
+        ready = [level for level in levels if int(level["threshold_weeks"]) <= full_weeks]
+        next_level = next((level for level in levels if int(level["threshold_weeks"]) > full_weeks), None)
+        redemptions = self._rows(connection.execute(
+            """SELECT id,full_weeks,threshold_weeks,title,created_at
+               FROM weekly_achievement_redemptions
+               WHERE member_id=? ORDER BY created_at DESC,id DESC LIMIT 10""",
+            (member_id,),
+        ))
+        current_week = achievement_week_key(today)
+        current_points = points_by_week.get(current_week, 0)
+        return {
+            "target_points": target,
+            "current_week": current_week,
+            "current_points": current_points,
+            "current_percent": min(100, round(current_points * 100 / target)),
+            "full_weeks": full_weeks,
+            "surprises": levels,
+            "ready_surprises": ready,
+            "next_surprise": next_level,
+            "redemptions": redemptions,
+        }
+
     def dashboard(self, today: dt.date | None = None) -> dict[str, Any]:
         today = today or dt.date.today()
         monday = today + dt.timedelta(days=(7 - today.weekday()) % 7)
@@ -761,6 +849,7 @@ class FamilyRepository:
             name = child["name"]
             profile = configured_profiles.get(child["id"], {})
             matching_goal = next((item for item in goals if item["member_id"] == child["id"]), None)
+            weekly_achievement = self.weekly_achievement_snapshot(connection, child["id"], today)
             if matching_goal:
                 earned = int(matching_goal["earned"] or 0)
                 target = int(matching_goal["target_value"])
@@ -777,6 +866,7 @@ class FamilyRepository:
                 "chores": chore_views_by_member.get(child["id"], []),
                 "history": [item for item in histories if item["member_id"] == child["id"]][:10],
                 "reward": matching_goal,
+                "weekly_achievement": weekly_achievement,
             })
 
         return {
@@ -1195,6 +1285,128 @@ class FamilyRepository:
         self.audit("reward.created", {"id": result["id"], "member_id": member_id, "target": target})
         return result
 
+    def set_weekly_surprise(self, member_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        member_id = self._integer(member_id, "Barn", 1, 1000000)
+        threshold = self._integer(payload.get("threshold_weeks"), "Uker", 1, 10000)
+        title = str(payload.get("title") or "").strip()
+        emoji = str(payload.get("emoji") or "🎁").strip()[:12]
+        if not 1 <= len(title) <= 80:
+            raise ValidationError("Overraskelsen må ha en tittel på 1–80 tegn.")
+        self.backup_before_write()
+        now = precise_iso_now()
+        with self.connect() as connection:
+            child = connection.execute("SELECT 1 FROM family_members WHERE id=? AND role='child'", (member_id,)).fetchone()
+            if not child:
+                raise ValidationError("Ukjent barn.")
+            existing = connection.execute(
+                "SELECT id FROM weekly_surprise_levels WHERE member_id=? AND threshold_weeks=?",
+                (member_id, threshold),
+            ).fetchone()
+            if existing:
+                connection.execute(
+                    "UPDATE weekly_surprise_levels SET title=?,emoji=?,active=1,updated_at=? WHERE id=?",
+                    (title, emoji, now, existing[0]),
+                )
+                surprise_id = existing[0]
+            else:
+                cursor = connection.execute(
+                    """INSERT INTO weekly_surprise_levels(member_id,threshold_weeks,title,emoji,created_at,updated_at)
+                       VALUES(?,?,?,?,?,?)""",
+                    (member_id, threshold, title, emoji, now, now),
+                )
+                surprise_id = cursor.lastrowid
+            result = dict(connection.execute(
+                "SELECT id,member_id,threshold_weeks,title,emoji,active FROM weekly_surprise_levels WHERE id=?",
+                (surprise_id,),
+            ).fetchone())
+        self.audit("weekly_surprise.saved", {"id": result["id"], "member_id": member_id, "threshold": threshold})
+        return result
+
+    def delete_weekly_surprise(self, member_id: int, threshold: int) -> dict[str, Any]:
+        member_id = self._integer(member_id, "Barn", 1, 1000000)
+        threshold = self._integer(threshold, "Uker", 1, 10000)
+        self.backup_before_write()
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "UPDATE weekly_surprise_levels SET active=0,updated_at=? WHERE member_id=? AND threshold_weeks=?",
+                (iso_now(), member_id, threshold),
+            )
+            if not cursor.rowcount:
+                raise KeyError(threshold)
+        self.audit("weekly_surprise.deleted", {"member_id": member_id, "threshold": threshold})
+        return {"member_id": member_id, "threshold_weeks": threshold, "deleted": True}
+
+    def reset_weekly_achievement(self, member_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        member_id = self._integer(member_id, "Barn", 1, 1000000)
+        key = str(payload.get("idempotency_key") or "").strip()
+        if not 8 <= len(key) <= 128:
+            raise ValidationError("Ugyldig nullstillingsnøkkel.")
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT result_json FROM weekly_achievement_reset_operations WHERE idempotency_key=?",
+                (key,),
+            ).fetchone()
+            if existing:
+                return {**json.loads(existing[0]), "duplicate": True}
+            child = connection.execute(
+                "SELECT id FROM family_members WHERE id=? AND role='child'", (member_id,)
+            ).fetchone()
+            if not child:
+                raise ValidationError("Ukjent barn.")
+        self.backup_before_write()
+        now = precise_iso_now()
+        with self.connect() as connection:
+            cycle = self._weekly_cycle(connection, member_id)
+            snapshot = self.weekly_achievement_snapshot(connection, member_id, dt.date.today())
+            requested_threshold = payload.get("threshold_weeks")
+            selected = None
+            if requested_threshold is not None:
+                threshold = self._integer(requested_threshold, "Uker", 1, 10000)
+                selected = connection.execute(
+                    """SELECT threshold_weeks,title FROM weekly_surprise_levels
+                       WHERE member_id=? AND threshold_weeks=? AND active=1""",
+                    (member_id, threshold),
+                ).fetchone()
+                if not selected:
+                    raise ValidationError("Denne overraskelsen finnes ikke.")
+            elif snapshot["ready_surprises"]:
+                ready = snapshot["ready_surprises"][-1]
+                selected = {"threshold_weeks": ready["threshold_weeks"], "title": ready["title"]}
+            connection.execute(
+                "UPDATE weekly_achievement_cycles SET ended_at=? WHERE id=?",
+                (now, cycle["id"]),
+            )
+            redemption_id = None
+            if snapshot["full_weeks"] or selected:
+                cursor = connection.execute(
+                    """INSERT INTO weekly_achievement_redemptions(
+                           member_id,cycle_id,full_weeks,threshold_weeks,title,created_at
+                       ) VALUES(?,?,?,?,?,?)""",
+                    (member_id, cycle["id"], snapshot["full_weeks"],
+                     selected["threshold_weeks"] if selected else None,
+                     selected["title"] if selected else "Manuell nullstilling", now),
+                )
+                redemption_id = cursor.lastrowid
+            cursor = connection.execute(
+                """INSERT INTO weekly_achievement_cycles(member_id,target_points,started_at)
+                   VALUES(?,?,?)""",
+                (member_id, cycle["target_points"], now),
+            )
+            result = {
+                "member_id": member_id,
+                "previous_full_weeks": snapshot["full_weeks"],
+                "claimed_surprise": dict(selected) if selected else None,
+                "redemption_id": redemption_id,
+                "new_cycle_id": cursor.lastrowid,
+            }
+            connection.execute(
+                """INSERT INTO weekly_achievement_reset_operations(member_id,idempotency_key,result_json,created_at)
+                   VALUES(?,?,?,?)""",
+                (member_id, key, json.dumps(result, ensure_ascii=False), now),
+            )
+        self.audit("weekly_achievement.reset", {**result, "idempotency_key": key})
+        return {**result, "duplicate": False}
+
     def reset_child(self, member_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         member_id = self._integer(member_id, "Barn", 1, 1000000)
         scope = str(payload.get("scope") or "both")
@@ -1412,6 +1624,27 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                     self.respond(403, {"error": "Foreldremodus kreves."})
                     return
                 self.respond(201, {"reward": self.app.repository.set_reward(self.read_payload())})
+                return
+            weekly_surprise = re.fullmatch(r"/api/children/(\d+)/weekly-achievement/surprises", path)
+            if method == "POST" and weekly_surprise:
+                if not self.authorize_parent():
+                    self.respond(403, {"error": "Foreldremodus kreves."})
+                    return
+                self.respond(201, {"surprise": self.app.repository.set_weekly_surprise(int(weekly_surprise.group(1)), self.read_payload())})
+                return
+            weekly_surprise_delete = re.fullmatch(r"/api/children/(\d+)/weekly-achievement/surprises/(\d+)", path)
+            if method == "DELETE" and weekly_surprise_delete:
+                if not self.authorize_parent():
+                    self.respond(403, {"error": "Foreldremodus kreves."})
+                    return
+                self.respond(200, {"surprise": self.app.repository.delete_weekly_surprise(int(weekly_surprise_delete.group(1)), int(weekly_surprise_delete.group(2)))})
+                return
+            weekly_reset = re.fullmatch(r"/api/children/(\d+)/weekly-achievement/reset", path)
+            if method == "POST" and weekly_reset:
+                if not self.authorize_parent():
+                    self.respond(403, {"error": "Foreldremodus kreves."})
+                    return
+                self.respond(200, {"reset": self.app.repository.reset_weekly_achievement(int(weekly_reset.group(1)), self.read_payload())})
                 return
             reset = re.fullmatch(r"/api/children/(\d+)/reset", path)
             if method == "POST" and reset:

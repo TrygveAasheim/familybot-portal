@@ -191,7 +191,9 @@ live deployed runtime script.
 - The detail view is scoped to that child’s plan, preserves structured day
   details, and provides a “Tilbake” action to return to the child page.
 - The detail route excludes source email identifiers, attachments and raw
-  integration payloads.
+  integration payloads. When a PDF is present, plan text comes only from the
+  parsed PDF context; email headers, addresses and body text are not used as a
+  fallback.
 
 Evidence: curated detail endpoint, repository test, rendered detail view and
 live child navigation.

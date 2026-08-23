@@ -163,7 +163,8 @@ def main() -> None:
         if child_id is not None:
             detail_status,detail_raw=request(API_PORT,"GET",f"/api/children/{child_id}/week-plans/{plan['id']}")
             detail_payload=json.loads(detail_raw)
-            detail_ok=detail_status==200 and detail_payload.get("week_plan",{}).get("member")==plan["member"] and bool(detail_payload.get("week_plan",{}).get("full_text"))
+            detail_text=detail_payload.get("week_plan",{}).get("full_text","")
+            detail_ok=detail_status==200 and detail_payload.get("week_plan",{}).get("member")==plan["member"] and bool(detail_text) and not any(marker in detail_text for marker in ("@", "From:", "To:", "Subject:", "[Attachment:"))
     record("AC-17",detail_source and detail_api and detail_ok,"Child week-plan summary remains on the child page and full text opens through the scoped detail route",started)
 
     passed=sum(item["status"]=="pass" for item in results)

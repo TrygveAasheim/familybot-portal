@@ -111,14 +111,42 @@ def load_json(path: Path) -> dict[str, Any]:
         return {}
 
 
-def curated_week_plan_summary(value: Any) -> str:
-    """Remove source-email headers and attachment references before browser delivery."""
+def curated_week_plan_text(value: Any) -> str:
+    """Return only plan content, excluding mail transport metadata.
+
+    Older rows may contain a compacted email followed by extracted PDF text.
+    When an attachment marker exists, the marker is the hard boundary: all
+    content before it is discarded. The remaining header scrub protects rows
+    created by intermediate ingestion versions without weakening the rule
+    that PDF content is the authoritative plan source.
+    """
     text = str(value or "").strip()
-    if "Subject:" in text:
-        text = text.split("Subject:", 1)[1].lstrip()
+    attachment = re.search(r"\[[^\]]*attachment:\s*[^\]]+\]", text, flags=re.IGNORECASE)
+    if attachment:
+        text = text[attachment.end():].lstrip()
+    else:
+        compact_header = re.search(r"\bSubject:\s*", text, flags=re.IGNORECASE)
+        compact_prefix = text[:compact_header.start()] if compact_header else ""
+        if compact_header and re.search(r"\b(?:From|To|Cc|Bcc|Date|Reply-To):", compact_prefix, flags=re.IGNORECASE):
+            text = text[compact_header.end():].lstrip()
+        text = re.sub(
+            r"^\s*(?:from|to|cc|bcc|date|reply-to):[^\n]*(?:\n|$)",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(r"^\s*subject:\s*", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\[[^\]]*attachment:[^\]]*\]", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b", "", text)
-    return re.sub(r"\s{2,}", " ", text).strip()[:360]
+    text = re.sub(r"\b(?:from|to|cc|bcc|date|reply-to|subject):\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+[A-Za-z][\w .-]*\s*<\s*>", " ", text)
+    text = re.sub(r"(?im)^\s*(?:from|to|cc|bcc|date|reply-to|subject):[^\n]*\n?", "", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def curated_week_plan_summary(value: Any) -> str:
+    """Return a compact, browser-safe summary of PDF-derived plan content."""
+    return re.sub(r"\s{2,}", " ", curated_week_plan_text(value)).strip()[:360]
 
 
 HEALTH_LABELS = {
@@ -929,7 +957,7 @@ class FamilyRepository:
             if not plan:
                 raise KeyError(plan_id)
             result = dict(plan)
-            result["full_text"] = curated_week_plan_summary(result.pop("raw_text") or result.get("summary") or "")
+            result["full_text"] = curated_week_plan_text(result.pop("raw_text") or result.get("summary") or "")
             result["days"] = self._rows(connection.execute(
                 """SELECT id,week_plan_id,day,date,subject,note,homework,bring
                    FROM week_plan_days WHERE week_plan_id=?

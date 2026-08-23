@@ -28,7 +28,9 @@ or attachments.
 `GET /api/children/{child_id}/week-plans/{plan_id}` is the explicit child-page
 drill-down for one plan. It returns that child’s full week-plan text and
 structured day fields, while still excluding source email IDs, raw email
-headers, attachments and integration payloads.
+headers, addresses, attachment markers and integration payloads. When the
+source email contains a PDF, the stored and displayed full text is rebuilt from
+the parsed PDF context only; the email body is not a fallback.
 
 The bridge may inspect unlinked week-plan email summaries locally to identify a
 likely grade. Only the message ID, subject, timestamps, status and inferred child

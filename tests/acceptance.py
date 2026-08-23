@@ -153,6 +153,19 @@ def main() -> None:
     bridge_contract=all(text in bridge_source for text in ("chore-preview", "chore-create", "FAMILYBOT_PORTAL_ROOT"))
     record("AC-16",bool(operation_table) and interview_contract and bridge_contract,"Telegram preview/confirmation bridge, portal-owned validation and idempotency table present",started)
 
+    started=time.monotonic()
+    detail_source=all(text in source for text in ("Se hele ukeplanen", "WeekPlanDetailPage", "Tilbake"))
+    detail_api=all(text in api_source for text in ("week_plan_detail", "/api/children/(\\d+)/week-plans/(\\d+)", "full_text"))
+    detail_ok=False
+    if dashboard.get("week_plans"):
+        plan=dashboard["week_plans"][0]
+        child_id=next((child["id"] for child in dashboard["children"] if child["name"]==plan["member"]), None)
+        if child_id is not None:
+            detail_status,detail_raw=request(API_PORT,"GET",f"/api/children/{child_id}/week-plans/{plan['id']}")
+            detail_payload=json.loads(detail_raw)
+            detail_ok=detail_status==200 and detail_payload.get("week_plan",{}).get("member")==plan["member"] and bool(detail_payload.get("week_plan",{}).get("full_text"))
+    record("AC-17",detail_source and detail_api and detail_ok,"Child week-plan summary remains on the child page and full text opens through the scoped detail route",started)
+
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}
     result_dir=ROOT/"tests/results"; result_dir.mkdir(parents=True,exist_ok=True)

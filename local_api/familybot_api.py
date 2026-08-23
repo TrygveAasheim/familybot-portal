@@ -917,6 +917,27 @@ class FamilyRepository:
             "weather": weather_summary(self.workspace),
         }
 
+    def week_plan_detail(self, child_id: int, plan_id: int) -> dict[str, Any]:
+        with self.connect() as connection:
+            plan = connection.execute(
+                """SELECT w.id,w.member_id,w.week_number,w.year,w.summary,w.raw_text,
+                          m.name AS member
+                   FROM week_plans w JOIN family_members m ON m.id=w.member_id
+                   WHERE w.id=? AND w.member_id=? AND m.role='child'""",
+                (plan_id, child_id),
+            ).fetchone()
+            if not plan:
+                raise KeyError(plan_id)
+            result = dict(plan)
+            result["full_text"] = curated_week_plan_summary(result.pop("raw_text") or result.get("summary") or "")
+            result["days"] = self._rows(connection.execute(
+                """SELECT id,week_plan_id,day,date,subject,note,homework,bring
+                   FROM week_plan_days WHERE week_plan_id=?
+                   ORDER BY COALESCE(date,'9999-12-31'),id""",
+                (plan_id,),
+            ))
+            return result
+
     @staticmethod
     def validate_chore(payload: dict[str, Any], partial: bool = False) -> dict[str, Any]:
         clean: dict[str, Any] = {}
@@ -1605,6 +1626,16 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             except sqlite3.Error as exc:
                 self.log_error("dashboard database error: %s", type(exc).__name__)
                 self.respond(503, {"error": "Familiedata er midlertidig utilgjengelig."})
+            return
+        week_plan = re.fullmatch(r"/api/children/(\d+)/week-plans/(\d+)", parsed.path)
+        if week_plan:
+            try:
+                self.respond(200, {"week_plan": self.app.repository.week_plan_detail(int(week_plan.group(1)), int(week_plan.group(2)))})
+            except KeyError:
+                self.respond(404, {"error": "Ukeplanen ble ikke funnet."})
+            except sqlite3.Error as exc:
+                self.log_error("week plan database error: %s", type(exc).__name__)
+                self.respond(503, {"error": "Ukeplanen er midlertidig utilgjengelig."})
             return
         self.respond(404, {"error": "Ikke funnet."})
 

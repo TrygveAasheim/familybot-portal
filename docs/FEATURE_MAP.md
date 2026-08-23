@@ -10,6 +10,7 @@
 - parent creation/archive, reward goals, review queue and child routine resets;
 - family Kanban board with New, In Progress, Pause and Done lanes, parent-gated creation/movement/archive and newest-first Done history;
 - Telegram/OpenClaw child-chore interview bridge with preview, explicit confirmation and idempotent creation;
+- child-specific week-plan detail view with full plan text, structured days and return navigation;
 - approved 30-point full-week counting with configurable surprise levels and parent redemption resets; see [the weekly achievement specification](WEEKLY_ACHIEVEMENTS.md);
 - curated read/write API, SQLite backup, audit and idempotency;
 - launchd supervision, Bonjour advertisement and local acceptance gate.

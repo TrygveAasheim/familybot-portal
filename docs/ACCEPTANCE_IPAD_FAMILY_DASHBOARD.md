@@ -184,15 +184,27 @@ rendered board assertions and live database ordering.
 Evidence: core bridge command, portal CLI, repository tests, operation table and
 live deployed runtime script.
 
+### AC-17 — Full child week-plan detail
+
+- Each child page keeps its compact per-day week-plan summary and offers a
+  clear action to open the full free-text plan.
+- The detail view is scoped to that child’s plan, preserves structured day
+  details, and provides a “Tilbake” action to return to the child page.
+- The detail route excludes source email identifiers, attachments and raw
+  integration payloads.
+
+Evidence: curated detail endpoint, repository test, rendered detail view and
+live child navigation.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **16/16 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **17/17 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
-These 16 criteria cover the currently deployed family dashboard and its
-Telegram child-chore add-on. A new user-visible add-on such as Smart Home must
+These 17 criteria cover the currently deployed family dashboard, its Telegram
+child-chore add-on and week-plan detail view. A new user-visible add-on such as Smart Home must
 add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be
 declared supported; planned criteria live in the core repository's

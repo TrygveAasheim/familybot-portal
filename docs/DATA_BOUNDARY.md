@@ -19,11 +19,16 @@ a general-purpose OpenClaw administration surface.
 ## Read allowlist
 
 `GET /api/dashboard` returns selected fields for family members, upcoming
-events, Spond events, activities, the active parent Kanban task list, child chores, current week plans, school dates,
+events, Spond events, activities, the active parent Kanban task list, child chores, compact current week plans, school dates,
 weekly achievement progress, configured surprise levels, redemption history,
 source freshness and scheduled-job state. It does not return raw week-plan text,
 email sender addresses, Telegram IDs, Spond `raw_json`, message bodies, secrets
 or attachments.
+
+`GET /api/children/{child_id}/week-plans/{plan_id}` is the explicit child-page
+drill-down for one plan. It returns that child’s full week-plan text and
+structured day fields, while still excluding source email IDs, raw email
+headers, attachments and integration payloads.
 
 The bridge may inspect unlinked week-plan email summaries locally to identify a
 likely grade. Only the message ID, subject, timestamps, status and inferred child

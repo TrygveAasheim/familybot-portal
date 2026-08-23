@@ -240,6 +240,41 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
     return {"chores": created_chores, "rewards": created_rewards}
 
 
+def ensure_default_rewards(db_path: Path) -> int:
+    """Restore an active individual goal for configured children that lack one."""
+    created = 0
+    workspace = db_path.parent.parent
+    with sqlite3.connect(db_path) as connection:
+        for profile in child_profiles(workspace):
+            child_name = str(profile.get("name") or "").strip()
+            if not child_name:
+                continue
+            member = connection.execute(
+                "SELECT id FROM family_members WHERE lower(name)=lower(?) AND role='child'",
+                (child_name,),
+            ).fetchone()
+            if not member or connection.execute(
+                "SELECT 1 FROM reward_goals WHERE member_id=? AND active=1", (member[0],)
+            ).fetchone():
+                continue
+            reward = profile.get("default_reward") or {}
+            connection.execute(
+                """INSERT INTO reward_goals(member_id,title,emoji,goal_type,target_value,unit_label,created_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (
+                    member[0],
+                    str(reward.get("title") or "Familiebelønning"),
+                    str(reward.get("emoji") or "🎯"),
+                    str(reward.get("goal_type") or "points"),
+                    int(reward.get("target_value") or 30),
+                    str(reward.get("unit_label") or "poeng"),
+                    dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+                ),
+            )
+            created += 1
+    return created
+
+
 def clear_active_setup(db_path: Path) -> dict[str, int]:
     """Hide and archive the current kid setup without deleting its history."""
     now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
@@ -276,16 +311,20 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--seed", action="store_true")
     mode.add_argument("--clear-active-setup", action="store_true")
+    parser.add_argument("--repair-default-rewards", action="store_true")
     parser.add_argument("--no-backup", action="store_true")
     args = parser.parse_args()
     if not args.db.is_file():
         raise SystemExit(f"Database not found: {args.db}")
     backup = None if args.no_backup else backup_database(args.db, args.backup_root)
     result = migrate(args.db, seed=args.seed)
+    repaired_rewards = ensure_default_rewards(args.db) if args.repair_default_rewards else 0
     cleared = clear_active_setup(args.db) if args.clear_active_setup else None
     if backup:
         print(f"[backup] {backup}")
     print(f"[migration] chores={result['chores']} rewards={result['rewards']}")
+    if args.repair_default_rewards:
+        print(f"[default-rewards] created={repaired_rewards}")
     if cleared:
         print(
             "[cleared] "

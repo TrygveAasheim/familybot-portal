@@ -86,7 +86,7 @@ def main() -> None:
 
     started=time.monotonic()
     rewards=[child.get("reward") for child in dashboard["children"]]
-    reward_ok=all(reward is None or all(key in reward for key in ("earned","remaining","percent","target_value","title")) for reward in rewards)
+    reward_ok=all(reward and all(key in reward for key in ("earned","remaining","percent","target_value","title")) and reward["target_value"]==30 for reward in rewards)
     record("AC-06",reward_ok and "Sett nytt mål" in source,f"reward contract valid; {sum(reward is not None for reward in rewards)} active target(s)",started)
 
     started=time.monotonic()

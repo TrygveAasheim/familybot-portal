@@ -12,7 +12,7 @@ cd "$ROOT"
 npm run preflight
 npm run lint
 npm test
-python3 local_api/dashboard_migration.py
+python3 local_api/dashboard_migration.py --repair-default-rewards
 
 # Stop the managed service before replacing its runtime tree. Updating files
 # underneath a running Node process can otherwise trigger a restart against a

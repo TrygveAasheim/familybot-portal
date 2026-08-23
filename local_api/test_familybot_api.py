@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from dashboard_migration import clear_active_setup, migrate
+from dashboard_migration import clear_active_setup, ensure_default_rewards, migrate
 from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, health_summary, transport_summary, trusted_portal_origin, weather_summary
 
 
@@ -339,6 +339,18 @@ class RepositoryTests(unittest.TestCase):
         second = migrate(self.db, seed=True)
         self.assertEqual(first, {"chores": 6, "rewards": 2})
         self.assertEqual(second, {"chores": 0, "rewards": 0})
+
+    def test_default_rewards_restore_an_individual_goal_for_each_child(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute(
+                "INSERT INTO reward_goals(member_id,title,emoji,goal_type,target_value,unit_label,created_at) VALUES(3,'Old', '🎯','points',30,'poeng','now')"
+            )
+            connection.execute("UPDATE reward_goals SET active=0")
+        self.assertEqual(ensure_default_rewards(self.db), 2)
+        dashboard = self.repo.dashboard(dt.date(2026, 8, 15))
+        self.assertTrue(all(child["reward"] for child in dashboard["children"]))
+        self.assertTrue(all(child["reward"]["target_value"] == 30 for child in dashboard["children"]))
+        self.assertEqual(ensure_default_rewards(self.db), 0)
 
     def test_clear_setup_preserves_history_but_hides_active_setup(self):
         migrate(self.db, seed=True)

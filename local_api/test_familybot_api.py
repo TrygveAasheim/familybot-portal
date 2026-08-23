@@ -234,7 +234,7 @@ class RepositoryTests(unittest.TestCase):
                     chore["id"], {"member_id": 3, "idempotency_key": f"weekday-key-{index:02d}"}
                 )
                 self.assertEqual(result["repeat_completed"], index + 1)
-                self.assertEqual(result["points"], 0)
+                self.assertEqual(result["points"], 10)
             with self.assertRaises(ValidationError):
                 self.repo.complete_chore(
                     chore["id"], {"member_id": 3, "idempotency_key": "weekday-duplicate"}
@@ -243,13 +243,13 @@ class RepositoryTests(unittest.TestCase):
         child = next(item for item in dashboard["children"] if item["id"] == 3)
         self.assertEqual(child["chores"][0]["repeat_completed"], 5)
         self.assertEqual(child["chores"][0]["repeat_percent"], 100)
-        self.assertEqual(len(dashboard["approval_queue"]), 1)
+        self.assertEqual(len(dashboard["approval_queue"]), 5)
         awarded = self.repo.decide_completion(
             dashboard["approval_queue"][0]["id"], {"decision": "awarded"}, 1
         )
         self.assertEqual(awarded["status"], "awarded")
         with sqlite3.connect(self.db) as connection:
-            self.assertEqual(connection.execute("SELECT SUM(points) FROM chore_completions").fetchone()[0], 10)
+            self.assertEqual(connection.execute("SELECT SUM(points) FROM chore_completions").fetchone()[0], 50)
         next_week = self.repo.dashboard(dt.date(2026, 8, 24))
         next_child = next(item for item in next_week["children"] if item["id"] == 3)
         self.assertEqual(next_child["chores"][0]["repeat_completed"], 0)
@@ -264,9 +264,32 @@ class RepositoryTests(unittest.TestCase):
             date_class.today.side_effect = dates
             first = self.repo.complete_chore(chore["id"], {"member_id": 4, "idempotency_key": "wash-day-001"})
             second = self.repo.complete_chore(chore["id"], {"member_id": 4, "idempotency_key": "wash-day-002"})
-        self.assertEqual(first["points"], 0)
+        self.assertEqual(first["points"], 3)
         self.assertEqual(second["points"], 3)
         self.assertEqual(second["repeat_status"], "awarded")
+
+    def test_repeated_points_are_visible_immediately_and_parent_can_reject_one_day(self):
+        self.repo.set_reward({"member_id": 4, "title": "Kino", "emoji": "🎬", "target_value": 30})
+        chore = self.repo.create_child_chore({
+            "title": "Ta ut søppel", "assigned_to": "child two", "icon": "🗑️", "points": 3,
+            "requires_approval": True, "repeat_mode": "weekly", "repeat_weekdays": [1, 2],
+        })
+        completion_date = dt.date(2026, 8, 17)
+        with patch("familybot_api.dt.date") as date_class:
+            date_class.today.return_value = completion_date
+            completion = self.repo.complete_chore(chore["id"], {"member_id": 4, "idempotency_key": "visible-repeat-points"})
+        self.assertEqual(completion["points"], 3)
+        dashboard = self.repo.dashboard(dt.date(2026, 8, 17))
+        child = next(item for item in dashboard["children"] if item["id"] == 4)
+        self.assertEqual(child["reward"]["earned"], 3)
+        self.assertEqual(child["weekly_achievement"]["current_points"], 3)
+        self.assertEqual(len(dashboard["approval_queue"]), 1)
+        rejected = self.repo.decide_completion(completion["id"], {"decision": "rejected"}, 1)
+        self.assertEqual(rejected["status"], "rejected")
+        after = self.repo.dashboard(dt.date(2026, 8, 17))
+        child = next(item for item in after["children"] if item["id"] == 4)
+        self.assertEqual(child["reward"]["earned"], 0)
+        self.assertEqual(child["weekly_achievement"]["current_points"], 0)
 
     def test_weekly_achievement_counts_full_week_and_preserves_redemption(self):
         self.repo.set_weekly_surprise(3, {"threshold_weeks": 1, "title": "Liten overraskelse", "emoji": "🎁"})

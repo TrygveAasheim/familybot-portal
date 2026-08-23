@@ -126,8 +126,9 @@ Evidence: migration-twice test, backup check, supervisor health and full suite.
 - A child can complete the recurring chore once on each selected day; a repeat
   tap on the same day cannot create another occurrence.
 - The child sees a compact `completed/required` progress bar on the chore.
-- Points are awarded, or the cycle enters parent approval, only after all
-  selected occurrences are complete. The next weekly cycle starts at zero.
+- Each daily completion immediately contributes its configured points, including
+  points awaiting parent approval; rejecting a completion removes those points
+  and reopens that day's repetition. The next weekly cycle starts at zero.
 
 Evidence: API cycle tests, duplicate-day test, dashboard contract and rendered
 child-card assertions.

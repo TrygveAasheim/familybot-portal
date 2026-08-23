@@ -627,7 +627,7 @@ class FamilyRepository:
         if started_at:
             rows = connection.execute(
                 """SELECT points,completed_at FROM chore_completions
-                   WHERE member_id=? AND status='awarded' AND points>0""",
+                   WHERE member_id=? AND status IN ('awarded','pending') AND points>0""",
                 (member_id,),
             ).fetchall()
             for row in rows:
@@ -769,8 +769,7 @@ class FamilyRepository:
                           k.title,m.icon,f.name AS member,
                           x.id AS cycle_id,x.status AS cycle_status,
                           x.completed_count AS cycle_completed,x.required_count AS cycle_required,x.points AS cycle_points,
-                          CASE WHEN x.id IS NULL OR c.id=(SELECT MAX(last.id) FROM chore_completions last WHERE last.cycle_id=x.id)
-                               THEN 1 ELSE 0 END AS reviewable
+                          CASE WHEN c.status IN ('pending','awarded') THEN 1 ELSE 0 END AS reviewable
                    FROM chore_completions c
                    JOIN kanban_cards k ON k.id=c.card_id
                    JOIN family_chore_meta m ON m.card_id=k.id AND m.visible_to_kids=1
@@ -912,8 +911,8 @@ class FamilyRepository:
             "hardening": hardening,
             "processes": processes,
             "children": dashboard_children,
-            "approval_queue": [item for item in histories if item["reviewable"] and item["status"] == "pending" and item.get("cycle_status") in {None, "pending"}],
-            "review_queue": [item for item in histories if item["reviewable"] and item["status"] in {"pending", "awarded"} and item.get("cycle_status") in {None, "pending", "awarded"}][:20],
+            "approval_queue": [item for item in histories if item["reviewable"] and item["status"] == "pending" and item.get("cycle_status") in {None, "open", "pending"}],
+            "review_queue": [item for item in histories if item["reviewable"] and item["status"] in {"pending", "awarded"} and item.get("cycle_status") in {None, "open", "pending", "awarded"}][:20],
             "transport": transport_summary(self.workspace),
             "weather": weather_summary(self.workspace),
         }
@@ -1208,7 +1207,7 @@ class FamilyRepository:
                 completed_count = int(cycle["completed_count"]) + 1
                 final = completed_count >= int(cycle["required_count"])
                 status = "pending" if row["requires_approval"] else "awarded"
-                awarded_points = int(row["points"]) if final and not row["requires_approval"] else 0
+                awarded_points = int(row["points"])
                 cursor = connection.execute(
                     """INSERT INTO chore_completions(
                            card_id,member_id,idempotency_key,status,points,completed_at,cycle_id,occurrence_date
@@ -1259,29 +1258,35 @@ class FamilyRepository:
                     """SELECT id,card_id,member_id,cycle_key,required_count,completed_count,status,points,created_at,decided_at
                        FROM chore_cycles WHERE id=?""", (current["cycle_id"],)
                 ).fetchone()
-                if not cycle or cycle["status"] != "pending":
+                if not cycle or cycle["status"] not in {"open", "pending", "awarded"}:
                     raise ValidationError("Denne gjentakelsen er ikke klar for godkjenning.")
                 now = iso_now()
+                if current["status"] == "rejected":
+                    return {**dict(current), "unchanged": True}
                 if decision == "awarded":
-                    final_id = connection.execute(
-                        "SELECT id FROM chore_completions WHERE cycle_id=? ORDER BY id DESC LIMIT 1",
+                    if current["status"] == "awarded":
+                        return {**dict(current), "unchanged": True}
+                    connection.execute(
+                        "UPDATE chore_completions SET status='awarded',approved_by=?,decided_at=? WHERE id=?",
+                        (parent_id, now, completion_id),
+                    )
+                    pending_count = connection.execute(
+                        "SELECT COUNT(*) FROM chore_completions WHERE cycle_id=? AND status='pending'",
                         (cycle["id"],),
                     ).fetchone()[0]
+                    next_status = "awarded" if int(cycle["completed_count"]) >= int(cycle["required_count"]) and not pending_count else "open"
                     connection.execute(
-                        "UPDATE chore_completions SET status='awarded',points=CASE WHEN id=? THEN ? ELSE 0 END,approved_by=?,decided_at=? WHERE cycle_id=?",
-                        (final_id, cycle["points"], parent_id, now, cycle["id"]),
-                    )
-                    connection.execute(
-                        "UPDATE chore_cycles SET status='awarded',decided_at=? WHERE id=?", (now, cycle["id"])
+                        "UPDATE chore_cycles SET status=?,decided_at=? WHERE id=?",
+                        (next_status, now if next_status == "awarded" else None, cycle["id"]),
                     )
                 else:
                     connection.execute(
-                        "UPDATE chore_completions SET status='rejected',points=0,approved_by=?,decided_at=? WHERE cycle_id=?",
-                        (parent_id, now, cycle["id"]),
+                        "UPDATE chore_completions SET status='rejected',points=0,approved_by=?,decided_at=? WHERE id=?",
+                        (parent_id, now, completion_id),
                     )
                     connection.execute(
-                        "UPDATE chore_cycles SET status='open',completed_count=0,decided_at=? WHERE id=?",
-                        (now, cycle["id"]),
+                        "UPDATE chore_cycles SET status='open',completed_count=?,decided_at=NULL WHERE id=?",
+                        (max(0, int(cycle["completed_count"]) - 1), cycle["id"]),
                     )
                 result = dict(connection.execute(
                     "SELECT id,card_id,status,points,completed_at,decided_at FROM chore_completions WHERE id=?",

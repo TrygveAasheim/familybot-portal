@@ -119,7 +119,8 @@ def main() -> None:
     record("AC-11",bool(backups) and tables_ok and supervisor and launch.returncode==0,f"backup={backup_evidence}; integrity={tables_ok}; supervisor+launchd active",started)
 
     started=time.monotonic()
-    recurring_contract=all(text in source for text in ("repeat_weekdays","mission-progress","repeat_completed"))
+    recurring_api=(ROOT/"local_api/familybot_api.py").read_text()
+    recurring_contract=all(text in source for text in ("repeat_weekdays","mission-progress","repeat_completed")) and all(text in recurring_api for text in ("status IN ('awarded','pending')","awarded_points = int(row[\"points\"])") )
     with sqlite3.connect(DB) as connection:
         cycle_table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chore_cycles'").fetchone()
     record("AC-12",recurring_contract and bool(cycle_table),"recurring chore fields, child progress bar and cycle table present",started)

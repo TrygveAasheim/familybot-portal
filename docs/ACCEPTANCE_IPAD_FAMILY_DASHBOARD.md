@@ -146,7 +146,9 @@ Evidence: authorization, backup, history-retention and reset idempotency tests.
 
 ### AC-14 — Full-week achievement and surprise redemption
 
-- A child sees the current week's approved points toward the 30-point full-week target.
+- A child sees the current ISO week's recorded points toward the 30-point
+  full-week target; both pending and awarded points are included immediately,
+  while rejected completions contribute zero.
 - Each completed full week is counted once and the count continues across weeks.
 - Parents can configure multiple surprise levels, such as 4, 8 and 12 full weeks.
 - Reaching a surprise level does not reset the count; a parent can record the
@@ -190,6 +192,9 @@ live deployed runtime script.
   clear action to open the full free-text plan.
 - The detail view is scoped to that child’s plan, preserves structured day
   details, and provides a “Tilbake” action to return to the child page.
+- The full plan text is rendered as readable structured content: original line
+  breaks are retained, bullet/numbered lines become lists, and clear section or
+  weekday labels become headings instead of one large text blob.
 - The detail route excludes source email identifiers, attachments and raw
   integration payloads. When a PDF is present, plan text comes only from the
   parsed PDF context; email headers, addresses and body text are not used as a

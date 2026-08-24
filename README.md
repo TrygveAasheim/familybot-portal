@@ -73,9 +73,12 @@ API process restarts.
 ## Weekly chores and surprises
 
 Weekly chore cycles use the selected weekdays and award points only when the
-required occurrences are complete. A child reaches a full week at 30 approved
-points in an ISO calendar week. Full weeks are counted once and continue across
-weeks until a parent records a surprise as taken.
+required occurrences are complete. Weekly achievement progress groups each
+completion by the local date in its `completed_at` timestamp and uses ISO
+calendar weeks (Monday–Sunday). Both pending and awarded points count toward the
+30-point target immediately; rejected completions contribute zero. The current
+week's bar therefore starts over each Monday, while full weeks are counted once
+and continue across weeks until a parent records a surprise as taken.
 
 Parents can configure several surprise levels (for example, 4, 8 and 12 full
 weeks). Recording a surprise starts a new achievement cycle for that child;

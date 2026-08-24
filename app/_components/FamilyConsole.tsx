@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const apiBase = () => `${window.location.protocol}//${window.location.hostname}:8788`;
 type Chore={id:number;title:string;icon:string;points:number;requires_approval:number;assigned_to:string;repeat_mode?:"once"|"weekly";repeat_weekdays?:number[];repeat_target?:number;repeat_completed?:number;repeat_percent?:number;repeat_status?:string;available_today?:boolean};
@@ -28,6 +28,33 @@ function when(value?:string|null){const parsed=asDate(value);return parsed?`${da
 function eventTime(item:EventItem){if(item.event_time)return item.event_time.slice(0,5);const parsed=asDate(item.event_date);return parsed&&item.event_date.includes("T")?timeFormat.format(parsed):"Hele dagen"}
 function osloHour(value:Date){const part=new Intl.DateTimeFormat("en-GB",{hour:"2-digit",hourCycle:"h23",timeZone:"Europe/Oslo"}).formatToParts(value).find(item=>item.type==="hour");return Number(part?.value||0)}
 function greetingForHour(hour:number){if(hour>=5&&hour<11)return"God morgen";if(hour>=11&&hour<14)return"God dag";if(hour>=14&&hour<18)return"God ettermiddag";return"God kveld"}
+const weekPlanBullet=/^\s*([-–—*•·▪◦‣]|\d+[.)]|[A-Za-zÆØÅæøå][.)])\s+(.+)$/;
+function weekPlanHeading(line:string){return line.length<=100&&(/:$/.test(line)||/^(?:mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag|ukeplan|uke\s+\d+|lekser|husk|beskjeder|dette skjer|læringsmål)\b/i.test(line)||/^[A-ZÆØÅ0-9][A-ZÆØÅ0-9\s–—-]{3,}$/.test(line))}
+function renderWeekPlanText(text:string){
+  const lines=text.replace(/\r\n?/g,"\n").split("\n").map(line=>line.trim());
+  const blocks:ReactNode[]=[];
+  let index=0;
+  while(index<lines.length){
+    if(!lines[index]){index+=1;continue}
+    const bullet=lines[index].match(weekPlanBullet);
+    if(bullet){
+      const items:string[]=[];const ordered=/^\d/.test(bullet[1]);
+      while(index<lines.length){
+        const match=lines[index].match(weekPlanBullet);
+        if(!match||/^\d/.test(match[1])!==ordered)break;
+        items.push(match[2]);index+=1;
+      }
+      const List=ordered?"ol":"ul";
+      blocks.push(<List className="week-plan-list" key={`list-${index}`}>{items.map((item,itemIndex)=><li key={`${index}-${itemIndex}`}>{item}</li>)}</List>);
+      continue;
+    }
+    if(weekPlanHeading(lines[index])){blocks.push(<h3 className="week-plan-heading" key={`heading-${index}`}>{lines[index]}</h3>);index+=1;continue}
+    const prose:string[]=[];
+    while(index<lines.length&&lines[index]&&!weekPlanBullet.test(lines[index])&&!weekPlanHeading(lines[index])){prose.push(lines[index]);index+=1}
+    blocks.push(<p key={`paragraph-${index}`}>{prose.map((line,lineIndex)=><Fragment key={`${index}-${lineIndex}`}>{line}{lineIndex<prose.length-1&&<br/>}</Fragment>)}</p>);
+  }
+  return <div className="week-plan-rich-text" aria-label="Strukturert ukeplan">{blocks.length?blocks:<p className="empty-text">Ingen plantekst er tilgjengelig.</p>}</div>;
+}
 function completionKey(childId:number,choreId:number){
   const webCrypto=globalThis.crypto;
   if(typeof webCrypto?.randomUUID==="function")return `${childId}-${choreId}-${webCrypto.randomUUID()}`;
@@ -157,7 +184,7 @@ function WeekPlanDetailPage({child,planId,token,onBack}:{child:Child;planId:numb
   useEffect(()=>{let cancelled=false;void fetch(`${apiBase()}/api/children/${child.id}/week-plans/${planId}`,{headers:{"X-FamilyBot-Local-Token":token},cache:"no-store"}).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||"Ukeplanen kunne ikke leses.");if(!cancelled)setDetail(result.week_plan)}).catch(cause=>{if(!cancelled)setError(cause instanceof Error?cause.message:"Ukeplanen kunne ikke leses.")});return()=>{cancelled=true}},[child.id,planId,token]);
   if(error)return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake</button><p className="error-text">{error}</p></section>;
   if(!detail)return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake</button><div className="loading-inline"><div className="spinner"/><p>Ukeplanen åpnes …</p></div></section>;
-  return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake til {child.name}</button><header><p className="eyebrow">Skolen denne uken</p><h1>Ukeplan · uke {detail.week_number}</h1><p className="week-detail-child">{detail.member}</p></header><p className="week-detail-summary">{detail.summary}</p><article className="week-detail-text"><h2>Hele ukeplanen</h2><pre>{detail.full_text}</pre></article>{detail.days.length>0&&<section className="week-detail-days"><h2>Dagene</h2><div className="week-items">{detail.days.map(item=><article key={item.id}><div><span>{item.day}</span>{item.date&&<time>{dateFormat.format(asDate(item.date)!)}</time>}</div>{item.subject&&<h3>{item.subject}</h3>}{item.homework&&<p><b>📚 Oppgave:</b> {item.homework}</p>}{item.note&&<p><b>ℹ️ Dette skjer:</b> {item.note}</p>}{item.bring&&<p><b>🎒 Husk:</b> {item.bring}</p>}</article>)}</div></section>}</section>
+  return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake til {child.name}</button><header><p className="eyebrow">Skolen denne uken</p><h1>Ukeplan · uke {detail.week_number}</h1><p className="week-detail-child">{detail.member}</p></header><p className="week-detail-summary">{detail.summary}</p><article className="week-detail-text"><h2>Hele ukeplanen</h2>{renderWeekPlanText(detail.full_text)}</article>{detail.days.length>0&&<section className="week-detail-days"><h2>Dagene</h2><div className="week-items">{detail.days.map(item=><article key={item.id}><div><span>{item.day}</span>{item.date&&<time>{dateFormat.format(asDate(item.date)!)}</time>}</div>{item.subject&&<h3>{item.subject}</h3>}{item.homework&&<p><b>📚 Oppgave:</b> {item.homework}</p>}{item.note&&<p><b>ℹ️ Dette skjer:</b> {item.note}</p>}{item.bring&&<p><b>🎒 Husk:</b> {item.bring}</p>}</article>)}</div></section>}</section>
 }
 function eventLabel(item:EventItem,today:string){if(item.event_date.slice(0,10)===today)return eventTime(item);const parsed=asDate(item.event_date);const day=parsed?dateFormat.format(parsed):item.event_date.slice(0,10);const time=item.event_time?item.event_time.slice(0,5):parsed&&item.event_date.includes("T")?timeFormat.format(parsed):"";return time?`${day} · ${time}`:day}
 function upcomingEventsFor(data:Dashboard){const seen=new Set<string>();const endDate=new Date(`${data.date}T12:00:00`);endDate.setDate(endDate.getDate()+4);const end=endDate.toISOString().slice(0,10);return [...data.events,...data.spond_events].filter(item=>{const date=item.event_date.slice(0,10);const key=`${item.title}|${date}|${item.member}`;if(date<data.date||date>end||seen.has(key))return false;seen.add(key);return true}).sort((left,right)=>left.event_date.localeCompare(right.event_date)||String(left.event_time||"").localeCompare(String(right.event_time||""))||left.title.localeCompare(right.title)).slice(0,4)}

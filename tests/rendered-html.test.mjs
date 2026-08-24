@@ -39,6 +39,10 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /sessionToken\.current&&sessionToken\.current!==nextToken/);
   assert.match(consoleSource, /window\.location\.reload\(\)/);
   assert.match(consoleSource, /Skolen denne uken/);
+  assert.match(consoleSource, /function renderWeekPlanText/);
+  assert.match(consoleSource, /week-plan-rich-text/);
+  assert.match(consoleSource, /week-plan-list/);
+  assert.doesNotMatch(consoleSource, /<pre>\{detail\.full_text\}<\/pre>/);
   assert.match(consoleSource, /Neste 5 dager/);
   assert.match(consoleSource, /function upcomingEventsFor/);
   assert.match(consoleSource, /slice\(0,4\)/);

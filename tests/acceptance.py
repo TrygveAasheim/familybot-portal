@@ -154,8 +154,8 @@ def main() -> None:
     record("AC-16",bool(operation_table) and interview_contract and bridge_contract,"Telegram preview/confirmation bridge, portal-owned validation and idempotency table present",started)
 
     started=time.monotonic()
-    detail_source=all(text in source for text in ("Se hele ukeplanen", "WeekPlanDetailPage", "Tilbake"))
-    detail_api=all(text in api_source for text in ("week_plan_detail", "/api/children/(\\d+)/week-plans/(\\d+)", "full_text"))
+    detail_source=all(text in source for text in ("Se hele ukeplanen", "WeekPlanDetailPage", "Tilbake", "renderWeekPlanInterpretation", "week-plan-interpretation"))
+    detail_api=all(text in api_source for text in ("week_plan_detail", "/api/children/(\\d+)/week-plans/(\\d+)", "full_text", "interpretation", "week_plan_interpretations"))
     detail_ok=False
     if dashboard.get("week_plans"):
         plan=dashboard["week_plans"][0]

@@ -195,6 +195,9 @@ live deployed runtime script.
 - The full plan text is rendered as readable structured content: original line
   breaks are retained, bullet/numbered lines become lists, and clear section or
   weekday labels become headings instead of one large text blob.
+- When a validated interpretation is available, the detail view groups
+  source-backed items under weekdays and categories; if interpretation is
+  unavailable, it falls back to the deterministic structured text.
 - The detail route excludes source email identifiers, attachments and raw
   integration payloads. When a PDF is present, plan text comes only from the
   parsed PDF context; email headers, addresses and body text are not used as a

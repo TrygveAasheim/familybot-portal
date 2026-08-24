@@ -269,14 +269,20 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(second["repeat_status"], "awarded")
 
     def test_repeated_points_are_visible_immediately_and_parent_can_reject_one_day(self):
-        self.repo.set_reward({"member_id": 4, "title": "Kino", "emoji": "🎬", "target_value": 30})
         chore = self.repo.create_child_chore({
             "title": "Ta ut søppel", "assigned_to": "child two", "icon": "🗑️", "points": 3,
             "requires_approval": True, "repeat_mode": "weekly", "repeat_weekdays": [1, 2],
         })
         completion_date = dt.date(2026, 8, 17)
-        with patch("familybot_api.dt.date") as date_class:
+        with patch("familybot_api.dt.date") as date_class, \
+                patch("familybot_api.iso_now", return_value="2026-08-17T12:00:00+02:00"):
             date_class.today.return_value = completion_date
+            self.repo.set_reward({"member_id": 4, "title": "Kino", "emoji": "🎬", "target_value": 30})
+            with sqlite3.connect(self.db) as connection:
+                connection.execute(
+                    "UPDATE weekly_achievement_cycles SET started_at=? WHERE member_id=? AND ended_at IS NULL",
+                    ("2026-08-16T12:00:00+02:00", 4),
+                )
             completion = self.repo.complete_chore(chore["id"], {"member_id": 4, "idempotency_key": "visible-repeat-points"})
         self.assertEqual(completion["points"], 3)
         dashboard = self.repo.dashboard(dt.date(2026, 8, 17))
@@ -415,11 +421,25 @@ class RepositoryTests(unittest.TestCase):
                    VALUES(?,?,?,?,?,?)""",
                 (cursor.lastrowid, "onsdag", "2026-08-19", "Tur", "Leksefri", "Mat og drikke"),
             )
+            connection.execute(
+                """INSERT INTO week_plan_interpretations(
+                       week_plan_id,status,source_hash,parser_version,structured_json)
+                   VALUES(?,?,?,?,?)""",
+                (cursor.lastrowid, "accepted", "test", "test", json.dumps({
+                    "version": 1, "week": 34, "year": 2026,
+                    "days": [{"date": "2026-08-19", "weekday": "onsdag", "items": [{
+                        "category": "homework", "text": "Leksefri",
+                        "source_blocks": ["page2-block1"], "confidence": 1,
+                    }]}],
+                    "general_notes": [],
+                })),
+            )
         dashboard = self.repo.dashboard(dt.date(2026, 8, 15))
         self.assertEqual(dashboard["week_plan_days"][0]["member"], "Child One")
         self.assertEqual(dashboard["week_plan_days"][0]["homework"], "Leksefri")
         plan = self.repo.week_plan_detail(3, cursor.lastrowid)
         self.assertEqual(plan["full_text"], "Hele ukeplanen med lekser, beskjeder og detaljer fra .")
+        self.assertEqual(plan["interpretation"]["days"][0]["items"][0]["text"], "Leksefri")
         self.assertNotIn("Subject:", plan["full_text"])
         self.assertNotIn("@", plan["full_text"])
         self.assertEqual(plan["days"][0]["homework"], "Leksefri")

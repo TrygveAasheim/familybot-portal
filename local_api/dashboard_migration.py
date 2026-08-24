@@ -136,6 +136,22 @@ CREATE TABLE IF NOT EXISTS dashboard_reset_operations (
     result_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS week_plan_interpretations (
+    id INTEGER PRIMARY KEY,
+    week_plan_id INTEGER NOT NULL UNIQUE REFERENCES week_plans(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK(status IN ('pending','processing','accepted','failed')),
+    source_hash TEXT NOT NULL,
+    parser_version TEXT NOT NULL,
+    model TEXT,
+    structured_json TEXT NOT NULL DEFAULT '{}',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_week_plan_interpretations_status
+    ON week_plan_interpretations(status, updated_at);
 """
 
 DEFAULT_CHORES = [
@@ -172,6 +188,7 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
             ("family_chore_meta", "repeat_target", "INTEGER NOT NULL DEFAULT 1"),
             ("chore_completions", "cycle_id", "INTEGER REFERENCES chore_cycles(id)"),
             ("chore_completions", "occurrence_date", "TEXT"),
+            ("week_plans", "layout_json", "TEXT NOT NULL DEFAULT ''"),
         ):
             columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
             if column not in columns:

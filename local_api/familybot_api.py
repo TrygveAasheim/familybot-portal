@@ -949,15 +949,26 @@ class FamilyRepository:
         with self.connect() as connection:
             plan = connection.execute(
                 """SELECT w.id,w.member_id,w.week_number,w.year,w.summary,w.raw_text,
-                          m.name AS member
+                          m.name AS member, i.structured_json AS interpretation_json
                    FROM week_plans w JOIN family_members m ON m.id=w.member_id
+                   LEFT JOIN week_plan_interpretations i
+                     ON i.week_plan_id=w.id AND i.status='accepted'
                    WHERE w.id=? AND w.member_id=? AND m.role='child'""",
                 (plan_id, child_id),
             ).fetchone()
             if not plan:
                 raise KeyError(plan_id)
             result = dict(plan)
+            interpretation_json = result.pop("interpretation_json", None)
             result["full_text"] = curated_week_plan_text(result.pop("raw_text") or result.get("summary") or "")
+            result["interpretation"] = None
+            if interpretation_json:
+                try:
+                    interpretation = json.loads(interpretation_json)
+                except (TypeError, ValueError):
+                    interpretation = None
+                if isinstance(interpretation, dict) and interpretation.get("version") == 1:
+                    result["interpretation"] = interpretation
             result["days"] = self._rows(connection.execute(
                 """SELECT id,week_plan_id,day,date,subject,note,homework,bring
                    FROM week_plan_days WHERE week_plan_id=?

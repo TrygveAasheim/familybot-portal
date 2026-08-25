@@ -17,7 +17,7 @@ type Transport={ok?:boolean|null;status:string;stop:string;updated_at?:string|nu
 type WeatherPeriod={label:string;temperature_min?:number|null;temperature_max?:number|null;precipitation_mm:number;summary:string;symbol:string};
 type HealthState="ok"|"degraded"|"stopped";
 type WeekPlanInterpretationItem={category:"homework"|"bring"|"event"|"subject"|"notice"|"general";text:string;source_blocks:string[];confidence:number};
-type WeekPlanInterpretation={version:number;week:number;year:number;days:Array<{date:string;weekday:string;items:WeekPlanInterpretationItem[]}>;general_notes:Array<{text:string;source_blocks:string[]}>};
+type WeekPlanInterpretation={version:number;week:number;year:number;days:Array<{date:string;weekday:string;items:WeekPlanInterpretationItem[]}>;weekly_tasks?:Array<{text:string;source_blocks:string[]}>;general_info?:Array<{text:string;source_blocks:string[]}>;general_notes?:Array<{text:string;source_blocks:string[]}>};
 type WeekPlanDetail={id:number;member_id:number;member:string;week_number:number;year:number;summary?:string|null;full_text:string;interpretation?:WeekPlanInterpretation|null;days:Array<{id:number;week_plan_id:number;day:string;date?:string|null;subject?:string|null;note?:string|null;homework?:string|null;bring?:string|null}>};
 type Dashboard={date:string;generated_at:string;children:Child[];chores:KanbanCard[];approval_queue:History[];review_queue:History[];events:EventItem[];spond_events:EventItem[];activities:Array<{id:number;name:string;location?:string|null;schedule?:string|null;member?:string|null}>;week_plans:Array<{id:number;member:string;summary:string;week_number?:number;year?:number}>;week_plan_days:Array<{id:number;week_plan_id:number;member:string;day:string;date?:string|null;subject?:string|null;note?:string|null;homework?:string|null;bring?:string|null}>;school_calendar:Array<{id:number;name:string;start_date:string;end_date:string}>;weather:{status:string;updated_at?:string|null;period_date?:string|null;advice?:string;periods?:WeatherPeriod[]};transport:Transport;sources:{email:{latest_processed?:string|null;waiting:number};spond:{checked_at?:string|null;ok?:boolean|null};health:{status:HealthState;ok:boolean;checked_at?:string|null;issues:Array<{service:string;label:string;severity:"warn"|"critical"}>}}};
 type Page="family"|"child"|"week-plan"|"parent"|"kanban";
@@ -60,13 +60,16 @@ function renderWeekPlanText(text:string){
 const interpretationLabels:Record<WeekPlanInterpretationItem["category"],string>={homework:"Lekse",bring:"Husk",event:"Dette skjer",subject:"Fag",notice:"Beskjed",general:"Info"};
 function renderWeekPlanInterpretation(interpretation:WeekPlanInterpretation){
   const days=interpretation.days.filter(day=>day.items.length>0);
+  const weeklyTasks=interpretation.weekly_tasks||[];
+  const generalInfo=interpretation.general_info||interpretation.general_notes||[];
   return <div className="week-plan-interpretation" aria-label="Tolkede ukeplanpunkter">
     {days.map(day=><section className="week-plan-interpretation-day" key={day.date}>
       <h3>{day.weekday}</h3>
       <ul>{day.items.map((item,index)=><li key={`${day.date}-${index}`}><span className="week-plan-item-category">{interpretationLabels[item.category]}</span>{item.text}</li>)}</ul>
     </section>)}
-    {interpretation.general_notes.length>0&&<section className="week-plan-general-notes"><h3>Generelt</h3><ul>{interpretation.general_notes.map((note,index)=><li key={index}>{note.text}</li>)}</ul></section>}
-    {days.length===0&&interpretation.general_notes.length===0&&<p className="empty-text">Ingen strukturerte punkter er tilgjengelige.</p>}
+    {weeklyTasks.length>0&&<section className="week-plan-weekly-tasks"><h3>Dette må gjøres denne uken</h3><ul>{weeklyTasks.map((note,index)=><li key={index}>{note.text}</li>)}</ul></section>}
+    {generalInfo.length>0&&<section className="week-plan-general-info"><h3>Generell informasjon</h3><ul>{generalInfo.map((note,index)=><li key={index}>{note.text}</li>)}</ul></section>}
+    {days.length===0&&weeklyTasks.length===0&&generalInfo.length===0&&<p className="empty-text">Ingen strukturerte punkter er tilgjengelige.</p>}
   </div>;
 }
 function completionKey(childId:number,choreId:number){

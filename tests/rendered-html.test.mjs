@@ -42,6 +42,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /function renderWeekPlanText/);
   assert.match(consoleSource, /function renderWeekPlanInterpretation/);
   assert.match(consoleSource, /week-plan-interpretation/);
+  assert.match(consoleSource, /week-plan-weekly-tasks/);
+  assert.match(consoleSource, /week-plan-general-info/);
   assert.match(consoleSource, /week-plan-rich-text/);
   assert.match(consoleSource, /week-plan-list/);
   assert.doesNotMatch(consoleSource, /<pre>\{detail\.full_text\}<\/pre>/);

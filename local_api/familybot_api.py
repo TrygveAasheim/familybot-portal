@@ -967,7 +967,7 @@ class FamilyRepository:
                     interpretation = json.loads(interpretation_json)
                 except (TypeError, ValueError):
                     interpretation = None
-                if isinstance(interpretation, dict) and interpretation.get("version") == 1:
+                if isinstance(interpretation, dict) and interpretation.get("version") in {1, 2}:
                     result["interpretation"] = interpretation
             result["days"] = self._rows(connection.execute(
                 """SELECT id,week_plan_id,day,date,subject,note,homework,bring

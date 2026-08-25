@@ -426,12 +426,13 @@ class RepositoryTests(unittest.TestCase):
                        week_plan_id,status,source_hash,parser_version,structured_json)
                    VALUES(?,?,?,?,?)""",
                 (cursor.lastrowid, "accepted", "test", "test", json.dumps({
-                    "version": 1, "week": 34, "year": 2026,
+                    "version": 2, "week": 34, "year": 2026,
                     "days": [{"date": "2026-08-19", "weekday": "onsdag", "items": [{
                         "category": "homework", "text": "Leksefri",
                         "source_blocks": ["page2-block1"], "confidence": 1,
                     }]}],
-                    "general_notes": [],
+                    "weekly_tasks": [{"text": "Les side 10", "source_blocks": ["page2-block1"]}],
+                    "general_info": [],
                 })),
             )
         dashboard = self.repo.dashboard(dt.date(2026, 8, 15))
@@ -440,6 +441,7 @@ class RepositoryTests(unittest.TestCase):
         plan = self.repo.week_plan_detail(3, cursor.lastrowid)
         self.assertEqual(plan["full_text"], "Hele ukeplanen med lekser, beskjeder og detaljer fra .")
         self.assertEqual(plan["interpretation"]["days"][0]["items"][0]["text"], "Leksefri")
+        self.assertEqual(plan["interpretation"]["weekly_tasks"][0]["text"], "Les side 10")
         self.assertNotIn("Subject:", plan["full_text"])
         self.assertNotIn("@", plan["full_text"])
         self.assertEqual(plan["days"][0]["homework"], "Leksefri")

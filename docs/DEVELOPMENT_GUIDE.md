@@ -62,17 +62,12 @@ by the portal migration.
 The portal may add a separate add-on schema, but it cannot reuse core ledgers or
 raw payload columns as a convenient storage area.
 
-Weekly achievement progress is derived from portal completion points in
-`pending` or `awarded` status. The local date represented by `completed_at` is
-grouped into ISO calendar weeks (Monday–Sunday); 30 points in one such week
-count as one full week, and each week is counted at most once per active
-achievement cycle. Rejected completions have zero points and therefore do not
-contribute. A parent redemption reset ends the active cycle, starts a new one
-and retains the old cycle and redemption record for history. The current-week
-bar is the total for the current ISO week and therefore starts over on Monday;
-the full-week counter continues across weeks until that reset. See [the weekly
-achievement specification](WEEKLY_ACHIEVEMENTS.md) for the contract and state
-transitions.
+Weekly achievement progress is now derived as continuous portal completion
+points in `pending` or `awarded` status. Every 30 points makes one full block;
+the remainder is shown in a new progress bar immediately. Rejected completions
+have zero points and do not contribute. The full-block counter continues until
+a parent redeems a surprise. See [the weekly achievement specification](WEEKLY_ACHIEVEMENTS.md)
+for the contract and state transitions.
 
 The browser is not entitled to every field returned by SQLite. New response
 fields require an explicit privacy decision in `docs/DATA_BOUNDARY.md` and

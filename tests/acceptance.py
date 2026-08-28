@@ -132,10 +132,10 @@ def main() -> None:
     record("AC-13",reset_contract and bool(reset_table),"parent reset controls and idempotency table present",started)
 
     started=time.monotonic()
-    weekly_source=all(text in source for text in ("Fullførte uker","weekly-achievement","Lagre nivå","Overraskelse tatt"))
+    weekly_source=all(text in source for text in ("Samlet fremgang","full_tabs","Lagre nivå","Overraskelse tatt"))
     with sqlite3.connect(DB) as connection:
         weekly_tables=all(connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone() for name in ("weekly_achievement_cycles","weekly_surprise_levels","weekly_achievement_redemptions","weekly_achievement_reset_operations"))
-    record("AC-14",weekly_source and weekly_tables,"weekly full-week count, surprise ladder and parent redemption reset present",started)
+    record("AC-14",weekly_source and weekly_tables,"30-point block count, surprise ladder and parent redemption reset present",started)
 
     started=time.monotonic()
     api_source=(ROOT/"local_api/familybot_api.py").read_text()

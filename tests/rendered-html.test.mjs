@@ -35,6 +35,10 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Nullstill begge/);
   assert.match(consoleSource, /Fullførte uker/);
   assert.match(consoleSource, /weekly-achievement/);
+  assert.match(consoleSource, /full_tabs/);
+  assert.match(consoleSource, /Samlet fremgang/);
+  assert.match(consoleSource, /JanuaryChoreSummary/);
+  assert.match(consoleSource, /annual_chore_summary/);
   assert.match(consoleSource, /function completionKey/);
   assert.match(consoleSource, /sessionToken\.current&&sessionToken\.current!==nextToken/);
   assert.match(consoleSource, /window\.location\.reload\(\)/);
@@ -93,5 +97,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /NOT EXISTS \(SELECT 1 FROM family_chore_meta/);
   assert.match(apiSource, /weekly_achievement_cycles/);
   assert.match(apiSource, /weekly_surprise_levels/);
+  assert.match(apiSource, /full_tabs/);
+  assert.match(apiSource, /annual_chore_counts/);
+  assert.match(apiSource, /status.*pending.*awarded/);
   assert.doesNotMatch(apiSource, /SELECT \*/i);
 });

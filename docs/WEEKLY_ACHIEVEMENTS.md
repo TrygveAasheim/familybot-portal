@@ -1,26 +1,24 @@
-# Weekly achievement specification
+# 30-point block achievement specification
 
-This is the portal contract for counting completed chore weeks and allowing a
-parent to attach redeemable surprises to that progress. It is separate from
-FamilyBot Core's source and delivery ledgers.
+This is the portal contract for counting completed 30-point blocks and allowing
+a parent to attach redeemable surprises to that progress. It is separate from
+FamilyBot Core's source and delivery ledgers. The legacy table and API field
+names still contain `week` for compatibility, but the progress unit is now a
+continuous block of points rather than a calendar week.
 
 ## Rules
 
-- The target is 30 points in one ISO calendar week.
+- The target is 30 points per block.
 - Completions with `status IN ('pending', 'awarded')` contribute their recorded
   points. Pending points are visible immediately while awaiting parent review;
   a rejection changes the completion to `rejected` and sets its points to zero,
   removing them from progress.
-- The completion's local `completed_at` date determines its ISO week. ISO weeks
-  run Monday through Sunday; this is a calendar-week bucket, not a rolling
-  seven-day period starting when a chore is done.
-- A week is full when its pending-plus-awarded points reach the target. A full
-  week counts once per active achievement cycle, even if later approvals change
-  its point total.
-- The current week's points and the number of full weeks are shown to the
-  child. The current-week progress bar naturally starts at zero for a new ISO
-  week, while the full-week count continues across calendar weeks until a
-  parent redeems a surprise.
+- Pending-plus-awarded points are summed from the start of the active cycle.
+  Every 30 points fills one block; any remainder immediately starts the next
+  progress bar. Rejected completions contribute zero.
+- The current remainder and number of full blocks are shown to the child. A
+  new block starts immediately when the previous one reaches 30 points; there
+  is no Monday reset and no ISO-week grouping.
 - Parents can configure multiple active levels, each with a positive threshold
   in full weeks, a title and an emoji. A level is ready when the count reaches
   its threshold and it has not already been redeemed in the active cycle.
@@ -55,6 +53,13 @@ The portal migration owns these tables:
 - `weekly_achievement_redemptions` — redeemed levels and cycle history;
 - `weekly_achievement_reset_operations` — idempotency records for resets.
 
-The implementation derives ISO-week totals from portal completion rows whose
-status is `pending` or `awarded`, using the local date represented by each
-`completed_at` timestamp. It does not write to FamilyBot Core tables.
+The implementation derives continuous totals from portal completion rows whose
+status is `pending` or `awarded`, starting at the active cycle boundary. It
+does not write to FamilyBot Core tables.
+
+## January summary
+
+During January, the family dashboard shows a one-time-per-session summary of
+the previous calendar year's retained child-completion counts. It includes
+approved and pending completions, excludes rejected completions, and continues
+to count completions after a chore is archived.

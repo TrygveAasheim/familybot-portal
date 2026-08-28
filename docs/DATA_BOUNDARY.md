@@ -21,7 +21,9 @@ a general-purpose OpenClaw administration surface.
 `GET /api/dashboard` returns selected fields for family members, upcoming
 events, Spond events, activities, the active parent Kanban task list, child chores, compact current week plans, school dates,
 weekly achievement progress, configured surprise levels, redemption history,
-source freshness and scheduled-job state. It does not return raw week-plan text,
+source freshness and scheduled-job state. If the upcoming Monday's plan has not
+arrived yet, the most recent prior week's plan is retained as a one-week
+fallback so the child screens do not go blank between school emails. It does not return raw week-plan text,
 email sender addresses, Telegram IDs, Spond `raw_json`, message bodies, secrets
 or attachments.
 
@@ -49,8 +51,8 @@ Writes are limited to the dashboard's chores and rewards model:
 - register a child completion and approve or reject it as a parent;
 - set an active reward goal.
 - reset a selected child's active chore list, points cycle, or both.
-- configure surprise levels for full-week achievements;
-- reset a selected child's full-week achievement counter after a surprise is taken.
+- configure surprise levels for full-block achievements;
+- reset a selected child's full-block achievement counter after a surprise is taken.
 - create a child chore through the confirmed Telegram interview bridge.
 
 The bridge creates a consistent SQLite backup before the first mutation in each

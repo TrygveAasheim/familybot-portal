@@ -651,7 +651,7 @@ class FamilyRepository:
         target = int(cycle["target_points"])
         started = local_date_from_timestamp(cycle["started_at"])
         started_at = started[0] if started else None
-        points_by_week: dict[str, int] = {}
+        total_points = 0
         if started_at:
             rows = connection.execute(
                 """SELECT points,completed_at FROM chore_completions
@@ -662,9 +662,8 @@ class FamilyRepository:
                 parsed = local_date_from_timestamp(row["completed_at"])
                 if not parsed or parsed[0] < started_at:
                     continue
-                week = achievement_week_key(parsed[1])
-                points_by_week[week] = points_by_week.get(week, 0) + int(row["points"])
-        full_weeks = sum(points >= target for points in points_by_week.values())
+                total_points += int(row["points"])
+        full_tabs, current_points = divmod(total_points, target)
         levels = self._rows(connection.execute(
             """SELECT id,threshold_weeks,title,emoji
                FROM weekly_surprise_levels
@@ -672,8 +671,8 @@ class FamilyRepository:
                ORDER BY threshold_weeks,id""",
             (member_id,),
         ))
-        ready = [level for level in levels if int(level["threshold_weeks"]) <= full_weeks]
-        next_level = next((level for level in levels if int(level["threshold_weeks"]) > full_weeks), None)
+        ready = [level for level in levels if int(level["threshold_weeks"]) <= full_tabs]
+        next_level = next((level for level in levels if int(level["threshold_weeks"]) > full_tabs), None)
         redemptions = self._rows(connection.execute(
             """SELECT id,full_weeks,threshold_weeks,title,created_at
                FROM weekly_achievement_redemptions
@@ -681,21 +680,27 @@ class FamilyRepository:
             (member_id,),
         ))
         current_week = achievement_week_key(today)
-        current_points = points_by_week.get(current_week, 0)
         return {
             "target_points": target,
             "current_week": current_week,
             "current_points": current_points,
             "current_percent": min(100, round(current_points * 100 / target)),
-            "full_weeks": full_weeks,
+            "total_points": total_points,
+            "full_tabs": full_tabs,
+            # Compatibility alias for older portal clients.
+            "full_weeks": full_tabs,
             "surprises": levels,
             "ready_surprises": ready,
             "next_surprise": next_level,
-            "redemptions": redemptions,
+            "redemptions": [
+                {**item, "full_tabs": item["full_weeks"]} for item in redemptions
+            ],
         }
 
     def dashboard(self, today: dt.date | None = None) -> dict[str, Any]:
         today = today or dt.date.today()
+        annual_summary_year = today.year - 1 if today.month == 1 else None
+        annual_chore_counts: dict[int, int] = {}
         monday = today + dt.timedelta(days=(7 - today.weekday()) % 7)
         if monday == today and today.weekday() != 0:
             monday += dt.timedelta(days=7)
@@ -743,6 +748,21 @@ class FamilyRepository:
                    WHERE w.year=? AND w.week_number=? ORDER BY m.id, w.created_at DESC""",
                 (target_year, target_week),
             ))
+            plan_year, plan_week = target_year, target_week
+            if not plans:
+                # Friday/weekend dashboards point at the upcoming Monday. Keep
+                # the most recent current-week plan visible until next week's
+                # school email has arrived and been processed.
+                fallback_year, fallback_week, _ = (monday - dt.timedelta(days=7)).isocalendar()
+                plans = self._rows(connection.execute(
+                    """SELECT w.id, w.week_number, w.year, substr(COALESCE(w.summary,''),1,360) AS summary,
+                              w.teacher, w.created_at, m.name AS member
+                       FROM week_plans w JOIN family_members m ON m.id=w.member_id
+                       WHERE w.year=? AND w.week_number=? ORDER BY m.id, w.created_at DESC""",
+                    (fallback_year, fallback_week),
+                ))
+                if plans:
+                    plan_year, plan_week = fallback_year, fallback_week
             for plan in plans:
                 plan["summary"] = curated_week_plan_summary(plan.get("summary"))
             plan_days = self._rows(connection.execute(
@@ -753,7 +773,7 @@ class FamilyRepository:
                    JOIN family_members m ON m.id=w.member_id
                    WHERE w.year=? AND w.week_number=?
                    ORDER BY COALESCE(d.date,'9999-12-31'),d.id""",
-                (target_year, target_week),
+                (plan_year, plan_week),
             ))
             unlinked_plan_rows = self._rows(connection.execute(
                 """SELECT id, subject, received_at, processed_at, summary
@@ -805,6 +825,17 @@ class FamilyRepository:
                    LEFT JOIN chore_cycles x ON x.id=c.cycle_id
                    ORDER BY c.completed_at DESC,c.id DESC LIMIT 40"""
             )) if self.table_exists(connection, "chore_completions") else []
+            if annual_summary_year is not None and self.table_exists(connection, "chore_completions"):
+                annual_rows = connection.execute(
+                    """SELECT c.member_id,c.completed_at,c.status
+                       FROM chore_completions c
+                       JOIN family_members f ON f.id=c.member_id AND f.role='child'
+                       WHERE c.status IN ('pending','awarded')"""
+                ).fetchall()
+                for row in annual_rows:
+                    parsed = local_date_from_timestamp(row["completed_at"])
+                    if parsed and parsed[1].year == annual_summary_year:
+                        annual_chore_counts[row["member_id"]] = annual_chore_counts.get(row["member_id"], 0) + 1
             goals = self._rows(connection.execute(
                 """SELECT g.id,g.member_id,g.title,g.emoji,g.goal_type,g.target_value,g.unit_label,g.created_at,
                           f.name AS member,
@@ -885,6 +916,19 @@ class FamilyRepository:
         ]
 
         configured_profiles = member_profiles(self.workspace)
+        annual_chore_summary = None
+        if annual_summary_year is not None:
+            annual_chore_summary = {
+                "year": annual_summary_year,
+                "children": [
+                    {
+                        "id": child["id"],
+                        "name": configured_profiles.get(child["id"], {}).get("name") or child["name"],
+                        "count": annual_chore_counts.get(child["id"], 0),
+                    }
+                    for child in children
+                ],
+            }
         dashboard_children = []
         for child in children:
             name = child["name"]
@@ -913,7 +957,9 @@ class FamilyRepository:
         return {
             "generated_at": iso_now(),
             "date": today.isoformat(),
+            "annual_chore_summary": annual_chore_summary,
             "target_week": {"week": target_week, "year": target_year, "starts": monday.isoformat()},
+            "week_plan_week": {"week": plan_week, "year": plan_year, "fallback": (plan_year, plan_week) != (target_year, target_week)},
             "members": members,
             "events": events,
             "spond_events": spond,
@@ -940,7 +986,9 @@ class FamilyRepository:
             "processes": processes,
             "children": dashboard_children,
             "approval_queue": [item for item in histories if item["reviewable"] and item["status"] == "pending" and item.get("cycle_status") in {None, "open", "pending"}],
-            "review_queue": [item for item in histories if item["reviewable"] and item["status"] in {"pending", "awarded"} and item.get("cycle_status") in {None, "open", "pending", "awarded"}][:20],
+            # Approved completions remain in each child's history and in the
+            # database, but leave the parent's actionable review queue.
+            "review_queue": [item for item in histories if item["reviewable"] and item["status"] == "pending" and item.get("cycle_status") in {None, "open", "pending"}][:20],
             "transport": transport_summary(self.workspace),
             "weather": weather_summary(self.workspace),
         }
@@ -1491,12 +1539,12 @@ class FamilyRepository:
                 (now, cycle["id"]),
             )
             redemption_id = None
-            if snapshot["full_weeks"] or selected:
+            if snapshot["full_tabs"] or selected:
                 cursor = connection.execute(
                     """INSERT INTO weekly_achievement_redemptions(
                            member_id,cycle_id,full_weeks,threshold_weeks,title,created_at
                        ) VALUES(?,?,?,?,?,?)""",
-                    (member_id, cycle["id"], snapshot["full_weeks"],
+                    (member_id, cycle["id"], snapshot["full_tabs"],
                      selected["threshold_weeks"] if selected else None,
                      selected["title"] if selected else "Manuell nullstilling", now),
                 )
@@ -1508,7 +1556,9 @@ class FamilyRepository:
             )
             result = {
                 "member_id": member_id,
-                "previous_full_weeks": snapshot["full_weeks"],
+                "previous_full_tabs": snapshot["full_tabs"],
+                # Compatibility alias for callers using the old field name.
+                "previous_full_weeks": snapshot["full_tabs"],
                 "claimed_surprise": dict(selected) if selected else None,
                 "redemption_id": redemption_id,
                 "new_cycle_id": cursor.lastrowid,

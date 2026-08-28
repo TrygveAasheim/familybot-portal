@@ -144,13 +144,14 @@ child-card assertions.
 
 Evidence: authorization, backup, history-retention and reset idempotency tests.
 
-### AC-14 — Full-week achievement and surprise redemption
+### AC-14 — 30-point block achievement and surprise redemption
 
-- A child sees the current ISO week's recorded points toward the 30-point
-  full-week target; both pending and awarded points are included immediately,
-  while rejected completions contribute zero.
-- Each completed full week is counted once and the count continues across weeks.
-- Parents can configure multiple surprise levels, such as 4, 8 and 12 full weeks.
+- A child sees the current progress toward a 30-point block; both pending and
+  awarded points are included immediately, while rejected completions contribute
+  zero.
+- Each completed block is counted, and any remainder starts the next progress
+  bar immediately. Calendar weeks do not affect the count.
+- Parents can configure multiple surprise levels, such as 4, 8 and 12 full blocks.
 - Reaching a surprise level does not reset the count; a parent can record the
   surprise as taken and reset the active counter while retaining redemption history.
 - Achievement resets and surprise changes require the parent session and are

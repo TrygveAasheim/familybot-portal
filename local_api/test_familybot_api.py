@@ -248,6 +248,12 @@ class RepositoryTests(unittest.TestCase):
             dashboard["approval_queue"][0]["id"], {"decision": "awarded"}, 1
         )
         self.assertEqual(awarded["status"], "awarded")
+        after_award = self.repo.dashboard(weekdays[-1])
+        self.assertEqual(len(after_award["review_queue"]), 4)
+        self.assertEqual(
+            next(item for item in after_award["children"][0]["history"] if item["id"] == awarded["id"])["points"],
+            10,
+        )
         with sqlite3.connect(self.db) as connection:
             self.assertEqual(connection.execute("SELECT SUM(points) FROM chore_completions").fetchone()[0], 50)
         next_week = self.repo.dashboard(dt.date(2026, 8, 24))
@@ -301,25 +307,71 @@ class RepositoryTests(unittest.TestCase):
         self.repo.set_weekly_surprise(3, {"threshold_weeks": 1, "title": "Liten overraskelse", "emoji": "🎁"})
         self.repo.set_weekly_surprise(3, {"threshold_weeks": 2, "title": "Bedre overraskelse", "emoji": "🌟"})
         first = self.repo.create_child_chore({"title": "Lekser", "assigned_to": "child one", "icon": "📖", "points": 20})
-        second = self.repo.create_child_chore({"title": "Rydde", "assigned_to": "child one", "icon": "🧹", "points": 10})
+        second = self.repo.create_child_chore({"title": "Rydde", "assigned_to": "child one", "icon": "🧹", "points": 15})
         self.repo.complete_chore(first["id"], {"member_id": 3, "idempotency_key": "achievement-20"})
         self.repo.complete_chore(second["id"], {"member_id": 3, "idempotency_key": "achievement-10"})
         today = dt.date.today()
         dashboard = self.repo.dashboard(today)
         child = next(item for item in dashboard["children"] if item["id"] == 3)
         achievement = child["weekly_achievement"]
-        self.assertEqual(achievement["current_points"], 30)
+        self.assertEqual(achievement["total_points"], 35)
+        self.assertEqual(achievement["current_points"], 5)
+        self.assertEqual(achievement["full_tabs"], 1)
         self.assertEqual(achievement["full_weeks"], 1)
         self.assertEqual(achievement["ready_surprises"][0]["title"], "Liten overraskelse")
         self.assertEqual(achievement["next_surprise"]["threshold_weeks"], 2)
         reset = self.repo.reset_weekly_achievement(3, {"threshold_weeks": 1, "idempotency_key": "achievement-reset-1"})
         duplicate = self.repo.reset_weekly_achievement(3, {"threshold_weeks": 1, "idempotency_key": "achievement-reset-1"})
+        self.assertEqual(reset["previous_full_tabs"], 1)
         self.assertEqual(reset["previous_full_weeks"], 1)
         self.assertEqual(reset["claimed_surprise"]["title"], "Liten overraskelse")
         self.assertTrue(duplicate["duplicate"])
         after = next(item for item in self.repo.dashboard(today)["children"] if item["id"] == 3)["weekly_achievement"]
         self.assertEqual(after["full_weeks"], 0)
         self.assertEqual(after["redemptions"][0]["title"], "Liten overraskelse")
+
+    def test_january_summary_counts_retained_child_completions(self):
+        chore = self.repo.create_child_chore({
+            "title": "Årsoppgave", "assigned_to": "child one", "icon": "✅", "points": 2,
+        })
+        with sqlite3.connect(self.db) as connection:
+            connection.execute(
+                """INSERT INTO chore_completions(card_id,member_id,idempotency_key,status,points,completed_at)
+                   VALUES(?,?,?,'awarded',?,?)""",
+                (chore["id"], 3, "annual-summary-2025", 2, "2025-12-31T23:30:00+01:00"),
+            )
+        january = self.repo.dashboard(dt.date(2026, 1, 5))
+        summary = january["annual_chore_summary"]
+        self.assertEqual(summary["year"], 2025)
+        self.assertEqual(next(item for item in summary["children"] if item["id"] == 3)["count"], 1)
+        self.assertIsNone(self.repo.dashboard(dt.date(2026, 8, 15))["annual_chore_summary"])
+
+    def test_blocks_carry_across_calendar_weeks(self):
+        first = self.repo.create_child_chore({
+            "title": "Mandagsoppgave", "assigned_to": "child one", "icon": "✅", "points": 20,
+        })
+        second = self.repo.create_child_chore({
+            "title": "Neste ukesoppgave", "assigned_to": "child one", "icon": "⭐", "points": 15,
+        })
+        with sqlite3.connect(self.db) as connection:
+            connection.execute(
+                "UPDATE weekly_achievement_cycles SET started_at=? WHERE member_id=? AND ended_at IS NULL",
+                ("2026-08-01T00:00:00+02:00", 3),
+            )
+            connection.executemany(
+                """INSERT INTO chore_completions(card_id,member_id,idempotency_key,status,points,completed_at)
+                   VALUES(?,?,?,'awarded',?,?)""",
+                [
+                    (first["id"], 3, "cross-week-20", 20, "2026-08-17T12:00:00+02:00"),
+                    (second["id"], 3, "cross-week-15", 15, "2026-08-24T12:00:00+02:00"),
+                ],
+            )
+        achievement = next(
+            item for item in self.repo.dashboard(dt.date(2026, 8, 24))["children"] if item["id"] == 3
+        )["weekly_achievement"]
+        self.assertEqual(achievement["total_points"], 35)
+        self.assertEqual(achievement["full_tabs"], 1)
+        self.assertEqual(achievement["current_points"], 5)
 
     def test_parent_can_reset_child_chores_and_points_idempotently(self):
         self.repo.set_reward({"member_id": 3, "title": "Ny premie", "emoji": "🎯", "target_value": 20})
@@ -447,6 +499,23 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(plan["days"][0]["homework"], "Leksefri")
         self.assertNotIn("full_text", json.dumps(dashboard))
         self.assertNotIn("raw_text", json.dumps(dashboard))
+
+    def test_upcoming_week_uses_current_plan_until_next_plan_arrives(self):
+        with sqlite3.connect(self.db) as connection:
+            cursor = connection.execute(
+                """INSERT INTO week_plans(member_id,week_number,year,summary,raw_text,teacher)
+                   VALUES(3,35,2026,'Denne uken','Ukeplan for denne uken','Ingrid')"""
+            )
+            connection.execute(
+                """INSERT INTO week_plan_days(week_plan_id,day,date,subject,homework,bring)
+                   VALUES(?,?,?,?,?,?)""",
+                (cursor.lastrowid, "fredag", "2026-08-28", "Oppsummering", "Les", "Bok"),
+            )
+        dashboard = self.repo.dashboard(dt.date(2026, 8, 28))
+        self.assertEqual(dashboard["target_week"], {"week": 36, "year": 2026, "starts": "2026-08-31"})
+        self.assertEqual(dashboard["week_plan_week"], {"week": 35, "year": 2026, "fallback": True})
+        self.assertEqual(dashboard["week_plans"][0]["week_number"], 35)
+        self.assertEqual(dashboard["week_plan_days"][0]["homework"], "Les")
 
     def test_transport_cache_exposes_only_curated_departure_fields(self):
         transport = transport_summary(Path(self.temp.name))

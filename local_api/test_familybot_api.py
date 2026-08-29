@@ -1,8 +1,10 @@
 import datetime as dt
+import http.client
 import io
 import json
 import sqlite3
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -158,6 +160,9 @@ class RepositoryTests(unittest.TestCase):
         self.assertIsNone(restored["archived_at"])
         self.assertTrue(any((Path(self.temp.name) / "backups").glob("portal-chores-*/family.db")))
         self.assertIn("chore.restored", self.repo.audit_path.read_text(encoding="utf-8"))
+        backup = next((Path(self.temp.name) / "backups").glob("portal-chores-*/family.db"))
+        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(backup.parent.stat().st_mode & 0o777, 0o700)
 
     def test_rejects_invalid_chore_values(self):
         with self.assertRaises(ValidationError):
@@ -395,11 +400,14 @@ class RepositoryTests(unittest.TestCase):
         duplicate = self.repo.reset_child(3, {"scope": "both", "idempotency_key": "reset-child-001"})
         self.assertEqual(result["archived_chores"], 1)
         self.assertTrue(result["reset_points"])
+        self.assertTrue(result["reset_achievement"])
         self.assertTrue(duplicate["duplicate"])
         with sqlite3.connect(self.db) as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM chore_completions").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM reward_goals WHERE member_id=3 AND active=1").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM reward_goals WHERE member_id=3").fetchone()[0], 2)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM weekly_achievement_cycles WHERE member_id=3 AND ended_at IS NULL").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM weekly_achievement_cycles WHERE member_id=3 AND ended_at IS NOT NULL").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT archived_at FROM kanban_cards WHERE id=?", (chore["id"],)).fetchone()[0] is not None, True)
         dashboard = self.repo.dashboard(dt.date(2026, 8, 15))
         child = next(item for item in dashboard["children"] if item["id"] == 3)
@@ -414,6 +422,29 @@ class RepositoryTests(unittest.TestCase):
         self.assertFalse(trusted_portal_origin("http://8.8.8.8:3000"))
         self.assertFalse(trusted_portal_origin("http://localhost:9999"))
         self.assertFalse(trusted_portal_origin(None, allowed))
+
+    def test_read_routes_require_local_token(self):
+        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "1234", {"http://localhost:3000"})
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            connection.request("GET", "/api/dashboard", headers={"Origin": "http://localhost:3000"})
+            self.assertEqual(connection.getresponse().status, 403)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            connection.request("GET", "/api/dashboard", headers={
+                "Origin": "http://localhost:3000",
+                "X-FamilyBot-Local-Token": server.session_token,
+            })
+            self.assertEqual(connection.getresponse().status, 200)
+            connection.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
     def test_parent_pin_attempts_are_rate_limited(self):
         server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
@@ -528,6 +559,33 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(dashboard["week_plan_week"], {"week": 35, "year": 2026, "fallback": True})
         self.assertEqual(dashboard["week_plans"][0]["week_number"], 35)
         self.assertEqual(dashboard["week_plan_days"][0]["homework"], "Les")
+
+    def test_week_plans_fallback_per_child_and_return_member_ids(self):
+        with sqlite3.connect(self.db) as connection:
+            target = connection.execute(
+                """INSERT INTO week_plans(member_id,week_number,year,summary,raw_text,teacher)
+                   VALUES(3,36,2026,'Barn 1','Plan for child one','Teacher')"""
+            )
+            fallback = connection.execute(
+                """INSERT INTO week_plans(member_id,week_number,year,summary,raw_text,teacher)
+                   VALUES(4,35,2026,'Barn 2','Plan for child two','Teacher')"""
+            )
+            connection.executemany(
+                """INSERT INTO week_plan_days(week_plan_id,day,date,subject,homework,bring)
+                   VALUES(?,?,?,?,?,?)""",
+                [(target.lastrowid, "mandag", "2026-08-31", "Matte", "Les", "Bok"),
+                 (fallback.lastrowid, "fredag", "2026-08-28", "Tur", "Pakke", "Mat")],
+            )
+        dashboard = self.repo.dashboard(dt.date(2026, 8, 28))
+        plans = {plan["member_id"]: plan for plan in dashboard["week_plans"]}
+        self.assertEqual(plans[3]["week_number"], 36)
+        self.assertEqual(plans[4]["week_number"], 35)
+        self.assertTrue(dashboard["week_plan_week"]["fallback"])
+        self.assertTrue(dashboard["week_plan_week"]["mixed"])
+        status = {item["member_id"]: item for item in dashboard["week_plan_status"]}
+        self.assertFalse(status[3]["fallback"])
+        self.assertTrue(status[4]["fallback"])
+        self.assertEqual({item["member_id"] for item in dashboard["week_plan_days"]}, {3, 4})
 
     def test_transport_cache_exposes_only_curated_departure_fields(self):
         transport = transport_summary(Path(self.temp.name))

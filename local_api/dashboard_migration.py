@@ -8,6 +8,7 @@ import datetime as dt
 import os
 import shutil
 import sqlite3
+import tempfile
 from pathlib import Path
 
 from family_config import child_profiles
@@ -163,16 +164,25 @@ DEFAULT_CHORES = [
 
 def backup_database(db_path: Path, backup_root: Path) -> Path:
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_root.mkdir(parents=True, exist_ok=True)
+    os.chmod(backup_root, 0o700)
     target_dir = backup_root / f"dashboard-service-{stamp}"
     target_dir.mkdir(parents=True, exist_ok=False)
+    os.chmod(target_dir, 0o700)
     target = target_dir / "family.db"
+    fd, temporary = tempfile.mkstemp(prefix=".family-", suffix=".db", dir=target_dir)
+    os.close(fd)
+    temporary_path = Path(temporary)
     source = sqlite3.connect(db_path)
-    destination = sqlite3.connect(target)
+    destination = sqlite3.connect(temporary_path)
     try:
         source.backup(destination)
     finally:
         destination.close()
         source.close()
+    os.chmod(temporary_path, 0o600)
+    os.replace(temporary_path, target)
+    os.chmod(target, 0o600)
     return target
 
 

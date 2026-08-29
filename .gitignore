@@ -39,5 +39,6 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+*.tsbuildinfo
 /runtime/
 /config/family.local.json

@@ -47,4 +47,23 @@ if [[ "$(sqlite3 "$WORKSPACE/db/family.db" 'PRAGMA integrity_check;')" != "ok" ]
   exit 1
 fi
 
+BACKUP_ROOT="$WORKSPACE/backups"
+if [[ -d "$BACKUP_ROOT" ]]; then
+  if [[ "$(stat -f '%Lp' "$BACKUP_ROOT")" != "700" ]]; then
+    echo "Backup directory must have mode 0700: $BACKUP_ROOT" >&2
+    exit 1
+  fi
+  for backup in "$BACKUP_ROOT"/*/family.db; do
+    [[ -e "$backup" ]] || continue
+    if [[ "$(stat -f '%Lp' "$backup")" != "600" ]]; then
+      echo "Backup database must have mode 0600: $backup" >&2
+      exit 1
+    fi
+    if [[ "$(stat -f '%Lp' "${backup%/*}")" != "700" ]]; then
+      echo "Backup directory must have mode 0700: ${backup%/*}" >&2
+      exit 1
+    fi
+  done
+fi
+
 echo "Portal preflight OK."

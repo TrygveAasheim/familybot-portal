@@ -20,6 +20,7 @@ import secrets
 import sqlite3
 import subprocess
 import threading
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -540,18 +541,27 @@ class FamilyRepository:
             stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
             backup_dir = self.workspace / f"backups/portal-chores-{stamp}"
             backup_dir.mkdir(parents=True, exist_ok=True)
+            os.chmod(self.workspace / "backups", 0o700)
+            os.chmod(backup_dir, 0o700)
             target = backup_dir / "family.db"
+            fd, temporary = tempfile.mkstemp(prefix=".family-", suffix=".db", dir=backup_dir)
+            os.close(fd)
+            temporary_path = Path(temporary)
             source = sqlite3.connect(self.db_path)
-            destination = sqlite3.connect(target)
+            destination = sqlite3.connect(temporary_path)
             try:
                 source.backup(destination)
             finally:
                 destination.close()
                 source.close()
+            os.chmod(temporary_path, 0o600)
+            os.replace(temporary_path, target)
+            os.chmod(target, 0o600)
             self._backup_done = True
 
     def audit(self, action: str, details: dict[str, Any]) -> None:
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(self.audit_path.parent, 0o700)
         record = {"at": iso_now(), "action": action, **details}
         with self.audit_path.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -714,21 +724,21 @@ class FamilyRepository:
             events = self._rows(connection.execute(
                 """SELECT e.id, e.title, e.event_date, e.event_time, e.end_date, e.location,
                           e.bring, e.requires_response, e.response_deadline, e.source,
-                          m.name AS member
+                          m.id AS member_id, m.name AS member
                    FROM calendar_events e LEFT JOIN family_members m ON m.id=e.member_id
                    WHERE e.event_date BETWEEN ? AND ? ORDER BY e.event_date, e.event_time, e.title""",
                 (today.isoformat(), end.isoformat()),
             ))
             spond = self._rows(connection.execute(
                 """SELECT s.id, s.title, s.event_date, s.event_end, s.location,
-                          s.requires_response, s.rsvp_deadline, s.my_rsvp, m.name AS member
+                          s.requires_response, s.rsvp_deadline, s.my_rsvp, m.id AS member_id, m.name AS member
                    FROM spond_events s LEFT JOIN family_members m ON m.id=s.member_id
                    WHERE substr(s.event_date,1,10) BETWEEN ? AND ?
                    ORDER BY s.event_date, s.title LIMIT 30""",
                 (today.isoformat(), end.isoformat()),
             ))
             activities = self._rows(connection.execute(
-                """SELECT a.id, a.name, a.location, a.schedule, a.paused_until, m.name AS member
+                """SELECT a.id, a.name, a.location, a.schedule, a.paused_until, m.id AS member_id, m.name AS member
                    FROM activities a LEFT JOIN family_members m ON m.id=a.member_id
                    WHERE a.active=1 ORDER BY m.id, a.name"""
             ))
@@ -741,40 +751,43 @@ class FamilyRepository:
                             CASE priority WHEN 'must-do' THEN 0 WHEN 'important' THEN 1 ELSE 2 END,
                             COALESCE(due_date,'9999-12-31'), id"""
             ))
-            plans = self._rows(connection.execute(
-                """SELECT w.id, w.week_number, w.year, substr(COALESCE(w.summary,''),1,360) AS summary,
-                          w.teacher, w.created_at, m.name AS member
-                   FROM week_plans w JOIN family_members m ON m.id=w.member_id
-                   WHERE w.year=? AND w.week_number=? ORDER BY m.id, w.created_at DESC""",
-                (target_year, target_week),
-            ))
-            plan_year, plan_week = target_year, target_week
-            if not plans:
-                # Friday/weekend dashboards point at the upcoming Monday. Keep
-                # the most recent current-week plan visible until next week's
-                # school email has arrived and been processed.
-                fallback_year, fallback_week, _ = (monday - dt.timedelta(days=7)).isocalendar()
-                plans = self._rows(connection.execute(
-                    """SELECT w.id, w.week_number, w.year, substr(COALESCE(w.summary,''),1,360) AS summary,
+            def plans_for(year: int, week: int) -> list[dict[str, Any]]:
+                return self._rows(connection.execute(
+                    """SELECT w.id, w.member_id, w.week_number, w.year,
+                              substr(COALESCE(w.summary,''),1,360) AS summary,
                               w.teacher, w.created_at, m.name AS member
                        FROM week_plans w JOIN family_members m ON m.id=w.member_id
                        WHERE w.year=? AND w.week_number=? ORDER BY m.id, w.created_at DESC""",
-                    (fallback_year, fallback_week),
+                    (year, week),
                 ))
-                if plans:
-                    plan_year, plan_week = fallback_year, fallback_week
+
+            target_plans = plans_for(target_year, target_week)
+            fallback_year, fallback_week, _ = (monday - dt.timedelta(days=7)).isocalendar()
+            fallback_plans = plans_for(fallback_year, fallback_week)
+            selected_by_member: dict[int, dict[str, Any]] = {}
+            for plan in target_plans + fallback_plans:
+                selected_by_member.setdefault(int(plan["member_id"]), plan)
+            plans = sorted(selected_by_member.values(), key=lambda item: (item["member_id"], -int(item["id"])))
+            plan_year, plan_week = target_year, target_week
+            if plans and all((plan["year"], plan["week_number"]) == (fallback_year, fallback_week) for plan in plans):
+                plan_year, plan_week = fallback_year, fallback_week
             for plan in plans:
                 plan["summary"] = curated_week_plan_summary(plan.get("summary"))
-            plan_days = self._rows(connection.execute(
-                """SELECT d.id,d.week_plan_id,d.day,d.date,d.subject,d.note,d.homework,d.bring,
-                          m.name AS member
-                   FROM week_plan_days d
-                   JOIN week_plans w ON w.id=d.week_plan_id
-                   JOIN family_members m ON m.id=w.member_id
-                   WHERE w.year=? AND w.week_number=?
-                   ORDER BY COALESCE(d.date,'9999-12-31'),d.id""",
-                (plan_year, plan_week),
-            ))
+                plan["fallback"] = (plan["year"], plan["week_number"]) != (target_year, target_week)
+            plan_ids = [int(plan["id"]) for plan in plans]
+            plan_days = []
+            if plan_ids:
+                placeholders = ",".join("?" for _ in plan_ids)
+                plan_days = self._rows(connection.execute(
+                    f"""SELECT d.id,d.week_plan_id,d.day,d.date,d.subject,d.note,d.homework,d.bring,
+                              m.id AS member_id, m.name AS member
+                       FROM week_plan_days d
+                       JOIN week_plans w ON w.id=d.week_plan_id
+                       JOIN family_members m ON m.id=w.member_id
+                       WHERE w.id IN ({placeholders})
+                       ORDER BY COALESCE(d.date,'9999-12-31'),d.id""",
+                    plan_ids,
+                ))
             unlinked_plan_rows = self._rows(connection.execute(
                 """SELECT id, subject, received_at, processed_at, summary
                    FROM email_log
@@ -889,7 +902,7 @@ class FamilyRepository:
 
         children = [member for member in members if member["role"] == "child"]
         child_names = {member["name"] for member in children}
-        planned = {plan["member"] for plan in plans}
+        planned_ids = {int(plan["member_id"]) for plan in plans}
         unlinked_plans = []
         candidate_names: set[str] = set()
         for message in unlinked_plan_rows:
@@ -911,8 +924,10 @@ class FamilyRepository:
                 "status": "processed_not_registered",
             })
         week_plan_status = [
-            {"member": name, "received": name in planned, "inbox_candidate": name in candidate_names}
-            for name in sorted(child_names)
+            {"member_id": child["id"], "member": child["name"], "received": child["id"] in planned_ids,
+             "fallback": any(plan["member_id"] == child["id"] and (plan["year"], plan["week_number"]) != (target_year, target_week) for plan in plans),
+             "inbox_candidate": child["name"] in candidate_names}
+            for child in sorted(children, key=lambda item: item["id"])
         ]
 
         configured_profiles = member_profiles(self.workspace)
@@ -954,12 +969,19 @@ class FamilyRepository:
                 "weekly_achievement": weekly_achievement,
             })
 
+        week_plan_week = {
+            "week": plan_week,
+            "year": plan_year,
+            "fallback": any((plan["year"], plan["week_number"]) != (target_year, target_week) for plan in plans),
+        }
+        if any((plan["year"], plan["week_number"]) == (target_year, target_week) for plan in plans) and week_plan_week["fallback"]:
+            week_plan_week["mixed"] = True
         return {
             "generated_at": iso_now(),
             "date": today.isoformat(),
             "annual_chore_summary": annual_chore_summary,
             "target_week": {"week": target_week, "year": target_year, "starts": monday.isoformat()},
-            "week_plan_week": {"week": plan_week, "year": plan_year, "fallback": (plan_year, plan_week) != (target_year, target_week)},
+            "week_plan_week": week_plan_week,
             "members": members,
             "events": events,
             "spond_events": spond,
@@ -1594,6 +1616,7 @@ class FamilyRepository:
         now = iso_now()
         archived_chores = 0
         reset_points = False
+        reset_achievement = False
         with self.connect() as connection:
             if scope in {"chores", "both"}:
                 cursor = connection.execute(
@@ -1616,6 +1639,16 @@ class FamilyRepository:
                     (now, member_id),
                 )
             if scope in {"points", "both"}:
+                active_cycle = self._weekly_cycle(connection, member_id)
+                connection.execute(
+                    "UPDATE weekly_achievement_cycles SET ended_at=? WHERE id=? AND ended_at IS NULL",
+                    (now, active_cycle["id"]),
+                )
+                connection.execute(
+                    "INSERT INTO weekly_achievement_cycles(member_id,target_points,started_at) VALUES(?,?,?)",
+                    (member_id, active_cycle["target_points"], precise_iso_now()),
+                )
+                reset_achievement = True
                 goal = connection.execute(
                     """SELECT title,emoji,goal_type,target_value,unit_label
                        FROM reward_goals WHERE member_id=? AND active=1""",
@@ -1635,6 +1668,7 @@ class FamilyRepository:
                 "scope": scope,
                 "archived_chores": archived_chores,
                 "reset_points": reset_points,
+                "reset_achievement": reset_achievement,
             }
             connection.execute(
                 """INSERT INTO dashboard_reset_operations(member_id,scope,idempotency_key,result_json,created_at)
@@ -1705,6 +1739,9 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/session":
             self.respond(200, {"token": self.app.session_token, "api": "familybot-local-v2"})
             return
+        if not self.authorize_read():
+            self.respond(403, {"error": "Lokal lesetilgang ble avvist."})
+            return
         if parsed.path == "/api/dashboard":
             query = parse_qs(parsed.query)
             try:
@@ -1747,6 +1784,9 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         return self.trusted_origin() and secrets.compare_digest(
             self.headers.get("X-FamilyBot-Local-Token", ""), self.app.session_token
         )
+
+    def authorize_read(self) -> bool:
+        return self.authorize_mutation()
 
     def authorize_parent(self) -> bool:
         supplied = self.headers.get("X-FamilyBot-Parent-Token", "")

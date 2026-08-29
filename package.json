@@ -16,7 +16,8 @@
     "start:lan": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start --hostname 0.0.0.0 --port 3000",
     "start:service": "python3 local_service/run_service.py",
     "preflight": "bash scripts/preflight.sh",
-    "test": "python3 -m unittest discover -s local_api -p 'test_*.py' && npm run docs:check && npm run build && node --test tests/rendered-html.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "python3 -m unittest discover -s local_api -p 'test_*.py' && npm run docs:check && npm run typecheck && npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {

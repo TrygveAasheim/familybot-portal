@@ -79,7 +79,7 @@ def main() -> None:
 
     started=time.monotonic()
     status,session_raw=request(API_PORT,"GET","/api/session"); session=json.loads(session_raw); local=session.get("token","")
-    _,dashboard_raw=request(API_PORT,"GET","/api/dashboard"); dashboard=json.loads(dashboard_raw)
+    _,dashboard_raw=request(API_PORT,"GET","/api/dashboard",{"X-FamilyBot-Local-Token":local}); dashboard=json.loads(dashboard_raw)
     first_child=dashboard["children"][0]["name"].lower()
     rejected,_=request(API_PORT,"POST","/api/chores",{"X-FamilyBot-Local-Token":local},{"title":"must reject","assigned_to":first_child,"points":1})
     record("AC-05",status==200 and rejected==403 and "decide_completion" in (ROOT/"local_api/familybot_api.py").read_text(),f"child admin attempt={rejected}; approval transition implemented",started)
@@ -108,15 +108,20 @@ def main() -> None:
 
     started=time.monotonic()
     foreign=http.client.HTTPConnection(HOST,API_PORT,timeout=5);foreign.request("GET","/api/session",headers={"Origin":"https://evil.example:3000"});foreign_status=foreign.getresponse().status;foreign.close()
-    record("AC-10",foreign_status==403 and rejected==403 and not forbidden,f"foreign origin={foreign_status}; parent auth={rejected}; PIN={oct(mode)}",started)
+    unauthorized_status,_=request(API_PORT,"GET","/api/dashboard")
+    record("AC-10",foreign_status==403 and unauthorized_status==403 and rejected==403 and not forbidden,f"foreign origin={foreign_status}; unauthenticated read={unauthorized_status}; parent auth={rejected}; PIN={oct(mode)}",started)
 
     started=time.monotonic()
     backups=sorted((WORKSPACE / "backups").glob("dashboard-service-*/family.db"))
     tables_ok=False
     with sqlite3.connect(DB) as connection: tables_ok=connection.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
     supervisor=(ROOT/"local_service/run_service.py").is_file()
+    permissions_ok=(WORKSPACE / "backups").stat().st_mode & 0o777 == 0o700 and all(
+        backup.stat().st_mode & 0o777 == 0o600 and backup.parent.stat().st_mode & 0o777 == 0o700
+        for backup in backups
+    )
     backup_evidence = f"<workspace>/backups/{backups[-1].parent.name}/family.db" if backups else None
-    record("AC-11",bool(backups) and tables_ok and supervisor and launch.returncode==0,f"backup={backup_evidence}; integrity={tables_ok}; supervisor+launchd active",started)
+    record("AC-11",bool(backups) and tables_ok and permissions_ok and supervisor and launch.returncode==0,f"backup={backup_evidence}; integrity={tables_ok}; permissions={permissions_ok}; supervisor+launchd active",started)
 
     started=time.monotonic()
     recurring_api=(ROOT/"local_api/familybot_api.py").read_text()
@@ -161,7 +166,7 @@ def main() -> None:
         plan=dashboard["week_plans"][0]
         child_id=next((child["id"] for child in dashboard["children"] if child["name"]==plan["member"]), None)
         if child_id is not None:
-            detail_status,detail_raw=request(API_PORT,"GET",f"/api/children/{child_id}/week-plans/{plan['id']}")
+            detail_status,detail_raw=request(API_PORT,"GET",f"/api/children/{child_id}/week-plans/{plan['id']}",{"X-FamilyBot-Local-Token":local})
             detail_payload=json.loads(detail_raw)
             detail_text=detail_payload.get("week_plan",{}).get("full_text","")
             detail_ok=detail_status==200 and detail_payload.get("week_plan",{}).get("member")==plan["member"] and bool(detail_text) and not any(marker in detail_text for marker in ("@", "From:", "To:", "Subject:", "[Attachment:"))

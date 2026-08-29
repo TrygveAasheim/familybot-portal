@@ -373,6 +373,18 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(achievement["full_tabs"], 1)
         self.assertEqual(achievement["current_points"], 5)
 
+    def test_completed_block_restarts_active_progress_at_zero(self):
+        chore = self.repo.create_child_chore({
+            "title": "Full blokk", "assigned_to": "child one", "icon": "🏁", "points": 30,
+        })
+        self.repo.complete_chore(chore["id"], {"member_id": 3, "idempotency_key": "full-block-30"})
+        achievement = next(
+            item for item in self.repo.dashboard(dt.date(2026, 8, 24))["children"] if item["id"] == 3
+        )["weekly_achievement"]
+        self.assertEqual(achievement["full_tabs"], 1)
+        self.assertEqual(achievement["current_points"], 0)
+        self.assertEqual(achievement["current_percent"], 0)
+
     def test_parent_can_reset_child_chores_and_points_idempotently(self):
         self.repo.set_reward({"member_id": 3, "title": "Ny premie", "emoji": "🎯", "target_value": 20})
         chore = self.repo.create_child_chore({

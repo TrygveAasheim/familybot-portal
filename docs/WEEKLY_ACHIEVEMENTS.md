@@ -16,9 +16,11 @@ continuous block of points rather than a calendar week.
 - Pending-plus-awarded points are summed from the start of the active cycle.
   Every 30 points fills one block; any remainder immediately starts the next
   progress bar. Rejected completions contribute zero.
-- The current remainder and number of full blocks are shown to the child. A
-  new block starts immediately when the previous one reaches 30 points; there
-  is no Monday reset and no ISO-week grouping.
+- The child-facing bar shows only the current remainder from 0 to 30. A new
+  bar starts immediately when the previous one reaches 30 points. A tally
+  counter between the child bar and aggregate view shows completed blocks in
+  groups of five, and the aggregate bar labels the same completed-block count.
+  There is no Monday reset and no ISO-week grouping.
 - Parents can configure multiple active levels, each with a positive threshold
   in full weeks, a title and an emoji. A level is ready when the count reaches
   its threshold and it has not already been redeemed in the active cycle.

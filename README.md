@@ -75,9 +75,10 @@ API process restarts.
 Weekly chore cycles use the selected weekdays and award points only when the
 required occurrences are complete. The separate achievement progress sums
 pending and awarded points continuously: every 30 points fills one block and
-the remainder starts the next bar immediately. Rejected completions contribute
-zero. Full blocks continue to accumulate until a parent records a surprise as
-taken.
+the child bar immediately starts the next block at zero. A tally counter and
+the aggregate view retain the number of full blocks. Rejected completions
+contribute zero. Full blocks continue to accumulate until a parent records a
+surprise as taken.
 
 Parents can configure several surprise levels (for example, 4, 8 and 12 full
 weeks). Recording a surprise starts a new achievement cycle for that child;

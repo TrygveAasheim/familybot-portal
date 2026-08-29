@@ -149,8 +149,9 @@ Evidence: authorization, backup, history-retention and reset idempotency tests.
 - A child sees the current progress toward a 30-point block; both pending and
   awarded points are included immediately, while rejected completions contribute
   zero.
-- Each completed block is counted, and any remainder starts the next progress
-  bar immediately. Calendar weeks do not affect the count.
+- Each completed block is counted, the child-facing bar resets to the current
+  remainder from 0 to 30, and a tally counter plus aggregate view retain the
+  completed-block count. Calendar weeks do not affect the count.
 - Parents can configure multiple surprise levels, such as 4, 8 and 12 full blocks.
 - Reaching a surprise level does not reset the count; a parent can record the
   surprise as taken and reset the active counter while retaining redemption history.

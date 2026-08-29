@@ -37,6 +37,11 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /weekly-achievement/);
   assert.match(consoleSource, /full_tabs/);
   assert.match(consoleSource, /Samlet fremgang/);
+  assert.match(consoleSource, /BlockCounter/);
+  assert.match(consoleSource, /Aktiv 30-poengsblokk/);
+  assert.match(consoleSource, /tally-group/);
+  assert.match(consoleSource, /blockPoints/);
+  assert.match(consoleSource, /blockPercent/);
   assert.match(consoleSource, /JanuaryChoreSummary/);
   assert.match(consoleSource, /annual_chore_summary/);
   assert.match(consoleSource, /function completionKey/);

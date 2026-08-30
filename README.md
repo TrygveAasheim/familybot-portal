@@ -29,6 +29,33 @@ A coding agent or session without prior context starts at
 The sibling `familybot-core` repository owns the canonical system architecture,
 configuration, reliability invariants and Smart Home specification.
 
+## Dependencies and repository layout
+
+Familieportalen is an add-on to `familybot-core`, not a standalone replacement
+for it. Keep the checkouts as siblings:
+
+```text
+familybot-core/
+familybot-portal/
+```
+
+Runtime dependencies are:
+
+- `familybot-core` for the canonical configuration validator, normalized
+  SQLite facts, scheduled ingestion and the private workspace layout;
+- one shared owner-only
+  `$HOME/.openclaw/workspace/config/family.local.json` and
+  `$HOME/.openclaw/workspace/db/family.db`;
+- Node.js/npm for the portal build and Python 3 for the local API/service;
+- macOS `launchd` for the local service; OpenClaw is optional for conversational
+  and Telegram features, but is part of the normal workspace convention.
+
+Set up and deploy Core first, then install and deploy Portal. Keep both
+repositories on compatible `dev` commits and run both repositories' verification
+suites before promoting either one to `main`. The portal's preflight will look
+for `familybot-core/scripts/validate_config.py` beside this checkout unless an
+explicit validator override is supplied.
+
 ## Network service
 
 - Web: `http://familie.local:3000/`

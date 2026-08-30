@@ -15,6 +15,7 @@ directly to `main`. `.github/CODEOWNERS` requests that review for every file.
 GitHub branch protection is enabled on `main`: direct pushes, force pushes and
 deletions are blocked; administrators are covered; conversations must be
 resolved; and a fresh pull-request review from a code owner is required.
+The strict `Portal checks` CI workflow must also pass before merging.
 
 The dev verification and deployment workflow is:
 

@@ -24,7 +24,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Verify source
+        env:
+          FAMILYBOT_FAMILY_CONFIG: /tmp/familybot-test-config.json
         run: |
+          printf '%s\n' '{"members":[],"portal":{"allowed_origins":["http://familie.local:3000","http://localhost:3000"]}}' > "$FAMILYBOT_FAMILY_CONFIG"
           npm run docs:check
           npm run lint
           npm test

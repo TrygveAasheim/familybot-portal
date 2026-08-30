@@ -48,9 +48,9 @@ database available. All 17 current critical acceptance criteria must pass.
 Extend the acceptance contract before shipping a new user-visible capability.
 
 Normal work is committed and deployed from `dev` only. `main` is the stable
-release branch and must only receive reviewed pull requests; do not commit,
-push or deploy directly from `main`. Runtime files, PINs, audit logs and
-databases never enter Git.
+release branch and must only receive pull requests reviewed and approved by
+`@TrygveAasheim`; do not commit, push or deploy directly from `main`. Runtime
+files, PINs, audit logs and databases never enter Git.
 
 ## Deployment invariant
 

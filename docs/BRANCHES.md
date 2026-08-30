@@ -8,8 +8,13 @@ This repository uses a small production/integration split:
 - Short-lived `feature/<name>` or `fix/<name>` branches are optional for
   risky or easily isolated work and merge back into `dev`.
 
-All changes must be committed on `dev`. Promotion to `main` is a reviewed pull
-request; normal work must not push directly to `main`.
+All changes must be committed on `dev`. Promotion to `main` is a pull request
+reviewed and explicitly approved by `@TrygveAasheim`; normal work must not push
+directly to `main`. `.github/CODEOWNERS` requests that review for every file.
+
+Because GitHub branch protection is unavailable for this private repository on
+the current plan, the owner approval requirement is currently a repository
+process and review request rather than a technically mandatory merge gate.
 
 The dev verification and deployment workflow is:
 

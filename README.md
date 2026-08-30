@@ -160,6 +160,7 @@ Bonjour. Release requires every criterion in
 to pass. Open dashboards detect the new API session generation after a service
 restart and perform a full browser refresh automatically.
 
-`dev` is the only working, commit and deployment branch. `main` is reserved for
-reviewed pull-request promotion. See [docs/BRANCHES.md](docs/BRANCHES.md) and
-[docs/DATA_BOUNDARY.md](docs/DATA_BOUNDARY.md).
+`dev` is the working and deployment branch. `main` is the public release and
+fork baseline; GitHub branch protection is intentionally not enabled because
+forks are the expected customization path. See
+[docs/BRANCHES.md](docs/BRANCHES.md) and [docs/DATA_BOUNDARY.md](docs/DATA_BOUNDARY.md).

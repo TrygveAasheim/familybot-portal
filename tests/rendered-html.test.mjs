@@ -37,9 +37,11 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /weekly-achievement/);
   assert.match(consoleSource, /full_tabs/);
   assert.match(consoleSource, /Samlet fremgang/);
-  assert.match(consoleSource, /BlockCounter/);
+  assert.doesNotMatch(consoleSource, /BlockCounter/);
   assert.match(consoleSource, /Aktiv 30-poengsblokk/);
-  assert.match(consoleSource, /tally-group/);
+  assert.doesNotMatch(consoleSource, /tally-group|tally-groups|tally-empty/);
+  assert.match(consoleSource, /const achievement=child\.weekly_achievement/);
+  assert.match(consoleSource, /fullTabs=achievement\?\.full_tabs/);
   assert.match(consoleSource, /blockPoints/);
   assert.match(consoleSource, /blockPercent/);
   assert.match(consoleSource, /JanuaryChoreSummary/);

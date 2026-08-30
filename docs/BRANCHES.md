@@ -12,9 +12,9 @@ All changes must be committed on `dev`. Promotion to `main` is a pull request
 reviewed and explicitly approved by `@TrygveAasheim`; normal work must not push
 directly to `main`. `.github/CODEOWNERS` requests that review for every file.
 
-Because GitHub branch protection is unavailable for this private repository on
-the current plan, the owner approval requirement is currently a repository
-process and review request rather than a technically mandatory merge gate.
+GitHub branch protection is enabled on `main`: direct pushes, force pushes and
+deletions are blocked; administrators are covered; conversations must be
+resolved; and a fresh pull-request review from a code owner is required.
 
 The dev verification and deployment workflow is:
 

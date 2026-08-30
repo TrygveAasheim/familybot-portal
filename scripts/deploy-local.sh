@@ -9,6 +9,11 @@ PLIST_TEMP="$(mktemp -t familybot-portal-plist)"
 trap 'rm -f "$PLIST_TEMP"' EXIT
 
 cd "$ROOT"
+CURRENT_BRANCH="$(git branch --show-current)"
+if [[ "$CURRENT_BRANCH" != "dev" ]]; then
+  echo "Refusing deployment from '$CURRENT_BRANCH'. Deploy only from dev." >&2
+  exit 1
+fi
 npm run preflight
 npm run lint
 npm test

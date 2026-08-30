@@ -100,7 +100,7 @@ must leave the family overview and child pages usable.
 3. Update the acceptance contract before or with user-visible behaviour.
 4. Implement the smallest curated API and touch-first UI surface.
 5. Run docs, lint, unit/build/rendered HTML and acceptance checks.
-6. Deploy only from verified `main`; confirm Bonjour, API origin and iPad use.
+6. Deploy only from verified `dev`; confirm Bonjour, API origin and iPad use.
 
 Use the core repository's `docs/CHANGE_PROTOCOL.md` for shared promotion,
 security and rollback discipline.

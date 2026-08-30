@@ -15,6 +15,18 @@ family Kanban board.
 > the included adapters can be configured for local school, activity, weather
 > and transport services.
 
+## Network and security boundary
+
+Familieportalen is designed as a LAN-only service for a trusted household
+network. The dashboard, curated API and local data stay on the home network;
+Telegram is the intentional external integration and is handled by
+FamilyBot/OpenClaw. The security controls in this repository therefore provide
+defense in depth for a self-hosted home appliance: origin checks, authentication,
+rate limiting, owner-only local files, curated data boundaries and safe local
+deployment. This is not an internet-facing multi-tenant service, and it should
+not be exposed directly to the public internet without an explicit security
+review and additional perimeter controls.
+
 ## Start here
 
 A coding agent or session without prior context starts at

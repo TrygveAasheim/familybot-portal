@@ -47,9 +47,10 @@ Run `npm run preflight` before deployment with the real ignored config, PIN and
 database available. All 17 current critical acceptance criteria must pass.
 Extend the acceptance contract before shipping a new user-visible capability.
 
-Normal work lands on `dev`; verified commits are fast-forwarded to `main` and
-deployed from there. Runtime files, PINs, audit logs and databases never enter
-Git.
+Normal work is committed and deployed from `dev` only. `main` is the stable
+release branch and must only receive pull requests reviewed and approved by
+`@TrygveAasheim`; do not commit, push or deploy directly from `main`. Runtime
+files, PINs, audit logs and databases never enter Git.
 
 ## Deployment invariant
 

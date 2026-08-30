@@ -1,6 +1,10 @@
 # Familieportalen
 
-Familieportalen is the iPad-first touch surface for FamilyBot. It runs on an
+Familieportalen is loosely based on OpenClaw's local-first household-agent
+ideas, but a large part of this repository is now custom work for Norwegian
+households: school `ukeplan` views, Spond activities, Norwegian calendars, MET
+weather, Entur transport and a Norwegian-language family dashboard. It is the
+iPad-first touch surface for FamilyBot. It runs on an
 always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
@@ -10,6 +14,18 @@ family Kanban board.
 > **Built for local family life:** the UI and chores model are reusable, while
 > the included adapters can be configured for local school, activity, weather
 > and transport services.
+
+## Network and security boundary
+
+Familieportalen is designed as a LAN-only service for a trusted household
+network. The dashboard, curated API and local data stay on the home network;
+Telegram is the intentional external integration and is handled by
+FamilyBot/OpenClaw. The security controls in this repository therefore provide
+defense in depth for a self-hosted home appliance: origin checks, authentication,
+rate limiting, owner-only local files, curated data boundaries and safe local
+deployment. This is not an internet-facing multi-tenant service, and it should
+not be exposed directly to the public internet without an explicit security
+review and additional perimeter controls.
 
 ## Start here
 
@@ -24,6 +40,33 @@ A coding agent or session without prior context starts at
 
 The sibling `familybot-core` repository owns the canonical system architecture,
 configuration, reliability invariants and Smart Home specification.
+
+## Dependencies and repository layout
+
+Familieportalen is an add-on to `familybot-core`, not a standalone replacement
+for it. Keep the checkouts as siblings:
+
+```text
+familybot-core/
+familybot-portal/
+```
+
+Runtime dependencies are:
+
+- `familybot-core` for the canonical configuration validator, normalized
+  SQLite facts, scheduled ingestion and the private workspace layout;
+- one shared owner-only
+  `$HOME/.openclaw/workspace/config/family.local.json` and
+  `$HOME/.openclaw/workspace/db/family.db`;
+- Node.js/npm for the portal build and Python 3 for the local API/service;
+- macOS `launchd` for the local service; OpenClaw is optional for conversational
+  and Telegram features, but is part of the normal workspace convention.
+
+Set up and deploy Core first, then install and deploy Portal. Keep both
+repositories on compatible `dev` commits and run both repositories' verification
+suites before promoting either one to `main`. The portal's preflight will look
+for `familybot-core/scripts/validate_config.py` beside this checkout unless an
+explicit validator override is supplied.
 
 ## Network service
 
@@ -75,7 +118,7 @@ API process restarts.
 Weekly chore cycles use the selected weekdays and award points only when the
 required occurrences are complete. The separate achievement progress sums
 pending and awarded points continuously: every 30 points fills one block and
-the child bar immediately starts the next block at zero. A tally counter and
+the child bar immediately starts the next block at zero. A numeric count and
 the aggregate view retain the number of full blocks. Rejected completions
 contribute zero. Full blocks continue to accumulate until a parent records a
 surprise as taken.
@@ -117,6 +160,7 @@ Bonjour. Release requires every criterion in
 to pass. Open dashboards detect the new API session generation after a service
 restart and perform a full browser refresh automatically.
 
-`dev` is the working branch; tested commits are fast-forwarded to `main` for
-deployment. See [docs/BRANCHES.md](docs/BRANCHES.md) and
-[docs/DATA_BOUNDARY.md](docs/DATA_BOUNDARY.md).
+`dev` is the working and deployment branch. `main` is the public release and
+fork baseline; GitHub branch protection is intentionally not enabled because
+forks are the expected customization path. See
+[docs/BRANCHES.md](docs/BRANCHES.md) and [docs/DATA_BOUNDARY.md](docs/DATA_BOUNDARY.md).

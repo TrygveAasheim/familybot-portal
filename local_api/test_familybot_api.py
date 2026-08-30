@@ -418,9 +418,9 @@ class RepositoryTests(unittest.TestCase):
         allowed = {"http://familie.local:3000", "http://localhost:3000"}
         self.assertTrue(trusted_portal_origin("http://familie.local:3000", allowed))
         self.assertFalse(trusted_portal_origin("http://192.168.1.20:3000", allowed))
-        self.assertFalse(trusted_portal_origin("https://evil.example:3000"))
-        self.assertFalse(trusted_portal_origin("http://8.8.8.8:3000"))
-        self.assertFalse(trusted_portal_origin("http://localhost:9999"))
+        self.assertFalse(trusted_portal_origin("https://evil.example:3000", allowed))
+        self.assertFalse(trusted_portal_origin("http://8.8.8.8:3000", allowed))
+        self.assertFalse(trusted_portal_origin("http://localhost:9999", allowed))
         self.assertFalse(trusted_portal_origin(None, allowed))
 
     def test_read_routes_require_local_token(self):

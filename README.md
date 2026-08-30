@@ -1,6 +1,10 @@
 # Familieportalen
 
-Familieportalen is the iPad-first touch surface for FamilyBot. It runs on an
+Familieportalen is loosely based on OpenClaw's local-first household-agent
+ideas, but a large part of this repository is now custom work for Norwegian
+households: school `ukeplan` views, Spond activities, Norwegian calendars, MET
+weather, Entur transport and a Norwegian-language family dashboard. It is the
+iPad-first touch surface for FamilyBot. It runs on an
 always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
@@ -75,7 +79,7 @@ API process restarts.
 Weekly chore cycles use the selected weekdays and award points only when the
 required occurrences are complete. The separate achievement progress sums
 pending and awarded points continuously: every 30 points fills one block and
-the child bar immediately starts the next block at zero. A tally counter and
+the child bar immediately starts the next block at zero. A numeric count and
 the aggregate view retain the number of full blocks. Rejected completions
 contribute zero. Full blocks continue to accumulate until a parent records a
 surprise as taken.

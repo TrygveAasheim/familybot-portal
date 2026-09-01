@@ -190,16 +190,18 @@ live deployed runtime script.
 
 ### AC-17 — Full child week-plan detail
 
-- Each child page keeps its compact per-day week-plan summary and offers a
-  clear action to open the full free-text plan.
+- Each child page keeps its compact per-day week-plan summary, renders accepted
+  source-backed interpretation items grouped by weekday/category when
+  available, and offers a clear action to open the full free-text plan.
 - The detail view is scoped to that child’s plan, preserves structured day
   details, and provides a “Tilbake” action to return to the child page.
 - The full plan text is rendered as readable structured content: original line
   breaks are retained, bullet/numbered lines become lists, and clear section or
   weekday labels become headings instead of one large text blob.
 - When a validated interpretation is available, the detail view groups
-  source-backed items under weekdays and categories; if interpretation is
-  unavailable, it falls back to the deterministic structured text.
+  source-backed items under weekdays and categories, and the child overview
+  uses the same interpretation; if interpretation is unavailable, both views
+  fall back to deterministic structured text/day facts.
 - The detail route excludes source email identifiers, attachments and raw
   integration payloads. When a PDF is present, plan text comes only from the
   parsed PDF context; email headers, addresses and body text are not used as a

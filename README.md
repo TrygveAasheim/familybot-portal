@@ -36,10 +36,15 @@ A coding agent or session without prior context starts at
 2. [Local data boundary](docs/DATA_BOUNDARY.md)
 3. [iPad acceptance criteria](docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md)
 4. [Supported/planned feature map](docs/FEATURE_MAP.md)
-5. [New-session verification](docs/NEW_SESSION_VERIFICATION.md)
+5. [Change protocol](docs/CHANGE_PROTOCOL.md)
+6. [New-session verification](docs/NEW_SESSION_VERIFICATION.md)
 
 The sibling `familybot-core` repository owns the canonical system architecture,
 configuration, reliability invariants and Smart Home specification.
+Its shared change-record standard is the basis for all Core and Portal bug
+fixes, features and improvements; this repository adds the Portal-specific
+acceptance and data-boundary checks in
+[`docs/CHANGE_PROTOCOL.md`](docs/CHANGE_PROTOCOL.md).
 
 ## Dependencies and repository layout
 
@@ -145,6 +150,12 @@ npm test
 The API reads curated columns only: no raw email bodies, sender addresses,
 Telegram identifiers, raw Spond JSON, credentials or filesystem paths are
 returned to the browser.
+
+For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;
+Portal owns the curated dashboard contract and must render accepted
+interpretations consistently on the child overview and full-plan page. See
+Core's `docs/UKEPLAN_INTERPRETATION.md` when both repositories are checked out
+as siblings.
 
 ## Local deployment
 

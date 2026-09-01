@@ -20,10 +20,13 @@ a general-purpose OpenClaw administration surface.
 
 `GET /api/dashboard` returns selected fields for family members, upcoming
 events, Spond events, activities, the active parent Kanban task list, child chores, compact current week plans, school dates,
-weekly achievement progress, configured surprise levels, redemption history,
-source freshness and scheduled-job state. If the upcoming Monday's plan has not
-arrived yet, the most recent prior week's plan is retained as a one-week
-fallback so the child screens do not go blank between school emails. It does not return raw week-plan text,
+  weekly achievement progress, configured surprise levels, redemption history,
+  source freshness and scheduled-job state. Current plans include only accepted,
+  source-backed structured interpretation data; pending or failed interpretation
+  remains available through the deterministic compact day facts. If the upcoming
+  Monday's plan has not arrived yet, the most recent prior week's plan is retained
+  as a one-week fallback so the child screens do not go blank between school
+  emails. It does not return raw week-plan text,
 email sender addresses, Telegram IDs, Spond `raw_json`, message bodies, secrets
 or attachments.
 

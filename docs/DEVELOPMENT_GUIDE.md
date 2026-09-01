@@ -97,10 +97,18 @@ must leave the family overview and child pages usable.
 
 1. Start at `AGENTS.md` and classify the change.
 2. Confirm the API/data owner and whether SQLite will mutate.
-3. Update the acceptance contract before or with user-visible behaviour.
-4. Implement the smallest curated API and touch-first UI surface.
-5. Run docs, lint, unit/build/rendered HTML and acceptance checks.
-6. Deploy only from verified `dev`; confirm Bonjour, API origin and iPad use.
+3. Write the standard change record in [`CHANGE_PROTOCOL.md`](CHANGE_PROTOCOL.md)
+   with evidence, acceptance criteria, security/privacy, rollback and docs.
+4. Update the acceptance contract before or with user-visible behaviour.
+5. Implement the smallest curated API and touch-first UI surface.
+6. Run docs, lint, unit/build/rendered HTML and acceptance checks.
+7. Deploy only from verified `dev`; confirm Bonjour, API origin and iPad use.
+
+For cross-repository Ukeplan work, Core owns the source PDF, routing,
+normalized facts and interpretation status. Portal must consume the curated
+accepted interpretation in the dashboard contract and use the same grouping on
+the child overview and detail page. A detail-page-only implementation is
+incomplete; add a regression assertion for both surfaces.
 
 Use the core repository's `docs/CHANGE_PROTOCOL.md` for shared promotion,
 security and rollback discipline.

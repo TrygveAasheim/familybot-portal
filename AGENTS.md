@@ -11,7 +11,8 @@ Read these files in order:
 2. `docs/DEVELOPMENT_GUIDE.md`
 3. `docs/DATA_BOUNDARY.md`
 4. `docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md`
-5. `docs/FEATURE_MAP.md`
+5. `docs/CHANGE_PROTOCOL.md`
+6. `docs/FEATURE_MAP.md`
 
 When the sibling core repository is available, also read
 `../familybot-core/AGENTS.md`, `../familybot-core/docs/REPOSITORY_GUIDE.md` and

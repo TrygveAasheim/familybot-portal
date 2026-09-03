@@ -755,11 +755,8 @@ class FamilyRepository:
                 return self._rows(connection.execute(
                     """SELECT w.id, w.member_id, w.week_number, w.year,
                               substr(COALESCE(w.summary,''),1,360) AS summary,
-                              w.teacher, w.created_at, m.name AS member,
-                              i.structured_json AS interpretation_json
+                              w.teacher, w.created_at, m.name AS member
                        FROM week_plans w JOIN family_members m ON m.id=w.member_id
-                       LEFT JOIN week_plan_interpretations i
-                         ON i.week_plan_id=w.id AND i.status='accepted'
                        WHERE w.year=? AND w.week_number=? ORDER BY m.id, w.created_at DESC""",
                     (year, week),
                 ))
@@ -775,15 +772,6 @@ class FamilyRepository:
             if plans and all((plan["year"], plan["week_number"]) == (fallback_year, fallback_week) for plan in plans):
                 plan_year, plan_week = fallback_year, fallback_week
             for plan in plans:
-                interpretation_json = plan.pop("interpretation_json", None)
-                plan["interpretation"] = None
-                if interpretation_json:
-                    try:
-                        interpretation = json.loads(interpretation_json)
-                    except (TypeError, ValueError):
-                        interpretation = None
-                    if isinstance(interpretation, dict) and interpretation.get("version") in {1, 2}:
-                        plan["interpretation"] = interpretation
                 plan["summary"] = curated_week_plan_summary(plan.get("summary"))
                 plan["fallback"] = (plan["year"], plan["week_number"]) != (target_year, target_week)
             plan_ids = [int(plan["id"]) for plan in plans]

@@ -533,7 +533,7 @@ class RepositoryTests(unittest.TestCase):
         dashboard = self.repo.dashboard(dt.date(2026, 8, 15))
         self.assertEqual(dashboard["week_plan_days"][0]["member"], "Child One")
         self.assertEqual(dashboard["week_plan_days"][0]["homework"], "Leksefri")
-        self.assertEqual(dashboard["week_plans"][0]["interpretation"]["days"][0]["items"][0]["text"], "Leksefri")
+        self.assertNotIn("interpretation", dashboard["week_plans"][0])
         plan = self.repo.week_plan_detail(3, cursor.lastrowid)
         self.assertEqual(plan["full_text"], "Hele ukeplanen med lekser, beskjeder og detaljer fra .")
         self.assertEqual(plan["interpretation"]["days"][0]["items"][0]["text"], "Leksefri")

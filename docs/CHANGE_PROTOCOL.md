@@ -42,9 +42,10 @@ The Ukeplan fix is the model for a cross-repository change. Core detects plans
 from message content even when the email subject is blank, persists PDF-backed
 facts before terminal processing, derives weekday dates from a valid ISO week,
 and records a retryable validated interpretation. Portal exposes only the
-accepted interpretation in the curated dashboard response and renders it on
-both the child overview and full-plan page. The regression must verify both
-surfaces, both children/member mappings and the deterministic fallback when
+accepted interpretation only through the scoped detail response. The child
+overview remains a compact link and the full-plan page renders the interpreted
+content. The regression must verify the compact overview link, the full detail
+surface, both children/member mappings and the deterministic fallback when
 interpretation is pending or failed.
 
 The full incident contract and Core-side safeguards are documented in the

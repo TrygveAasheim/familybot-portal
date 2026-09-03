@@ -106,9 +106,10 @@ must leave the family overview and child pages usable.
 
 For cross-repository Ukeplan work, Core owns the source PDF, routing,
 normalized facts and interpretation status. Portal must consume the curated
-accepted interpretation in the dashboard contract and use the same grouping on
-the child overview and detail page. A detail-page-only implementation is
-incomplete; add a regression assertion for both surfaces.
+accepted interpretation in the scoped detail contract. The child overview should
+remain a compact link to that page; do not duplicate the full interpretation in
+the overview. Add regression assertions for the compact overview and the full
+detail surface.
 
 Use the core repository's `docs/CHANGE_PROTOCOL.md` for shared promotion,
 security and rollback discipline.

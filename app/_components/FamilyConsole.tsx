@@ -26,6 +26,7 @@ type Page="family"|"child"|"week-plan"|"parent"|"kanban";
 const icons=["📖","🧹","🍽️","🧺","🪥","🎒","🗑️","🌱","✨","🎵"];
 const dateFormat=new Intl.DateTimeFormat("nb-NO",{weekday:"short",day:"numeric",month:"short"});
 const timeFormat=new Intl.DateTimeFormat("nb-NO",{hour:"2-digit",minute:"2-digit"});
+const dashboardClockFormat=new Intl.DateTimeFormat("nb-NO",{hour:"2-digit",minute:"2-digit",hourCycle:"h23",timeZone:"Europe/Oslo"});
 function asDate(value?:string|null){if(!value)return null;const result=new Date(value.length===10?`${value}T12:00:00`:value.replace(" ","T"));return Number.isNaN(result.getTime())?null:result}
 function when(value?:string|null){const parsed=asDate(value);return parsed?`${dateFormat.format(parsed)} · ${timeFormat.format(parsed)}`:"Ikke oppdatert"}
 function eventTime(item:EventItem){if(item.event_time)return item.event_time.slice(0,5);const parsed=asDate(item.event_date);return parsed&&item.event_date.includes("T")?timeFormat.format(parsed):"Hele dagen"}
@@ -123,18 +124,21 @@ function JanuaryChoreSummary({summary,onClose}:{summary:AnnualChoreSummary;onClo
 }
 
 function FamilyHome({data,openChild}:{data:Dashboard;openChild:(id:number)=>void}){
-  const [clock,setClock]=useState(()=>new Date());
+  const [clock,setClock]=useState(()=>{const now=Date.now();return{clientNow:now,syncClientNow:now}});
   const [summaryDismissed,setSummaryDismissed]=useState(false);
+  const generatedTime=useMemo(()=>asDate(data.generated_at)?.getTime()??null,[data.generated_at]);
+  const syncedClock=useMemo(()=>new Date(generatedTime?generatedTime+(clock.clientNow-clock.syncClientNow):clock.clientNow),[clock,generatedTime]);
+  const dashboardClock=dashboardClockFormat.format(syncedClock);
   const summaryYear=data.annual_chore_summary?.year;
   const showJanuarySummary=summaryYear!==undefined&&!summaryDismissed&&typeof window!=="undefined"&&window.sessionStorage.getItem(`familybot-january-summary-${summaryYear}`)!=="seen";
   function closeJanuarySummary(){
     if(summaryYear!==undefined)window.sessionStorage.setItem(`familybot-january-summary-${summaryYear}`,"seen");
     setSummaryDismissed(true);
   }
-  useEffect(()=>{const timer=window.setInterval(()=>setClock(new Date()),60_000);return()=>window.clearInterval(timer)},[]);
-  const upcoming=upcomingEventsFor(data);const nextSchool=data.school_calendar.find(item=>item.end_date>=data.date);const health=data.sources.health;const botState:HealthState=health.status||(health.ok?"ok":"stopped");const issueNames=health.issues?.map(item=>item.label)||[];const botLabel=botState==="stopped"?"Familiebot har stoppet":botState==="degraded"?"Familiebot fungerer med avvik":"Familiebot fungerer";const botDetail=issueNames.length?`${botState==="stopped"?"Feil":"Avvik"}: ${issueNames.join(", ")}`:`Sist kontrollert ${when(health.checked_at||data.generated_at)}`;
+  useEffect(()=>{const sync=()=>{const now=Date.now();setClock({clientNow:now,syncClientNow:now})};const initial=window.setTimeout(sync,0);const timer=window.setInterval(()=>setClock(current=>({...current,clientNow:Date.now()})),1_000);return()=>{window.clearTimeout(initial);window.clearInterval(timer)}},[data.generated_at]);
+  const upcoming=upcomingEventsFor(data);const nextSchool=data.school_calendar.find(item=>item.end_date>=data.date);
   return <>{showJanuarySummary&&data.annual_chore_summary&&<JanuaryChoreSummary summary={data.annual_chore_summary} onClose={closeJanuarySummary}/>}
-    <section className="family-hero"><div><p className="eyebrow">Familiens oversikt</p><h1>{greetingForHour(osloHour(clock))}.</h1><p>{new Intl.DateTimeFormat("nb-NO",{weekday:"long",day:"numeric",month:"long"}).format(asDate(data.date)!)}</p></div><div className="hero-status"><span className={botState==="stopped"?"stop-dot":botState==="degraded"?"warn-dot":"live-dot"}/><div><strong>{botLabel}</strong><small>{botDetail}</small></div></div></section>
+    <section className="family-hero"><div><p className="eyebrow">Familiens oversikt</p><h1>{greetingForHour(osloHour(syncedClock))}.</h1><p>{new Intl.DateTimeFormat("nb-NO",{weekday:"long",day:"numeric",month:"long"}).format(asDate(data.date)!)}</p></div><div className="hero-clock" aria-label={`Klokken er ${dashboardClock}`}><span>Systemtid</span><strong>{dashboardClock}</strong><small>Synket fra FamilyBot</small></div></section>
     <section className="overview-grid" aria-label="Dagens viktigste informasjon">
       <article className="overview-card important"><header><span>📅</span><div><p className="eyebrow">Neste 5 dager</p><h2>Viktigst nå</h2></div></header><div className="timeline">{upcoming.map(item=><div key={`${item.id}-${item.title}`}><time>{eventLabel(item,data.date)}</time><div><strong>{item.title}</strong><small>{item.member||"Familien"}{item.location?` · ${item.location}`:""}</small></div></div>)}{upcoming.length===0&&<p className="empty-text">Ingen særskilte avtaler de neste fem dagene.</p>}</div>{nextSchool&&<div className="info-strip"><strong>{nextSchool.name}</strong><span>{dateFormat.format(asDate(nextSchool.start_date)!)}</span></div>}</article>
       <article className="overview-card weather-card"><header><span>🌦️</span><div><p className="eyebrow">Ute</p><h2>Vær</h2></div></header><div className="big-status">{data.weather.status}</div><WeatherForecast periods={data.weather.periods} periodDate={data.weather.period_date} today={data.date}/><div className="weather-advice"><strong>{data.weather.period_date&&data.weather.period_date!==data.date?"Råd for neste dag":"Råd for i dag"}</strong><p>{data.weather.advice||"Sjekk værvarselet før dere går."}</p></div><small>Værkilde {when(data.weather.updated_at)}</small></article>

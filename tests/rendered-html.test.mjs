@@ -69,9 +69,10 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /api\/kanban/);
   assert.match(consoleSource, /Kanban er skrivebeskyttet/);
   assert.match(consoleSource, /function TransportCountdown/);
-  assert.match(consoleSource, /Familiebot fungerer/);
-  assert.match(consoleSource, /Familiebot har stoppet/);
-  assert.match(consoleSource, /Familiebot fungerer med avvik/);
+  assert.match(consoleSource, /dashboardClockFormat/);
+  assert.match(consoleSource, /Systemtid/);
+  assert.match(consoleSource, /Synket fra FamilyBot/);
+  assert.match(consoleSource, /hero-clock/);
   assert.doesNotMatch(consoleSource, /<p className="eyebrow">Hjemme<\/p><h2>FamilyBot<\/h2>/);
   assert.match(consoleSource, /God morgen/);
   assert.match(consoleSource, /God dag/);

@@ -70,7 +70,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Kanban er skrivebeskyttet/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /dashboardClockFormat/);
-  assert.match(consoleSource, /Systemtid/);
+  assert.match(consoleSource, /second:"2-digit"/);
+  assert.match(consoleSource, /Klokken er nå:/);
   assert.match(consoleSource, /Synket fra FamilyBot/);
   assert.match(consoleSource, /hero-clock/);
   assert.doesNotMatch(consoleSource, /<p className="eyebrow">Hjemme<\/p><h2>FamilyBot<\/h2>/);

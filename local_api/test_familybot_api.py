@@ -90,6 +90,26 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(child_one["inbox_candidate"])
         self.assertFalse(child_one["received"])
 
+    def test_week_plan_target_stays_current_until_weekend(self):
+        for day in range(19, 26):
+            with self.subTest(day=day):
+                dashboard = self.repo.dashboard(dt.date(2026, 10, day))
+                self.assertEqual(dashboard["target_week"]["week"], 43 if day < 24 else 44)
+        for day, expected in ((dt.date(2027, 1, 1), (2026, 53)),
+                              (dt.date(2027, 1, 2), (2027, 1))):
+            with self.subTest(day=day):
+                target = self.repo.dashboard(day)["target_week"]
+                self.assertEqual((target["year"], target["week"]), expected)
+
+    def test_current_plan_is_not_replaced_or_marked_previous_midweek(self):
+        with sqlite3.connect(self.db) as connection:
+            for member in (3, 4):
+                for week in (43, 44):
+                    connection.execute("INSERT INTO week_plans(member_id,week_number,year,summary) VALUES(?,?,2026,'Plan')", (member, week))
+        plans = self.repo.dashboard(dt.date(2026, 10, 20))["week_plans"]
+        self.assertEqual({p["member_id"] for p in plans}, {3, 4})
+        self.assertTrue(all(p["week_number"] == 43 and not p["fallback"] for p in plans))
+
     def test_dashboard_separates_parent_kanban_from_child_chores(self):
         child_chore = self.repo.create_child_chore({
             "title": "Les lekse", "assigned_to": "child one", "icon": "📖", "points": 2,
@@ -544,7 +564,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotIn("full_text", json.dumps(dashboard))
         self.assertNotIn("raw_text", json.dumps(dashboard))
 
-    def test_upcoming_week_uses_current_plan_until_next_plan_arrives(self):
+    def test_weekend_uses_current_plan_until_next_plan_arrives(self):
         with sqlite3.connect(self.db) as connection:
             cursor = connection.execute(
                 """INSERT INTO week_plans(member_id,week_number,year,summary,raw_text,teacher)
@@ -555,7 +575,7 @@ class RepositoryTests(unittest.TestCase):
                    VALUES(?,?,?,?,?,?)""",
                 (cursor.lastrowid, "fredag", "2026-08-28", "Oppsummering", "Les", "Bok"),
             )
-        dashboard = self.repo.dashboard(dt.date(2026, 8, 28))
+        dashboard = self.repo.dashboard(dt.date(2026, 8, 29))
         self.assertEqual(dashboard["target_week"], {"week": 36, "year": 2026, "starts": "2026-08-31"})
         self.assertEqual(dashboard["week_plan_week"], {"week": 35, "year": 2026, "fallback": True})
         self.assertEqual(dashboard["week_plans"][0]["week_number"], 35)
@@ -577,7 +597,7 @@ class RepositoryTests(unittest.TestCase):
                 [(target.lastrowid, "mandag", "2026-08-31", "Matte", "Les", "Bok"),
                  (fallback.lastrowid, "fredag", "2026-08-28", "Tur", "Pakke", "Mat")],
             )
-        dashboard = self.repo.dashboard(dt.date(2026, 8, 28))
+        dashboard = self.repo.dashboard(dt.date(2026, 8, 29))
         plans = {plan["member_id"]: plan for plan in dashboard["week_plans"]}
         self.assertEqual(plans[3]["week_number"], 36)
         self.assertEqual(plans[4]["week_number"], 35)

@@ -190,6 +190,13 @@ live deployed runtime script.
 
 ### AC-17 — Full child week-plan detail
 
+- Monday through Friday select the current ISO week's plan for each child;
+  Saturday and Sunday select the coming week's plan. A future plan arriving
+  early cannot displace the current school-week plan. The previous-week label
+  appears only for an actual fallback, including across ISO year boundaries.
+- Core-resolved child/week metadata (including explicit parent subject
+  overrides of stale PDF headings) is authoritative for the compact entry and
+  detail view; Portal does not infer a different week from PDF text.
 - Each child page keeps a compact Ukeplan entry with the week number and one
   clear action to open the dedicated plan page; it does not render the full
   summary inline.

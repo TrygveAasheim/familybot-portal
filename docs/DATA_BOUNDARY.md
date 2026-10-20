@@ -23,7 +23,8 @@ events, Spond events, activities, the active parent Kanban task list, child chor
   weekly achievement progress, configured surprise levels, redemption history,
   source freshness and scheduled-job state. Current plans contain only compact
   identity, week and fallback fields; full plan interpretation is fetched only
-  by the scoped detail route. If the upcoming Monday's plan has not arrived yet,
+  by the scoped detail route. Monday through Friday use the current ISO week;
+  Saturday and Sunday use the coming Monday's ISO week. If that plan has not arrived yet,
   the most recent prior week's plan is retained as a one-week fallback so the
   child screens do not go blank between school emails. It does not return raw
   week-plan text,

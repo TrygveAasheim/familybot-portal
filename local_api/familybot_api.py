@@ -711,8 +711,8 @@ class FamilyRepository:
         today = today or dt.date.today()
         annual_summary_year = today.year - 1 if today.month == 1 else None
         annual_chore_counts: dict[int, int] = {}
-        monday = today + dt.timedelta(days=(7 - today.weekday()) % 7)
-        if monday == today and today.weekday() != 0:
+        monday = today - dt.timedelta(days=today.weekday())
+        if today.weekday() >= 5:
             monday += dt.timedelta(days=7)
         target_year, target_week, _ = monday.isocalendar()
         end = today + dt.timedelta(days=14)

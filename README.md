@@ -152,8 +152,10 @@ Telegram identifiers, raw Spond JSON, credentials or filesystem paths are
 returned to the browser.
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;
-Portal owns the curated dashboard contract and must render accepted
-interpretations consistently on the child overview and full-plan page. See
+Core respects explicit parent subject metadata over stale PDF headings. Portal
+shows a compact child-page link and the accepted interpretation on the full-plan
+page. It selects the current week Monday–Friday and the coming week on weekends,
+using the previous week only when the target plan is missing. See
 Core's `docs/UKEPLAN_INTERPRETATION.md` when both repositories are checked out
 as siblings.
 

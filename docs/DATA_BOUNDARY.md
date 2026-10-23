@@ -52,8 +52,11 @@ facts and scoped current week-plan details; it never receives raw email,
 addresses, Telegram identifiers, raw Spond JSON, credentials, attachments,
 arbitrary paths, unlinked-message summaries or configuration.
 
-The dedicated model agent has no shell, filesystem, browser/web, messaging,
-memory, automation, media, plugin or elevated tools. Questions, answers and
+The dedicated model agent has only model inference, session-status introspection
+and hosted public web search. It has no shell, filesystem, arbitrary URL fetch,
+browser, messaging, memory, automation, media, plugin or elevated tools. The
+harness forbids private household facts in search queries and distinguishes
+external search results from supplied family facts. Questions, answers and
 conversation history are not persisted by the Portal. OpenClaw may retain its
 own private per-request runtime record under the owner-only workspace; a fresh
 session ID prevents hidden conversation state from crossing requests.

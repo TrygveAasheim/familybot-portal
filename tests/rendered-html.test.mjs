@@ -71,6 +71,7 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Kanban er skrivebeskyttet/);
   assert.match(consoleSource, /Spør FamilyBot/);
   assert.match(consoleSource, /kuratert utdrag av familiedata sendes til OpenAI/);
+  assert.match(consoleSource, /søke på nettet etter fersk offentlig informasjon/);
   assert.match(consoleSource, /sessionStorage/);
   assert.match(consoleSource, /api\/chat/);
   assert.match(consoleSource, /function TransportCountdown/);
@@ -114,6 +115,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(chatSource, /THINKING = os\.environ\.get\("FAMILYBOT_CHAT_THINKING", "medium"\)/);
   assert.match(chatSource, /--session-id/);
   assert.match(chatSource, /FAMILYBOT_DATA/);
+  assert.match(chatSource, /Bruk nettsøk/);
+  assert.match(chatSource, /aldri brukes til å lete etter familien/);
   assert.doesNotMatch(chatSource, /--deliver/);
   assert.match(apiSource, /NOT EXISTS \(SELECT 1 FROM family_chore_meta/);
   assert.match(apiSource, /weekly_achievement_cycles/);

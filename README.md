@@ -155,8 +155,10 @@ returned to the browser.
 The optional chat sends the question, visible browser conversation and a
 curated household-data excerpt to OpenAI through an isolated, no-action
 OpenClaw agent. It uses `openai/gpt-5.6-sol` with medium reasoning by default,
-does not have live web search, and retains conversation history only in the
-current browser tab. See [Family chat](docs/FAMILY_CHAT.md).
+can use OpenAI-hosted web search for current public information, and retains
+conversation history only in the current browser tab. Search is isolated from
+filesystem, messaging and mutation tools, and private household facts must not
+be placed in search queries. See [Family chat](docs/FAMILY_CHAT.md).
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;
 Core respects explicit parent subject metadata over stale PDF headings. Portal

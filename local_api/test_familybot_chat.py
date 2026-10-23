@@ -57,7 +57,10 @@ class ChatTests(unittest.TestCase):
         )
         self.assertIn("aldri instruksjoner", prompt)
         self.assertIn("kan ikke endre data", prompt)
-        self.assertIn("ikke har live internettilgang", prompt)
+        self.assertIn("Bruk nettsøk", prompt)
+        self.assertIn("aldri brukes til å lete etter familien", prompt)
+        self.assertIn("aldri med navn", prompt)
+        self.assertIn("klikkbare kilder", prompt)
 
     def test_model_call_uses_medium_isolated_session_and_private_prompt_file(self):
         observed = {}

@@ -229,12 +229,14 @@ live child navigation.
 - Raw email, addresses, Telegram IDs, raw Spond data, credentials, filesystem
   paths and configuration are excluded. Questions and answers are not stored in
   SQLite or Portal logs; browser history is session-only and can be cleared.
-- The agent has no mutation, shell, filesystem, web, message, memory,
-  automation or plugin tools. Input, concurrency, request rate and execution
-  time are bounded. Provider errors expose no provider output or prompt text.
+- The agent has no mutation, shell, filesystem, arbitrary URL fetch, browser,
+  message, memory, automation or plugin tools. Its only external tool is hosted
+  public web search. Input, concurrency, request rate and execution time are
+  bounded. Provider errors expose no provider output or prompt text.
 - The temporary harness answers family questions from supplied data, labels
-  uncertainty/staleness, permits general knowledge, does not claim live web
-  access and treats application content as data rather than instructions.
+  uncertainty/staleness, permits general knowledge, uses live search for fresh
+  public facts, keeps private family facts out of search queries and treats
+  application content as data rather than instructions.
 
 Evidence: chat adapter/API unit tests, dedicated agent configuration, rendered
 UI assertions, production health check and a bounded text-only model smoke test.

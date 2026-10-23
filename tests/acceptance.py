@@ -183,11 +183,12 @@ def main() -> None:
         agents=[]
     chat_agent=next((item for item in agents if item.get("id")=="familybot-chat"),{})
     denied=set(chat_agent.get("tools",{}).get("deny",[]))
-    policy_ok=chat_agent.get("tools",{}).get("profile")=="minimal" and chat_agent.get("skills")==[] and chat_agent.get("tools",{}).get("elevated",{}).get("enabled") is False and {"group:runtime","group:fs","group:web","group:messaging","group:plugins"}<=denied
-    chat_ui=all(text in source for text in ("Spør FamilyBot","kuratert utdrag av familiedata sendes til OpenAI","sessionStorage","/api/chat"))
+    added=set(chat_agent.get("tools",{}).get("alsoAllow",[]))
+    policy_ok=chat_agent.get("tools",{}).get("profile")=="minimal" and added=={"web_search"} and chat_agent.get("skills")==[] and chat_agent.get("tools",{}).get("elevated",{}).get("enabled") is False and {"group:runtime","group:fs","web_fetch","x_search","group:messaging","group:plugins"}<=denied
+    chat_ui=all(text in source for text in ("Spør FamilyBot","kuratert utdrag av familiedata sendes til OpenAI","søke på nettet etter fersk offentlig informasjon","sessionStorage","/api/chat"))
     chat_api=all(text in api_source for text in ('path == "/api/chat"',"chat_slot","chat_allowed"))
     harness=all(text in chat_source for text in ("openai/gpt-5.6-sol",'"medium"',"--session-id","FAMILYBOT_DATA")) and "--deliver" not in chat_source
-    deployment="configure-chat-agent.sh" in (ROOT/"scripts/deploy-local.sh").read_text() and "tools.profile" in agent_script
+    deployment="configure-chat-agent.sh" in (ROOT/"scripts/deploy-local.sh").read_text() and all(text in agent_script for text in ("tools.profile","web_search","tools.web.search.enabled","openaiCodex.enabled"))
     record("AC-18",unauthenticated_chat==403 and chat_ui and chat_api and harness and deployment and policy_ok,f"chat unauthenticated={unauthenticated_chat}; UI/API/harness/deployment present; isolated policy={policy_ok}",started)
 
     passed=sum(item["status"]=="pass" for item in results)

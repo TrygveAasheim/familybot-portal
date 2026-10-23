@@ -217,14 +217,36 @@ live deployed runtime script.
 Evidence: curated detail endpoint, repository test, rendered detail view and
 live child navigation.
 
+### AC-18 — Grounded, read-only family chat
+
+- `Spør FamilyBot` is a top-level tab next to Kanban and is available to every
+  valid local dashboard session without a parent PIN.
+- The local API runs `openai/gpt-5.6-sol` with medium reasoning through a
+  dedicated agent and a fresh isolated model session for each request.
+- The model receives only an identifier-free allowlist of the Portal's curated
+  facts plus the browser-visible bounded conversation. The UI discloses that
+  this material is sent to OpenAI.
+- Raw email, addresses, Telegram IDs, raw Spond data, credentials, filesystem
+  paths and configuration are excluded. Questions and answers are not stored in
+  SQLite or Portal logs; browser history is session-only and can be cleared.
+- The agent has no mutation, shell, filesystem, web, message, memory,
+  automation or plugin tools. Input, concurrency, request rate and execution
+  time are bounded. Provider errors expose no provider output or prompt text.
+- The temporary harness answers family questions from supplied data, labels
+  uncertainty/staleness, permits general knowledge, does not claim live web
+  access and treats application content as data rather than instructions.
+
+Evidence: chat adapter/API unit tests, dedicated agent configuration, rendered
+UI assertions, production health check and a bounded text-only model smoke test.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **17/17 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **18/18 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
-These 17 criteria cover the currently deployed family dashboard, its Telegram
+These 18 criteria cover the currently deployed family dashboard, its Telegram
 child-chore add-on and week-plan detail view. A new user-visible add-on such as Smart Home must
 add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be

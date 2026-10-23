@@ -20,10 +20,11 @@ test("server-renders the iPad family dashboard shell", async () => {
 });
 
 test("source keeps the data boundary and functional surfaces explicit", async () => {
-  const [page, consoleSource, apiSource, styles] = await Promise.all([
+  const [page, consoleSource, apiSource, chatSource, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/FamilyConsole.tsx", import.meta.url), "utf8"),
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/familybot_chat.py", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(page, /codex-preview/);
@@ -68,6 +69,10 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Done/);
   assert.match(consoleSource, /api\/kanban/);
   assert.match(consoleSource, /Kanban er skrivebeskyttet/);
+  assert.match(consoleSource, /Spør FamilyBot/);
+  assert.match(consoleSource, /kuratert utdrag av familiedata sendes til OpenAI/);
+  assert.match(consoleSource, /sessionStorage/);
+  assert.match(consoleSource, /api\/chat/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /dashboardClockFormat/);
   assert.match(consoleSource, /second:"2-digit"/);
@@ -103,6 +108,13 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /reset_child/);
   assert.match(apiSource, /LANES = \{"todo", "inprogress", "onhold", "done"\}/);
   assert.match(apiSource, /api\/kanban/);
+  assert.match(apiSource, /api\/chat/);
+  assert.match(apiSource, /chat_slot/);
+  assert.match(chatSource, /openai\/gpt-5\.6-sol/);
+  assert.match(chatSource, /THINKING = os\.environ\.get\("FAMILYBOT_CHAT_THINKING", "medium"\)/);
+  assert.match(chatSource, /--session-id/);
+  assert.match(chatSource, /FAMILYBOT_DATA/);
+  assert.doesNotMatch(chatSource, /--deliver/);
   assert.match(apiSource, /NOT EXISTS \(SELECT 1 FROM family_chore_meta/);
   assert.match(apiSource, /weekly_achievement_cycles/);
   assert.match(apiSource, /weekly_surprise_levels/);

@@ -42,6 +42,22 @@ The bridge may inspect unlinked week-plan email summaries locally to identify a
 likely grade. Only the message ID, subject, timestamps, status and inferred child
 are returned to the browser.
 
+## Inference request boundary
+
+`POST /api/chat` is an inference request, not a data mutation. It requires the
+allowed Portal Origin and rotating local session token but is available to all
+dashboard users without the parent PIN. It cannot call repository mutation
+methods. The model receives an identifier-free allowlist of current dashboard
+facts and scoped current week-plan details; it never receives raw email,
+addresses, Telegram identifiers, raw Spond JSON, credentials, attachments,
+arbitrary paths, unlinked-message summaries or configuration.
+
+The dedicated model agent has no shell, filesystem, browser/web, messaging,
+memory, automation, media, plugin or elevated tools. Questions, answers and
+conversation history are not persisted by the Portal. OpenClaw may retain its
+own private per-request runtime record under the owner-only workspace; a fresh
+session ID prevents hidden conversation state from crossing requests.
+
 ## Write allowlist
 
 Writes are limited to the dashboard's chores and rewards model:

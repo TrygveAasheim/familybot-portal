@@ -17,6 +17,7 @@ fi
 npm run preflight
 npm run lint
 npm test
+./scripts/configure-chat-agent.sh
 python3 local_api/dashboard_migration.py --repair-default-rewards
 
 # Stop the managed service before replacing its runtime tree. Updating files
@@ -27,7 +28,7 @@ launchctl bootout "gui/$UID_VALUE/ai.familybot.portal" 2>/dev/null || true
 mkdir -p "$TARGET/local_api" "$TARGET/local_service" "$TARGET/scripts" "$TARGET/runtime"
 rsync -a --delete dist/standalone/ "$TARGET/dist/standalone/"
 rsync -a node_modules/react node_modules/react-dom node_modules/scheduler "$TARGET/dist/standalone/node_modules/"
-rsync -a local_api/familybot_api.py local_api/dashboard_migration.py local_api/family_config.py "$TARGET/local_api/"
+rsync -a local_api/familybot_api.py local_api/familybot_chat.py local_api/dashboard_migration.py local_api/family_config.py "$TARGET/local_api/"
 rsync -a local_service/run_service.py "$TARGET/local_service/"
 rsync -a scripts/child_chore.py "$TARGET/scripts/"
 if [[ -f "$ROOT/runtime/parent-pin.txt" ]]; then

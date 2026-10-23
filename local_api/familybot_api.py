@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 from family_config import integration, member_profiles, portal_settings
+from familybot_chat import ChatUnavailable, ChatValidationError, answer as chat_answer
 
 
 DEFAULT_WORKSPACE = Path(
@@ -1800,6 +1801,18 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             return
         path = urlparse(self.path).path
         try:
+            if method == "POST" and path == "/api/chat":
+                if not self.app.chat_allowed(self.client_address[0]):
+                    self.respond(429, {"error": "Chatten er opptatt. Vent litt og prøv igjen."})
+                    return
+                if not self.app.chat_slot.acquire(blocking=False):
+                    self.respond(429, {"error": "FamilyBot tenker allerede på et annet spørsmål."})
+                    return
+                try:
+                    self.respond(200, chat_answer(self.app.repository, self.read_payload()))
+                finally:
+                    self.app.chat_slot.release()
+                return
             if method == "POST" and path == "/api/parent/session":
                 if not self.app.parent_login_allowed(self.client_address[0]):
                     self.respond(429, {"error": "For mange forsøk. Vent fem minutter."})
@@ -1902,11 +1915,16 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 self.respond(405, {"error": "Metoden støttes ikke."})
         except ValidationError as exc:
             self.respond(400, {"error": str(exc)})
+        except ChatValidationError as exc:
+            self.respond(400, {"error": str(exc)})
+        except ChatUnavailable as exc:
+            self.log_error("chat inference unavailable: %s", type(exc).__name__)
+            self.respond(503, {"error": str(exc)})
         except KeyError:
             self.respond(404, {"error": "Gjøremålet finnes ikke eller har allerede denne statusen."})
         except sqlite3.Error as exc:
-            self.log_error("mutation database error: %s", type(exc).__name__)
-            self.respond(503, {"error": "Endringen kunne ikke lagres akkurat nå."})
+            self.log_error("database error on %s: %s", path, type(exc).__name__)
+            self.respond(503, {"error": "Familiedata er midlertidig utilgjengelig." if path == "/api/chat" else "Endringen kunne ikke lagres akkurat nå."})
 
     def do_POST(self) -> None:  # noqa: N802
         self.mutate("POST")
@@ -1929,9 +1947,23 @@ class FamilyApiServer(ThreadingHTTPServer):
         self.allowed_origins = allowed_origins or configured_origins(repository.workspace)
         self._parent_failures: dict[str, list[float]] = {}
         self._parent_failure_lock = threading.Lock()
+        self.chat_slot = threading.BoundedSemaphore(1)
+        self._chat_requests: dict[str, list[float]] = {}
+        self._chat_request_lock = threading.Lock()
         with repository.connect() as connection:
             parent = connection.execute("SELECT id FROM family_members WHERE role='parent' ORDER BY id LIMIT 1").fetchone()
         self.parent_member_id = int(parent[0]) if parent else 1
+
+    def chat_allowed(self, client: str) -> bool:
+        cutoff = time.monotonic() - 300
+        with self._chat_request_lock:
+            recent = [value for value in self._chat_requests.get(client, []) if value >= cutoff]
+            if len(recent) >= 8:
+                self._chat_requests[client] = recent
+                return False
+            recent.append(time.monotonic())
+            self._chat_requests[client] = recent
+            return True
 
     def parent_login_allowed(self, client: str) -> bool:
         cutoff = time.monotonic() - 300

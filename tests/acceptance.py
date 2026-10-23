@@ -172,6 +172,24 @@ def main() -> None:
             detail_ok=detail_status==200 and detail_payload.get("week_plan",{}).get("member")==plan["member"] and bool(detail_text) and not any(marker in detail_text for marker in ("@", "From:", "To:", "Subject:", "[Attachment:"))
     record("AC-17",detail_source and detail_api and detail_ok,"Child page keeps a compact Ukeplan link and full interpreted text opens through the scoped detail route",started)
 
+    started=time.monotonic()
+    unauthenticated_chat,_=request(API_PORT,"POST","/api/chat",body={"question":"test"})
+    chat_source=(ROOT/"local_api/familybot_chat.py").read_text()
+    agent_script=(ROOT/"scripts/configure-chat-agent.sh").read_text()
+    agent_result=subprocess.run(["openclaw","config","get","agents.list","--json"],capture_output=True,text=True,timeout=15)
+    try:
+        agents=json.loads(agent_result.stdout) if agent_result.returncode==0 else []
+    except json.JSONDecodeError:
+        agents=[]
+    chat_agent=next((item for item in agents if item.get("id")=="familybot-chat"),{})
+    denied=set(chat_agent.get("tools",{}).get("deny",[]))
+    policy_ok=chat_agent.get("tools",{}).get("profile")=="minimal" and chat_agent.get("skills")==[] and chat_agent.get("tools",{}).get("elevated",{}).get("enabled") is False and {"group:runtime","group:fs","group:web","group:messaging","group:plugins"}<=denied
+    chat_ui=all(text in source for text in ("Spør FamilyBot","kuratert utdrag av familiedata sendes til OpenAI","sessionStorage","/api/chat"))
+    chat_api=all(text in api_source for text in ('path == "/api/chat"',"chat_slot","chat_allowed"))
+    harness=all(text in chat_source for text in ("openai/gpt-5.6-sol",'"medium"',"--session-id","FAMILYBOT_DATA")) and "--deliver" not in chat_source
+    deployment="configure-chat-agent.sh" in (ROOT/"scripts/deploy-local.sh").read_text() and "tools.profile" in agent_script
+    record("AC-18",unauthenticated_chat==403 and chat_ui and chat_api and harness and deployment and policy_ok,f"chat unauthenticated={unauthenticated_chat}; UI/API/harness/deployment present; isolated policy={policy_ok}",started)
+
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}
     result_dir=ROOT/"tests/results"; result_dir.mkdir(parents=True,exist_ok=True)

@@ -27,6 +27,8 @@ flowchart LR
   DB["Private FamilyBot SQLite"] --> API["Curated Python API :8788"]
   Config["Owner-only family config"] --> API
   API --> Web["Responsive web app :3000"]
+  API --> Chat["Read-only Sol chat"]
+  Chat --> OpenClaw["Isolated no-action agent"]
   Web --> iPad["Family iPads"]
   Parent["Parent PIN"] --> API
   HA["Home Assistant - planned"] --> Smart["Narrow Smart Home adapter - planned"]
@@ -43,6 +45,7 @@ the web service. The API and database remain on the Mac mini.
 | Main family/child/parent UI | `app/_components/FamilyConsole.tsx` | User-visible; touch, accessibility and state-transition risk |
 | Global layout and responsive design | `app/globals.css` | Verify portrait, landscape, 200% zoom and no hover dependency |
 | Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist, including parent-gated Kanban mutations |
+| Read-only family chat | `local_api/familybot_chat.py`, `scripts/configure-chat-agent.sh` | External inference privacy, prompt injection and tool-policy boundary |
 | Dashboard schema and backup | `local_api/dashboard_migration.py` | Data-critical; idempotent migration and pre-migration backup required, including weekly achievement history |
 | Config reader | `local_api/family_config.py` | Must match the one core-owned configuration contract |
 | Process supervision | `local_service/run_service.py` | Operational; both processes fail/restart as a group |

@@ -9,7 +9,8 @@ always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
 mode manages chores, goals, approvals, weekly achievement surprises and the
-family Kanban board.
+family Kanban board. The adjacent `Spør FamilyBot` tab provides an all-user,
+read-only Norwegian chat grounded in the same curated data.
 
 > **Built for local family life:** the UI and chores model are reusable, while
 > the included adapters can be configured for local school, activity, weather
@@ -150,6 +151,12 @@ npm test
 The API reads curated columns only: no raw email bodies, sender addresses,
 Telegram identifiers, raw Spond JSON, credentials or filesystem paths are
 returned to the browser.
+
+The optional chat sends the question, visible browser conversation and a
+curated household-data excerpt to OpenAI through an isolated, no-action
+OpenClaw agent. It uses `openai/gpt-5.6-sol` with medium reasoning by default,
+does not have live web search, and retains conversation history only in the
+current browser tab. See [Family chat](docs/FAMILY_CHAT.md).
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;
 Core respects explicit parent subject metadata over stale PDF headings. Portal

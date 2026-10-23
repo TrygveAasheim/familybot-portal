@@ -478,6 +478,39 @@ class RepositoryTests(unittest.TestCase):
         finally:
             server.server_close()
 
+    def test_chat_is_available_without_parent_token_but_requires_local_session(self):
+        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            headers = {"Origin": "http://localhost:3000", "Content-Type": "application/json"}
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            connection.request("POST", "/api/chat", json.dumps({"question": "Hei"}), headers)
+            self.assertEqual(connection.getresponse().status, 403)
+            connection.close()
+
+            headers["X-FamilyBot-Local-Token"] = server.session_token
+            with patch("familybot_api.chat_answer", return_value={"answer": "Hei", "model": "test", "reasoning": "medium"}):
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+                connection.request("POST", "/api/chat", json.dumps({"question": "Hei"}), headers)
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                self.assertEqual(json.loads(response.read())["answer"], "Hei")
+                connection.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_chat_rate_limit_is_bounded(self):
+        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        try:
+            self.assertTrue(all(server.chat_allowed("192.168.1.30") for _ in range(8)))
+            self.assertFalse(server.chat_allowed("192.168.1.30"))
+        finally:
+            server.server_close()
+
     def test_dashboard_migration_is_idempotent(self):
         first = migrate(self.db, seed=True)
         second = migrate(self.db, seed=True)

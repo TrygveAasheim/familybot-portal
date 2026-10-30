@@ -42,8 +42,10 @@ local dashboard session. It supports:
 - asking for dinner suggestions in Norwegian, informed by liked and previously
   purchased Oda recipe titles when available;
 - showing each recipe's public Oda hero image directly in the suggestion card;
-- opening a selected Oda recipe and adding all available ingredients for the
-  chosen number of portions after an explicit button press;
+- opening bounded public recipe details inside the Portal with an explicit
+  return button, without popup or browser-back dependencies;
+- adding all available ingredients for the chosen number of portions after an
+  explicit button press;
 - reading the current cart;
 - adding one product or removing one unit;
 - clearing the cart after an explicit browser confirmation;
@@ -76,15 +78,19 @@ only by the separate `POST /api/oda/recipes/{id}/cart` route after the user
 presses the recipe button. The route accepts only a positive Oda recipe ID and
 1–12 portions. Checkout remains at Oda.
 
-The MCP recipe schema does not include images. After Oda returns a recipe URL,
+The MCP recipe schema does not include images, ingredients or instructions.
+After Oda returns a recipe URL,
 the server may read that public `https://oda.com/{locale}/recipes/{id}-.../`
-page and extract only its `og:image`. Both the final page and image are checked
-against strict Oda hosts and recipe paths, HTML reads are size/time bounded,
-lookups run in a small worker pool and results are cached. Only Oda's current
+page and extract its `og:image` plus bounded schema.org `Recipe` presentation
+fields. Both the final page and image are checked against strict Oda hosts and
+recipe paths, HTML reads are size/time bounded, text and list lengths are
+capped, lookups run in a small worker pool and results are cached. Only Oda's current
 `https://images.oda.com/recipes/...` or legacy Norwegian
 `https://images.oda.com/oppskrifter/...` paths are returned to the browser. If the image
 cannot be verified, the card shows a local placeholder and recipe search still
-succeeds. Recipe links use same-window navigation for kiosk compatibility.
+succeeds. A selected recipe is rendered in a Portal-owned dialog with
+**Tilbake til middagsforslag**, because Oda disallows framing and kiosk mode
+does not expose dependable browser-back controls.
 
 ## Account connection
 

@@ -59,12 +59,15 @@ addresses, cart or product history. It returns search phrases only; Oda returns
 the recipe records afterward. Invalid or unavailable model output falls back to
 a direct Oda recipe search.
 
-Because the MCP recipe schema has no image field, the server can resolve a
-recipe's public `og:image`. Fetches accept only HTTPS `oda.com` recipe URLs,
-validate the final redirect target, cap response size and time, and return only
-HTTPS `images.oda.com` current `/recipes/` or legacy `/oppskrifter/` image URLs. No OAuth header or household identifier is
-sent with that public page request. A failed lookup becomes a local placeholder,
-not an expanded proxy or user-visible integration failure.
+Because the MCP recipe schema has no image or recipe-detail fields, the server
+can resolve a recipe's public `og:image` and schema.org `Recipe` description,
+yield, category, ingredients and instructions. Fetches accept only HTTPS
+`oda.com` recipe URLs, validate the final redirect target, and cap response
+size, time, field lengths and list counts. Only HTTPS `images.oda.com` current
+`/recipes/` or legacy `/oppskrifter/` image URLs are returned. No OAuth header
+or household identifier is sent with that public page request. Failed or
+malformed extraction becomes a local placeholder or limited detail state, not
+an expanded proxy or user-visible integration failure.
 
 Every valid local dashboard session may read Oda suggestions and the household
 cart, search recipes and read the bounded liked/purchased recipe lists used for

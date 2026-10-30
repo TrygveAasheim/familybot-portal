@@ -10,9 +10,9 @@
 - parent creation/archive, reward goals, review queue and child routine resets;
 - family Kanban board with New, In Progress, Pause and Done lanes, parent-gated creation/movement/archive and newest-first Done history;
 - all-user Oda grocery tab with a bounded Norwegian dinner assistant, Oda
-  recipe preferences and hero images, explicit add-all-ingredients actions,
-  direct OAuth/MCP product search, personal suggestions, cart editing and
-  checkout handoff;
+  recipe preferences, hero images and kiosk-safe in-Portal recipe details with
+  return navigation, explicit add-all-ingredients actions, direct OAuth/MCP
+  product search, personal suggestions, cart editing and checkout handoff;
 - Telegram/OpenClaw child-chore interview bridge with preview, explicit confirmation and idempotent creation;
 - child-specific week-plan detail view with structured full plan text, optional validated day/category interpretation, preserved line breaks and bullets, structured days and return navigation;
 - continuous 30-point block counting from pending and awarded completion points, with configurable surprise levels, parent redemption resets and a January annual summary; see [the achievement specification](WEEKLY_ACHIEVEMENTS.md);

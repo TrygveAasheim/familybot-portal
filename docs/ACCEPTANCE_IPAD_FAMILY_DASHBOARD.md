@@ -227,8 +227,10 @@ live child navigation.
 - The dinner assistant accepts a bounded Norwegian request and 1–12 portions,
   can use liked/purchased Oda recipe titles as preference signals, and renders
   named Oda recipe results with verified public Oda hero images or a local
-  placeholder. Recipe links use same-window navigation in kiosk mode. Selecting
-  a recipe adds its available ingredients only after an explicit button press.
+  placeholder. Selecting a recipe opens its bounded public ingredients and
+  instructions inside the Portal with a visible return button, so kiosk users
+  never depend on browser chrome or popup permissions. Adding its available
+  ingredients still requires a separate explicit button press.
 - OAuth login uses same-window navigation rather than a popup, works in kiosk
   mode, and returns automatically to the Oda tab with a visible fallback link.
 - The optional OpenAI dinner planner runs as a dedicated tool-free agent. It

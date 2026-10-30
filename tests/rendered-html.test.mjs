@@ -88,7 +88,11 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /oda-recipe-image/);
   assert.match(consoleSource, /src=\{recipe\.imageUrl\}/);
   assert.match(consoleSource, /referrerPolicy="no-referrer"/);
-  assert.match(consoleSource, /<a href=\{recipe\.url\}>/);
+  assert.match(consoleSource, /oda-recipe-dialog/);
+  assert.match(consoleSource, /Tilbake til middagsforslag/);
+  assert.match(consoleSource, /recipe\.ingredients/);
+  assert.match(consoleSource, /recipe\.instructions/);
+  assert.doesNotMatch(consoleSource, /<a href=\{recipe\.url\}>/);
   assert.match(consoleSource, /window\.location\.assign\(result\.authorization_url\)/);
   assert.match(consoleSource, /virker i kioskmodus/);
   assert.doesNotMatch(consoleSource, /window\.open\(|familybot-oda-connect|Tillat sprettoppvindu/);
@@ -103,6 +107,9 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(dinnerSource, /images\.oda\.com/);
   assert.match(dinnerSource, /MAX_RECIPE_HTML_BYTES/);
   assert.match(dinnerSource, /_allowed_recipe_url/);
+  assert.match(dinnerSource, /application\/ld\+json/);
+  assert.match(dinnerSource, /recipeIngredient/);
+  assert.match(dinnerSource, /recipeInstructions/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /dashboardClockFormat/);
   assert.match(consoleSource, /second:"2-digit"/);

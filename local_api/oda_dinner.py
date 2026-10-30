@@ -19,6 +19,7 @@ import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Callable
@@ -40,17 +41,29 @@ MAX_RESULTS = 6
 MAX_RECIPE_HTML_BYTES = 128_000
 
 
-class _RecipeImageParser(HTMLParser):
+class _RecipePageParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.image_url = ""
+        self.schema_blocks: list[str] = []
+        self._schema_parts: list[str] | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self.image_url or tag.casefold() != "meta":
-            return
+        tag = tag.casefold()
         values = {key.casefold(): value or "" for key, value in attrs}
-        if values.get("property", "").casefold() == "og:image":
+        if tag == "meta" and not self.image_url and values.get("property", "").casefold() == "og:image":
             self.image_url = values.get("content", "").strip()
+        if tag == "script" and values.get("type", "").casefold() == "application/ld+json":
+            self._schema_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._schema_parts is not None:
+            self._schema_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.casefold() == "script" and self._schema_parts is not None:
+            self.schema_blocks.append("".join(self._schema_parts))
+            self._schema_parts = None
 
 
 class DinnerValidationError(ValueError):
@@ -85,12 +98,58 @@ def _allowed_recipe_image_url(value: str) -> bool:
     )
 
 
-def _fetch_recipe_image(
+def _recipe_schema(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        schema_type = value.get("@type")
+        types = schema_type if isinstance(schema_type, list) else [schema_type]
+        if any(str(item).casefold() == "recipe" for item in types):
+            return value
+        for nested in value.values():
+            found = _recipe_schema(nested)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for nested in value:
+            found = _recipe_schema(nested)
+            if found:
+                return found
+    return None
+
+
+def _bounded_text(value: Any, limit: int) -> str:
+    return re.sub(r"\s+", " ", unescape(str(value or ""))).strip()[:limit]
+
+
+def _recipe_instructions(value: Any) -> list[str]:
+    items: list[str] = []
+
+    def collect(candidate: Any) -> None:
+        if len(items) >= 20:
+            return
+        if isinstance(candidate, str):
+            text = _bounded_text(candidate, 1_000)
+            if text:
+                items.append(text)
+        elif isinstance(candidate, dict):
+            text = _bounded_text(candidate.get("text"), 1_000)
+            if text:
+                items.append(text)
+            else:
+                collect(candidate.get("itemListElement"))
+        elif isinstance(candidate, list):
+            for nested in candidate:
+                collect(nested)
+
+    collect(value)
+    return items
+
+
+def _fetch_recipe_details(
     recipe_url: str,
     opener: Callable[..., Any] = urllib.request.urlopen,
-) -> str | None:
+) -> dict[str, Any]:
     if not _allowed_recipe_url(recipe_url):
-        return None
+        return {}
     request = urllib.request.Request(
         recipe_url,
         headers={"User-Agent": "FamilyBot-Portal/1.0", "Accept": "text/html"},
@@ -99,22 +158,53 @@ def _fetch_recipe_image(
         with opener(request, timeout=8) as response:
             final_url = str(response.geturl())
             if not _allowed_recipe_url(final_url):
-                return None
+                return {}
             body = response.read(MAX_RECIPE_HTML_BYTES)
     except (urllib.error.URLError, TimeoutError, OSError, ValueError):
-        return None
-    parser = _RecipeImageParser()
+        return {}
+    parser = _RecipePageParser()
     try:
         parser.feed(body.decode("utf-8", errors="replace"))
     except (UnicodeError, ValueError):
-        return None
-    return parser.image_url if _allowed_recipe_image_url(parser.image_url) else None
+        return {}
+    result: dict[str, Any] = {}
+    if _allowed_recipe_image_url(parser.image_url):
+        result["imageUrl"] = parser.image_url
+    schema: dict[str, Any] | None = None
+    for block in parser.schema_blocks:
+        try:
+            schema = _recipe_schema(json.loads(unescape(block)))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+        if schema:
+            break
+    if not schema:
+        return result
+    description = _bounded_text(schema.get("description"), 1_200)
+    raw_ingredients = schema.get("recipeIngredient")
+    ingredients = [
+        text
+        for item in (raw_ingredients[:40] if isinstance(raw_ingredients, list) else [])
+        if (text := _bounded_text(item, 200))
+    ]
+    instructions = _recipe_instructions(schema.get("recipeInstructions"))
+    if description:
+        result["description"] = description
+    if ingredients:
+        result["ingredients"] = ingredients
+    if instructions:
+        result["instructions"] = instructions
+    for source, target in (("recipeYield", "recipeYield"), ("recipeCategory", "recipeCategory")):
+        text = _bounded_text(schema.get(source), 80)
+        if text:
+            result[target] = text
+    return result
 
 
 @lru_cache(maxsize=256)
-def recipe_image(recipe_url: str) -> str | None:
-    """Resolve and cache only the public hero image from an Oda recipe page."""
-    return _fetch_recipe_image(recipe_url)
+def recipe_details(recipe_url: str) -> dict[str, Any]:
+    """Resolve bounded public presentation fields from an Oda recipe page."""
+    return _fetch_recipe_details(recipe_url)
 
 
 def validate_request(payload: Any) -> tuple[str, int, list[dict[str, str]]]:
@@ -300,7 +390,7 @@ def recommend(
     oda: OdaMcpClient,
     payload: Any,
     planner: Callable[[str], dict[str, Any]] = invoke,
-    image_loader: Callable[[str], str | None] = recipe_image,
+    details_loader: Callable[[str], dict[str, Any]] = recipe_details,
 ) -> dict[str, Any]:
     question, portions, history = validate_request(payload)
     liked: list[dict[str, Any]] = []
@@ -357,9 +447,10 @@ def recommend(
     recipe_urls = [str(recipe.get("url") or "") for recipe in recipes]
     if recipe_urls:
         with ThreadPoolExecutor(max_workers=min(4, len(recipe_urls))) as executor:
-            images = list(executor.map(image_loader, recipe_urls))
-        for recipe, image_url in zip(recipes, images):
-            recipe["imageUrl"] = image_url
+            details = list(executor.map(details_loader, recipe_urls))
+        for recipe, detail in zip(recipes, details):
+            if isinstance(detail, dict):
+                recipe.update(detail)
 
     if not recipes:
         reply = "Jeg fant ingen Oda-oppskrifter på akkurat dette. Prøv et litt bredere middagsønske."

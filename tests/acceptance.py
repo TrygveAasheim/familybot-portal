@@ -178,13 +178,13 @@ def main() -> None:
     oda_status=json.loads(oda_status_raw) if oda_status_code==200 else {}
     oda_source=(ROOT/"local_api/oda_mcp.py").read_text()
     dinner_source=(ROOT/"local_api/oda_dinner.py").read_text()
-    oda_ui=all(text in source for text in (">Oda</button>","Middagsassistent","oda-recipe-image","src={recipe.imageUrl}","<a href={recipe.url}>","Legg alle ingrediensene i kurven","Hva trenger dere?","Dette kjøper dere ofte","Se gjennom og betal hos Oda","kan ikke betale eller fullføre bestillingen","/api/oda/dinner","/api/oda/search"))
+    oda_ui=all(text in source for text in (">Oda</button>","Middagsassistent","oda-recipe-image","src={recipe.imageUrl}","oda-recipe-dialog","Tilbake til middagsforslag","recipe.ingredients","recipe.instructions","Legg alle ingrediensene i kurven","Hva trenger dere?","Dette kjøper dere ofte","Se gjennom og betal hos Oda","kan ikke betale eller fullføre bestillingen","/api/oda/dinner","/api/oda/search")) and "<a href={recipe.url}>" not in source
     oda_api=all(text in api_source for text in ("/api/oda/oauth/callback","/api/oda/status","/api/oda/dinner","/api/oda/recipes/(\\d+)/cart","/api/oda/search","/api/oda/cart","OdaMcpClient")) and "/api/chat" not in api_source
     oauth_boundary=all(text in oda_source for text in ("https://oda.com/mcp","code_challenge_method","Mcp-Session-Id",".openclaw/credentials/oda-mcp.json","product_search","likely_to_buy","recipe_search","get_liked_recipes","get_purchased_recipes","fromRecipePortions","manipulate_cart","clear_cart"))
-    dinner_boundary=all(text in dinner_source for text in ("familybot-oda-dinner","MAX_HISTORY_MESSAGES = 6","MAX_PREFERENCE_TITLES = 16","DinnerPlannerUnavailable","_fallback","MAX_RECIPE_HTML_BYTES","images.oda.com","_allowed_recipe_url"))
+    dinner_boundary=all(text in dinner_source for text in ("familybot-oda-dinner","MAX_HISTORY_MESSAGES = 6","MAX_PREFERENCE_TITLES = 16","DinnerPlannerUnavailable","_fallback","MAX_RECIPE_HTML_BYTES","images.oda.com","_allowed_recipe_url","application/ld+json","recipeIngredient","recipeInstructions"))
     credential_path=Path.home()/".openclaw/credentials/oda-mcp.json"
     credentials_safe=not credential_path.exists() or credential_path.stat().st_mode & 0o777==0o600
-    record("AC-18",unauthenticated_oda==403 and oda_status_code==200 and oda_ui and oda_api and oauth_boundary and dinner_boundary and credentials_safe,f"Oda unauthenticated={unauthenticated_oda}; status={oda_status_code}, connected={oda_status.get('connected')}; bounded dinner planner, direct OAuth/MCP allowlist and local credential mode={credentials_safe}",started)
+    record("AC-18",unauthenticated_oda==403 and oda_status_code==200 and oda_ui and oda_api and oauth_boundary and dinner_boundary and credentials_safe,f"Oda unauthenticated={unauthenticated_oda}; status={oda_status_code}, connected={oda_status.get('connected')}; in-portal recipe return path, bounded dinner planner, direct OAuth/MCP allowlist and local credential mode={credentials_safe}",started)
 
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}

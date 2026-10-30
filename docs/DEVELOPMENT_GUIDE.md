@@ -29,6 +29,8 @@ flowchart LR
   API --> Web["Responsive web app :3000"]
   API --> Oda["Narrow OAuth/MCP adapter"]
   Oda --> OdaMCP["Oda hosted MCP"]
+  API --> Dinner["Tool-free dinner query planner"]
+  Dinner --> OpenAI["OpenAI via isolated OpenClaw agent"]
   Web --> iPad["Family iPads"]
   Parent["Parent PIN"] --> API
   HA["Home Assistant - planned"] --> Smart["Narrow Smart Home adapter - planned"]
@@ -45,7 +47,7 @@ the web service. The API and database remain on the Mac mini.
 | Main family/child/parent UI | `app/_components/FamilyConsole.tsx` | User-visible; touch, accessibility and state-transition risk |
 | Global layout and responsive design | `app/globals.css` | Verify portrait, landscape, 200% zoom and no hover dependency |
 | Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist, including parent-gated Kanban mutations |
-| Oda groceries | `local_api/oda_mcp.py`, Oda routes in `local_api/familybot_api.py` | OAuth secrecy, account-data exposure, cart-mutation and provider-failure boundary |
+| Oda groceries | `local_api/oda_mcp.py`, `local_api/oda_dinner.py`, Oda routes in `local_api/familybot_api.py` | OAuth secrecy, bounded model context, account-data exposure, explicit cart-mutation and provider-failure boundary |
 | Dashboard schema and backup | `local_api/dashboard_migration.py` | Data-critical; idempotent migration and pre-migration backup required, including weekly achievement history |
 | Config reader | `local_api/family_config.py` | Must match the one core-owned configuration contract |
 | Process supervision | `local_service/run_service.py` | Operational; both processes fail/restart as a group |
@@ -85,7 +87,9 @@ negative tests for raw/private material.
 - Status text is derived from measured state and timestamp, not optimism.
 - Keep DNB Eufemia-inspired visual consistency without coupling business logic
   to a component library.
-- Grocery ordering stays direct and task-focused; checkout/payment remain at Oda.
+- Grocery ordering stays direct and task-focused. The dinner planner can only
+  produce Oda recipe search phrases; explicit cart actions remain separate and
+  checkout/payment remain at Oda.
 
 ## Core versus add-on changes
 

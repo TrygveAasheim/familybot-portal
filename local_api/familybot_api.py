@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 from family_config import integration, member_profiles, portal_settings
+from oda_dinner import DinnerValidationError, recommend as recommend_dinner
 from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable, OdaValidationError
 
 
@@ -1889,9 +1890,20 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 if method == "POST" and path == "/api/oda/connect":
                     origin = self.headers.get("Origin", "")
                     self.respond(200, {"authorization_url": self.app.oda.begin_authorization(origin)})
+                elif method == "POST" and path == "/api/oda/dinner":
+                    if not self.app.dinner_slots.acquire(blocking=False):
+                        self.respond(429, {"error": "Middagsassistenten er opptatt. Prøv igjen om litt."})
+                        return
+                    try:
+                        self.respond(200, self.app.dinner_planner(self.app.oda, self.read_payload()))
+                    finally:
+                        self.app.dinner_slots.release()
                 elif method == "POST" and path == "/api/oda/search":
                     payload = self.read_payload()
                     self.respond(200, {"search": self.app.oda.search_products(payload.get("query", ""), payload.get("page", 1))})
+                elif method == "POST" and (recipe := re.fullmatch(r"/api/oda/recipes/(\d+)/cart", path)):
+                    payload = self.read_payload()
+                    self.respond(200, {"cart": self.app.oda.add_recipe(recipe.group(1), payload.get("portions", 4))})
                 elif method == "POST" and path == "/api/oda/cart":
                     payload = self.read_payload()
                     self.respond(200, {"cart": self.app.oda.change_product(payload.get("product_id"), payload.get("quantity"))})
@@ -1993,6 +2005,8 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 self.respond(405, {"error": "Metoden støttes ikke."})
         except ValidationError as exc:
             self.respond(400, {"error": str(exc)})
+        except DinnerValidationError as exc:
+            self.respond(400, {"error": str(exc)})
         except OdaValidationError as exc:
             self.respond(400, {"error": str(exc)})
         except OdaAuthRequired as exc:
@@ -2018,7 +2032,8 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
 
 class FamilyApiServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], repository: FamilyRepository, parent_pin: str,
-                 allowed_origins: set[str] | None = None, oda_client: OdaMcpClient | None = None):
+                 allowed_origins: set[str] | None = None, oda_client: OdaMcpClient | None = None,
+                 dinner_planner: Any | None = None):
         super().__init__(address, FamilyApiHandler)
         self.repository = repository
         self.session_token = secrets.token_urlsafe(32)
@@ -2035,6 +2050,8 @@ class FamilyApiServer(ThreadingHTTPServer):
             f"http://{callback_host}:{callback_port}/api/oda/oauth/callback",
         )
         self.oda = oda_client or OdaMcpClient(callback_url)
+        self.dinner_planner = dinner_planner or recommend_dinner
+        self.dinner_slots = threading.BoundedSemaphore(1)
         with repository.connect() as connection:
             parent = connection.execute("SELECT id FROM family_members WHERE role='parent' ORDER BY id LIMIT 1").fetchone()
         self.parent_member_id = int(parent[0]) if parent else 1

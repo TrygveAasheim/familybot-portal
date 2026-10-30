@@ -156,11 +156,16 @@ The API reads curated columns only: no raw email bodies, sender addresses,
 Telegram identifiers, raw Spond JSON, credentials or filesystem paths are
 returned to the browser.
 
-The optional Oda tab talks directly to Oda's hosted MCP server; it does not use
-an AI model. Any valid local dashboard session can search, load personal
-suggestions and edit the shared Oda cart. OAuth tokens stay in the owner-only
+The optional Oda tab talks directly to Oda's hosted MCP server. Any valid local
+dashboard session can ask the bounded dinner assistant for recipe suggestions,
+search products, load personal suggestions and edit the shared Oda cart. A
+tool-free OpenAI planner may turn the dinner request and a small set of Oda
+recipe titles into search phrases; only the named Oda adapter can read recipes
+or change the cart, and every recipe add requires an explicit button press.
+OAuth tokens stay in the owner-only
 `$HOME/.openclaw/credentials/oda-mcp.json` file and never enter browser
-responses or Git. Checkout and payment are intentionally handed off to Oda.
+responses, model prompts or Git. Checkout and payment are intentionally handed
+off to Oda.
 See [Oda grocery integration](docs/ODA_GROCERIES.md).
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;

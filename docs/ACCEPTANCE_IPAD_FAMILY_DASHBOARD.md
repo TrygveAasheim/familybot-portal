@@ -224,10 +224,17 @@ live child navigation.
 - The browser can connect the household account through Oda OAuth with state
   and PKCE, search products, load `likely_to_buy`, read/edit/clear the cart and
   open Oda's returned cart URL.
+- The dinner assistant accepts a bounded Norwegian request and 1–12 portions,
+  can use liked/purchased Oda recipe titles as preference signals, and renders
+  named Oda recipe results. Selecting a recipe adds its available ingredients
+  only after an explicit button press.
 - OAuth login uses same-window navigation rather than a popup, works in kiosk
   mode, and returns automatically to the Oda tab with a visible fallback link.
-- The Portal does not use an AI model for this workflow and exposes no generic
-  MCP proxy. Only the named Oda tools selected by the API adapter can run.
+- The optional OpenAI dinner planner runs as a dedicated tool-free agent. It
+  receives only the bounded dinner conversation and selected Oda recipe titles,
+  returns search phrases rather than tool calls, and has a direct-search
+  fallback. The Portal exposes no generic model chat or MCP proxy; only named
+  Oda tools selected by the API adapter can run.
 - OAuth access and refresh tokens are stored outside Git in an owner-only local
   file and are never returned to the browser or written to logs. Callback query
   values are redacted.

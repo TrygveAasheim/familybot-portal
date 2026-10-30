@@ -50,12 +50,28 @@ class FakeOdaClient:
         self.calls.append(("suggestions", kind))
         return {"result": []}
 
+    def liked_recipes(self, page=1, size=12):
+        self.calls.append(("liked_recipes", page, size))
+        return {"recipes": []}
+
+    def purchased_recipes(self, page=1, size=12):
+        self.calls.append(("purchased_recipes", page, size))
+        return {"recipes": []}
+
+    def search_recipes(self, query, page=1, size=8):
+        self.calls.append(("search_recipes", query, page, size))
+        return {"recipes": []}
+
     def cart(self):
         self.calls.append(("cart",))
         return {"groups": [], "productQuantityCount": 0, "totalGrossAmount": "0 kr", "url": "https://oda.com/"}
 
     def change_product(self, product_id, quantity):
         self.calls.append(("change", product_id, quantity))
+        return self.cart()
+
+    def add_recipe(self, recipe_id, portions):
+        self.calls.append(("add_recipe", int(recipe_id), portions))
         return self.cart()
 
     def clear_cart(self):
@@ -547,6 +563,41 @@ class RepositoryTests(unittest.TestCase):
             self.assertEqual(response.status, 200)
             self.assertEqual(json.loads(response.read())["search"]["result"][0]["query"], "melk")
             self.assertIn(("search", "melk", 1), oda.calls)
+            connection.close()
+
+            def dinner_planner(_oda, payload):
+                return {
+                    "answer": "Tre forslag",
+                    "recipes": [{"id": 42, "title": "Taco"}],
+                    "portions": payload["portions"],
+                    "personalized": True,
+                    "model_used": True,
+                }
+
+            server.dinner_planner = dinner_planner
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            connection.request(
+                "POST",
+                "/api/oda/dinner",
+                json.dumps({"question": "rask middag", "portions": 5}),
+                headers,
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(json.loads(response.read())["portions"], 5)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            connection.request(
+                "POST",
+                "/api/oda/recipes/42/cart",
+                json.dumps({"portions": 5}),
+                headers,
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            response.read()
+            self.assertIn(("add_recipe", 42, 5), oda.calls)
             connection.close()
         finally:
             server.shutdown()

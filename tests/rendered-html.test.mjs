@@ -25,11 +25,12 @@ test("server-renders the iPad family dashboard shell", async () => {
 });
 
 test("source keeps the data boundary and functional surfaces explicit", async () => {
-  const [page, consoleSource, apiSource, odaSource, styles] = await Promise.all([
+  const [page, consoleSource, apiSource, odaSource, dinnerSource, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/FamilyConsole.tsx", import.meta.url), "utf8"),
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
     readFile(new URL("../local_api/oda_mcp.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/oda_dinner.py", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(page, /codex-preview/);
@@ -80,10 +81,21 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Se gjennom og betal hos Oda/);
   assert.match(consoleSource, /kan ikke betale eller fullføre bestillingen/);
   assert.match(consoleSource, /api\/oda\/search/);
+  assert.match(consoleSource, /Middagsassistent/);
+  assert.match(consoleSource, /api\/oda\/dinner/);
+  assert.match(consoleSource, /Legg alle ingrediensene i kurven/);
+  assert.match(consoleSource, /api\/oda\/recipes\/\$\{recipe\.id\}\/cart/);
   assert.match(consoleSource, /window\.location\.assign\(result\.authorization_url\)/);
   assert.match(consoleSource, /virker i kioskmodus/);
   assert.doesNotMatch(consoleSource, /window\.open\(|familybot-oda-connect|Tillat sprettoppvindu/);
   assert.doesNotMatch(consoleSource, /Spør FamilyBot|api\/chat|OpenAI/);
+  assert.match(odaSource, /recipe_search/);
+  assert.match(odaSource, /get_liked_recipes/);
+  assert.match(odaSource, /get_purchased_recipes/);
+  assert.match(odaSource, /fromRecipePortions/);
+  assert.match(dinnerSource, /familybot-oda-dinner/);
+  assert.match(dinnerSource, /MAX_HISTORY_MESSAGES = 6/);
+  assert.match(dinnerSource, /fallback to a direct Oda recipe search|_fallback/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /dashboardClockFormat/);
   assert.match(consoleSource, /second:"2-digit"/);

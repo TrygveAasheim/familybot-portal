@@ -30,7 +30,8 @@ When the sibling core repository is available, also read
 - Children need large, tap-first controls and no typing for normal chore use.
   Parent household-administration mutations require a parent session. The Oda
   cart is an explicit trusted-LAN exception available to every dashboard user;
-  checkout and payment still happen at Oda.
+  its dinner model is tool-free, recipe/cart actions stay allowlisted and
+  explicit, and checkout/payment still happen at Oda.
 - User-visible unavailable/stale states are honest. Do not convert a missing
   source into a healthy or empty-looking result.
 - Smart Home is an add-on behind a narrow provider adapter. The browser must not

@@ -46,18 +46,29 @@ are returned to the browser.
 
 The Oda tab calls only `https://oda.com/mcp` through the server-side
 `OdaMcpClient`. There is no browser-visible bearer token, generic MCP endpoint,
-arbitrary tool-name input or AI model in this path. OAuth uses dynamic client
-registration, state and PKCE; tokens are written with mode `0600` beneath the
-owner-only `$HOME/.openclaw/credentials` directory. Callback query values are
-redacted from API request logs.
+or arbitrary tool-name input. OAuth uses dynamic client registration, state and
+PKCE; tokens are written with mode `0600` beneath the owner-only
+`$HOME/.openclaw/credentials` directory. Callback query values are redacted
+from API request logs.
+
+The dinner interface has one narrower model boundary. A dedicated tool-free
+OpenAI agent receives only the bounded dinner request, at most six dinner-chat
+messages, the portion count and at most sixteen liked/purchased Oda recipe
+titles. It receives no family dashboard facts, SQLite rows, OAuth tokens,
+addresses, cart or product history. It returns search phrases only; Oda returns
+the recipe records afterward. Invalid or unavailable model output falls back to
+a direct Oda recipe search.
 
 Every valid local dashboard session may read Oda suggestions and the household
-cart and may add/remove products or clear that cart. This is an explicit trusted
+cart, search recipes and read the bounded liked/purchased recipe lists used for
+preference signals. Sessions may add/remove products, add a selected recipe's
+ingredients for 1–12 portions, or clear that cart. This is an explicit trusted
 household policy: the Oda tab is not parent-PIN gated. The API allowlist is
-limited to product search, `likely_to_buy`, cart read/change/clear and OAuth
-connect/disconnect. It does not expose order history, saved addresses or a
-generic MCP proxy. Oda checkout and payment cannot be called through MCP; the
-browser receives only Oda's cart URL for final review and payment at oda.com.
+limited to product/recipe search, selected suggestion/preference reads, cart
+read/change/clear and OAuth connect/disconnect. It does not expose order
+history, saved addresses or a generic MCP proxy. Oda checkout and payment
+cannot be called through MCP; the browser receives only Oda's cart URL for
+final review and payment at oda.com.
 
 An Oda outage or expired OAuth grant returns an isolated unavailable/reconnect
 state and must not affect `/api/dashboard`, chores, Ukeplan or Kanban.

@@ -19,7 +19,8 @@
   history, saved address endpoint, AI model, checkout or payment operation is
   exposed.
 - State and deployment: no SQLite migration. The first connection dynamically
-  registers the local Portal client and opens Oda's login/consent page.
+  registers the local Portal client and navigates the current browser window to
+  Oda's login/consent page, which is compatible with kiosk popup restrictions.
 - Rollback: revert the source commit, redeploy Portal and revoke FamilyBot
   access under Oda's Privacy & security settings. The Oda cart itself remains
   in the Oda account.
@@ -46,9 +47,12 @@ allowlist maps only to `product_search`, `likely_to_buy`, `get_cart`,
 ## Account connection
 
 1. Deploy Portal and open `http://familie.local:3000/?oda=1`.
-2. Choose **Koble til Oda**. A separate Oda window opens.
+2. Choose **Logg inn hos Oda**. Oda opens in the current browser window, so no
+   popup permission is needed.
 3. Sign in to Oda and approve the connection.
-4. Return to the Oda tab; it refreshes automatically.
+4. The OAuth callback returns to the Oda tab automatically and confirms the
+   connection. If automatic navigation is unavailable, the callback page also
+   provides an explicit **Tilbake til Familieportalen** link.
 
 The OAuth callback defaults to
 `http://familie.local:8788/api/oda/oauth/callback`. A customized deployment may

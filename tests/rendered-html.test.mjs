@@ -80,6 +80,9 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Se gjennom og betal hos Oda/);
   assert.match(consoleSource, /kan ikke betale eller fullføre bestillingen/);
   assert.match(consoleSource, /api\/oda\/search/);
+  assert.match(consoleSource, /window\.location\.assign\(result\.authorization_url\)/);
+  assert.match(consoleSource, /virker i kioskmodus/);
+  assert.doesNotMatch(consoleSource, /window\.open\(|familybot-oda-connect|Tillat sprettoppvindu/);
   assert.doesNotMatch(consoleSource, /Spør FamilyBot|api\/chat|OpenAI/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /dashboardClockFormat/);

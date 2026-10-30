@@ -224,6 +224,8 @@ live child navigation.
 - The browser can connect the household account through Oda OAuth with state
   and PKCE, search products, load `likely_to_buy`, read/edit/clear the cart and
   open Oda's returned cart URL.
+- OAuth login uses same-window navigation rather than a popup, works in kiosk
+  mode, and returns automatically to the Oda tab with a visible fallback link.
 - The Portal does not use an AI model for this workflow and exposes no generic
   MCP proxy. Only the named Oda tools selected by the API adapter can run.
 - OAuth access and refresh tokens are stored outside Git in an owner-only local

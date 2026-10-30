@@ -1724,19 +1724,27 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         safe_message = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         origin_json = json.dumps(portal_origin or "")
         script = ""
+        return_link = ""
         if portal_origin:
+            return_url = f"{portal_origin.rstrip('/')}/?oda=1&oda_connected=1"
+            return_json = json.dumps(return_url)
+            safe_return_url = return_url.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
             script = (
                 "<script>"
-                f"if(window.opener)window.opener.postMessage('familybot-oda-connected',{origin_json});"
-                "window.setTimeout(()=>window.close(),900);"
+                f"const targetOrigin={origin_json};const returnUrl={return_json};"
+                "if(window.opener&&!window.opener.closed){"
+                "window.opener.postMessage('familybot-oda-connected',targetOrigin);"
+                "window.setTimeout(()=>window.close(),300);"
+                "}else{window.location.replace(returnUrl)}"
                 "</script>"
             )
+            return_link = f'<p><a href="{safe_return_url}">Tilbake til Familieportalen</a></p>'
         body = (
             "<!doctype html><html lang='nb'><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             f"<title>{safe_title}</title></head>"
             "<body style='font-family:system-ui;padding:3rem;background:#f4faf9;color:#00343e'>"
-            f"<h1>{safe_title}</h1><p>{safe_message}</p>{script}</body></html>"
+            f"<h1>{safe_title}</h1><p>{safe_message}</p>{return_link}{script}</body></html>"
         ).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1773,7 +1781,7 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/oda/oauth/callback":
             try:
                 portal_origin = self.app.oda.finish_authorization(parse_qs(parsed.query))
-                self.respond_html(200, "Oda er koblet til", "Du kan lukke dette vinduet og gå tilbake til Familieportalen.", portal_origin)
+                self.respond_html(200, "Oda er koblet til", "Du blir sendt tilbake til Familieportalen.", portal_origin)
             except OdaAuthRequired as exc:
                 self.respond_html(400, "Oda ble ikke koblet til", str(exc))
             except OdaUnavailable as exc:

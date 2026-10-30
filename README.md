@@ -1,17 +1,29 @@
 # Familieportalen
 
-Familieportalen is loosely based on OpenClaw's local-first household-agent
-ideas, but a large part of this repository is now custom work for Norwegian
-households: school `ukeplan` views, Spond activities, Norwegian calendars, MET
-weather, Entur transport and a Norwegian-language family dashboard. It is the
-iPad-first touch surface for FamilyBot. It runs on an
+Familieportalen is an AI-driven, iPad-first family planner built for Norwegian
+households. It brings school plans, activities, chores, rewards, weather,
+public transport and grocery planning into one shared dashboard on the home
+network. AI helps interpret incoming `ukeplan` documents and supports dinner
+planning, while the household remains in control of approvals and purchases.
+
+The planner connects the services Norwegian families already use:
+
+- **Spond** for activities and events;
+- **EnTur** for relevant real-time public transport departures and alerts;
+- **MET Norway / Yr** for local weather forecasts and practical advice;
+- **Oda MCP** for recipes, dinner suggestions, product search and the shared
+  grocery cart;
+- school email, PDF `ukeplan` documents and Norwegian calendars; and
+- **Telegram** for intentional notifications outside the home network.
+
+The portal is the large, touch-friendly surface for FamilyBot. It runs on an
 always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
 mode manages chores, goals, approvals, weekly achievement surprises and the
 family Kanban board. The adjacent `Oda` tab lets everyone on the trusted home
-dashboard search for groceries and prepare the household cart through Oda MCP;
-review, checkout and payment remain on Oda.
+dashboard plan dinners, view recipe photos, add ingredients and prepare the
+household cart; review, checkout and payment remain on Oda.
 
 > **Built for local family life:** the UI and chores model are reusable, while
 > the included adapters can be configured for local school, activity, weather
@@ -22,12 +34,12 @@ review, checkout and payment remain on Oda.
 Familieportalen is designed as a LAN-only service for a trusted household
 network. The dashboard, curated API and local data stay on the home network;
 Telegram is the intentional external integration and is handled by
-FamilyBot/OpenClaw. The security controls in this repository therefore provide
-defense in depth for a self-hosted home appliance: origin checks, authentication,
-rate limiting, owner-only local files, curated data boundaries and safe local
-deployment. This is not an internet-facing multi-tenant service, and it should
-not be exposed directly to the public internet without an explicit security
-review and additional perimeter controls.
+the companion Core service. The security controls in this repository therefore
+provide defense in depth for a self-hosted home appliance: origin checks,
+authentication, rate limiting, owner-only local files, curated data boundaries
+and safe local deployment. This is not an internet-facing multi-tenant service,
+and it should not be exposed directly to the public internet without an explicit
+security review and additional perimeter controls.
 
 ## Start here
 
@@ -66,8 +78,9 @@ Runtime dependencies are:
   `$HOME/.openclaw/workspace/config/family.local.json` and
   `$HOME/.openclaw/workspace/db/family.db`;
 - Node.js/npm for the portal build and Python 3 for the local API/service;
-- macOS `launchd` for the local service; OpenClaw is optional for conversational
-  and Telegram features, but is part of the normal workspace convention.
+- macOS `launchd` for the local service; the local agent runtime is optional for
+  conversational and Telegram features, and existing installations use the
+  `.openclaw` workspace convention;
 - an ordinary Oda account for the optional grocery tab; the hosted
   `https://oda.com/mcp` service uses OAuth and needs no API key.
 

@@ -13,7 +13,13 @@ import os
 import re
 import subprocess
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Callable
 
@@ -31,6 +37,20 @@ MAX_HISTORY_CHARS = 3_600
 MAX_PREFERENCE_TITLES = 16
 MAX_SEARCH_QUERIES = 3
 MAX_RESULTS = 6
+MAX_RECIPE_HTML_BYTES = 128_000
+
+
+class _RecipeImageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.image_url = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self.image_url or tag.casefold() != "meta":
+            return
+        values = {key.casefold(): value or "" for key, value in attrs}
+        if values.get("property", "").casefold() == "og:image":
+            self.image_url = values.get("content", "").strip()
 
 
 class DinnerValidationError(ValueError):
@@ -39,6 +59,62 @@ class DinnerValidationError(ValueError):
 
 class DinnerPlannerUnavailable(RuntimeError):
     """The optional query planner did not return a usable response."""
+
+
+def _allowed_recipe_url(value: str) -> bool:
+    parsed = urllib.parse.urlparse(value)
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname in {"oda.com", "www.oda.com"}
+        and bool(re.fullmatch(r"/[a-z]{2}/recipes/\d+(?:-[^/?#]+)?/?", parsed.path))
+        and not parsed.username
+        and not parsed.password
+        and parsed.port is None
+    )
+
+
+def _allowed_recipe_image_url(value: str) -> bool:
+    parsed = urllib.parse.urlparse(value)
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == "images.oda.com"
+        and bool(re.fullmatch(r"/(?:recipes|oppskrifter)/[^/?#]+", parsed.path))
+        and not parsed.username
+        and not parsed.password
+        and parsed.port is None
+    )
+
+
+def _fetch_recipe_image(
+    recipe_url: str,
+    opener: Callable[..., Any] = urllib.request.urlopen,
+) -> str | None:
+    if not _allowed_recipe_url(recipe_url):
+        return None
+    request = urllib.request.Request(
+        recipe_url,
+        headers={"User-Agent": "FamilyBot-Portal/1.0", "Accept": "text/html"},
+    )
+    try:
+        with opener(request, timeout=8) as response:
+            final_url = str(response.geturl())
+            if not _allowed_recipe_url(final_url):
+                return None
+            body = response.read(MAX_RECIPE_HTML_BYTES)
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+    parser = _RecipeImageParser()
+    try:
+        parser.feed(body.decode("utf-8", errors="replace"))
+    except (UnicodeError, ValueError):
+        return None
+    return parser.image_url if _allowed_recipe_image_url(parser.image_url) else None
+
+
+@lru_cache(maxsize=256)
+def recipe_image(recipe_url: str) -> str | None:
+    """Resolve and cache only the public hero image from an Oda recipe page."""
+    return _fetch_recipe_image(recipe_url)
 
 
 def validate_request(payload: Any) -> tuple[str, int, list[dict[str, str]]]:
@@ -224,6 +300,7 @@ def recommend(
     oda: OdaMcpClient,
     payload: Any,
     planner: Callable[[str], dict[str, Any]] = invoke,
+    image_loader: Callable[[str], str | None] = recipe_image,
 ) -> dict[str, Any]:
     question, portions, history = validate_request(payload)
     liked: list[dict[str, Any]] = []
@@ -276,6 +353,13 @@ def recommend(
                 break
         if len(recipes) >= MAX_RESULTS:
             break
+
+    recipe_urls = [str(recipe.get("url") or "") for recipe in recipes]
+    if recipe_urls:
+        with ThreadPoolExecutor(max_workers=min(4, len(recipe_urls))) as executor:
+            images = list(executor.map(image_loader, recipe_urls))
+        for recipe, image_url in zip(recipes, images):
+            recipe["imageUrl"] = image_url
 
     if not recipes:
         reply = "Jeg fant ingen Oda-oppskrifter på akkurat dette. Prøv et litt bredere middagsønske."

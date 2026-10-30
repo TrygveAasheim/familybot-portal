@@ -158,7 +158,8 @@ returned to the browser.
 
 The optional Oda tab talks directly to Oda's hosted MCP server. Any valid local
 dashboard session can ask the bounded dinner assistant for recipe suggestions,
-search products, load personal suggestions and edit the shared Oda cart. A
+see verified public Oda recipe images, search products, load personal
+suggestions and edit the shared Oda cart. A
 tool-free OpenAI planner may turn the dinner request and a small set of Oda
 recipe titles into search phrases; only the named Oda adapter can read recipes
 or change the cart, and every recipe add requires an explicit button press.

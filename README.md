@@ -143,6 +143,7 @@ Clone `familybot-core` and `familybot-portal` as sibling directories, then:
 
 ```bash
 npm ci
+npm run security:audit
 npm run docs:check
 npm run preflight
 npm run dev:family

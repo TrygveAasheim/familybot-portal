@@ -5,8 +5,13 @@ import test from "node:test";
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } }, { waitUntil() {}, passThroughOnException() {} });
+  const { default: handler } = await import(workerUrl.href);
+  const request = new Request("http://localhost/", { headers: { accept: "text/html" } });
+  const environment = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
+  const context = { waitUntil() {}, passThroughOnException() {} };
+  return typeof handler === "function"
+    ? handler(request, environment, context)
+    : handler.fetch(request, environment, context);
 }
 
 test("server-renders the iPad family dashboard shell", async () => {

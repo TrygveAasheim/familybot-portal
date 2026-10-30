@@ -33,7 +33,7 @@ Documentation: README/spec/acceptance/data-boundary/runbook files updated
   contract and does not patch ingestion, delivery or raw source data.
 - A UI and API change is tested together. Do not verify only the detail route
   when the family overview or child page also presents the same fact.
-- Run `npm run docs:check`, `npm run lint`, `npm test` and
+- Run `npm run security:audit`, `npm run docs:check`, `npm run lint`, `npm test` and
   `python3 tests/acceptance.py`; deploy only from verified `dev`.
 
 ## Worked Ukeplan example

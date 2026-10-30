@@ -9,8 +9,9 @@ always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
 mode manages chores, goals, approvals, weekly achievement surprises and the
-family Kanban board. The adjacent `Spør FamilyBot` tab provides an all-user,
-read-only Norwegian chat grounded in the same curated data.
+family Kanban board. The adjacent `Oda` tab lets everyone on the trusted home
+dashboard search for groceries and prepare the household cart through Oda MCP;
+review, checkout and payment remain on Oda.
 
 > **Built for local family life:** the UI and chores model are reusable, while
 > the included adapters can be configured for local school, activity, weather
@@ -67,6 +68,8 @@ Runtime dependencies are:
 - Node.js/npm for the portal build and Python 3 for the local API/service;
 - macOS `launchd` for the local service; OpenClaw is optional for conversational
   and Telegram features, but is part of the normal workspace convention.
+- an ordinary Oda account for the optional grocery tab; the hosted
+  `https://oda.com/mcp` service uses OAuth and needs no API key.
 
 Set up and deploy Core first, then install and deploy Portal. Keep both
 repositories on compatible `dev` commits and run both repositories' verification
@@ -152,13 +155,12 @@ The API reads curated columns only: no raw email bodies, sender addresses,
 Telegram identifiers, raw Spond JSON, credentials or filesystem paths are
 returned to the browser.
 
-The optional chat sends the question, visible browser conversation and a
-curated household-data excerpt to OpenAI through an isolated, no-action
-OpenClaw agent. It uses `openai/gpt-5.6-sol` with medium reasoning by default,
-can use OpenAI-hosted web search for current public information, and retains
-conversation history only in the current browser tab. Search is isolated from
-filesystem, messaging and mutation tools, and private household facts must not
-be placed in search queries. See [Family chat](docs/FAMILY_CHAT.md).
+The optional Oda tab talks directly to Oda's hosted MCP server; it does not use
+an AI model. Any valid local dashboard session can search, load personal
+suggestions and edit the shared Oda cart. OAuth tokens stay in the owner-only
+`$HOME/.openclaw/credentials/oda-mcp.json` file and never enter browser
+responses or Git. Checkout and payment are intentionally handed off to Oda.
+See [Oda grocery integration](docs/ODA_GROCERIES.md).
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;
 Core respects explicit parent subject metadata over stale PDF headings. Portal

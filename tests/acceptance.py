@@ -173,23 +173,16 @@ def main() -> None:
     record("AC-17",detail_source and detail_api and detail_ok,"Child page keeps a compact Ukeplan link and full interpreted text opens through the scoped detail route",started)
 
     started=time.monotonic()
-    unauthenticated_chat,_=request(API_PORT,"POST","/api/chat",body={"question":"test"})
-    chat_source=(ROOT/"local_api/familybot_chat.py").read_text()
-    agent_script=(ROOT/"scripts/configure-chat-agent.sh").read_text()
-    agent_result=subprocess.run(["openclaw","config","get","agents.list","--json"],capture_output=True,text=True,timeout=15)
-    try:
-        agents=json.loads(agent_result.stdout) if agent_result.returncode==0 else []
-    except json.JSONDecodeError:
-        agents=[]
-    chat_agent=next((item for item in agents if item.get("id")=="familybot-chat"),{})
-    denied=set(chat_agent.get("tools",{}).get("deny",[]))
-    added=set(chat_agent.get("tools",{}).get("alsoAllow",[]))
-    policy_ok=chat_agent.get("tools",{}).get("profile")=="minimal" and added=={"web_search"} and chat_agent.get("skills")==[] and chat_agent.get("tools",{}).get("elevated",{}).get("enabled") is False and {"group:runtime","group:fs","web_fetch","x_search","group:messaging","group:plugins"}<=denied
-    chat_ui=all(text in source for text in ("Spør FamilyBot","kuratert utdrag av familiedata sendes til OpenAI","søke på nettet etter fersk offentlig informasjon","sessionStorage","/api/chat"))
-    chat_api=all(text in api_source for text in ('path == "/api/chat"',"chat_slot","chat_allowed"))
-    harness=all(text in chat_source for text in ("openai/gpt-5.6-sol",'"medium"',"--session-id","FAMILYBOT_DATA")) and "--deliver" not in chat_source
-    deployment="configure-chat-agent.sh" in (ROOT/"scripts/deploy-local.sh").read_text() and all(text in agent_script for text in ("tools.profile","web_search","tools.web.search.enabled","openaiCodex.enabled"))
-    record("AC-18",unauthenticated_chat==403 and chat_ui and chat_api and harness and deployment and policy_ok,f"chat unauthenticated={unauthenticated_chat}; UI/API/harness/deployment present; isolated policy={policy_ok}",started)
+    unauthenticated_oda,_=request(API_PORT,"GET","/api/oda/status")
+    oda_status_code,oda_status_raw=request(API_PORT,"GET","/api/oda/status",{"X-FamilyBot-Local-Token":local})
+    oda_status=json.loads(oda_status_raw) if oda_status_code==200 else {}
+    oda_source=(ROOT/"local_api/oda_mcp.py").read_text()
+    oda_ui=all(text in source for text in (">Oda</button>","Hva trenger dere?","Dette kjøper dere ofte","Se gjennom og betal hos Oda","kan ikke betale eller fullføre bestillingen","/api/oda/search"))
+    oda_api=all(text in api_source for text in ("/api/oda/oauth/callback","/api/oda/status","/api/oda/search","/api/oda/cart","OdaMcpClient")) and "/api/chat" not in api_source
+    oauth_boundary=all(text in oda_source for text in ("https://oda.com/mcp","code_challenge_method","Mcp-Session-Id",".openclaw/credentials/oda-mcp.json","product_search","likely_to_buy","manipulate_cart","clear_cart"))
+    credential_path=Path.home()/".openclaw/credentials/oda-mcp.json"
+    credentials_safe=not credential_path.exists() or credential_path.stat().st_mode & 0o777==0o600
+    record("AC-18",unauthenticated_oda==403 and oda_status_code==200 and oda_ui and oda_api and oauth_boundary and credentials_safe,f"Oda unauthenticated={unauthenticated_oda}; status={oda_status_code}, connected={oda_status.get('connected')}; direct OAuth/MCP allowlist and local credential mode={credentials_safe}",started)
 
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}

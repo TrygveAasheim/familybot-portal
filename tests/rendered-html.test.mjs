@@ -20,11 +20,11 @@ test("server-renders the iPad family dashboard shell", async () => {
 });
 
 test("source keeps the data boundary and functional surfaces explicit", async () => {
-  const [page, consoleSource, apiSource, chatSource, styles] = await Promise.all([
+  const [page, consoleSource, apiSource, odaSource, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/FamilyConsole.tsx", import.meta.url), "utf8"),
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
-    readFile(new URL("../local_api/familybot_chat.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/oda_mcp.py", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(page, /codex-preview/);
@@ -69,11 +69,13 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Done/);
   assert.match(consoleSource, /api\/kanban/);
   assert.match(consoleSource, /Kanban er skrivebeskyttet/);
-  assert.match(consoleSource, /Spør FamilyBot/);
-  assert.match(consoleSource, /kuratert utdrag av familiedata sendes til OpenAI/);
-  assert.match(consoleSource, /søke på nettet etter fersk offentlig informasjon/);
-  assert.match(consoleSource, /sessionStorage/);
-  assert.match(consoleSource, /api\/chat/);
+  assert.match(consoleSource, />Oda<\/button>/);
+  assert.match(consoleSource, /Hva trenger dere\?/);
+  assert.match(consoleSource, /Dette kjøper dere ofte/);
+  assert.match(consoleSource, /Se gjennom og betal hos Oda/);
+  assert.match(consoleSource, /kan ikke betale eller fullføre bestillingen/);
+  assert.match(consoleSource, /api\/oda\/search/);
+  assert.doesNotMatch(consoleSource, /Spør FamilyBot|api\/chat|OpenAI/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /dashboardClockFormat/);
   assert.match(consoleSource, /second:"2-digit"/);
@@ -109,15 +111,19 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /reset_child/);
   assert.match(apiSource, /LANES = \{"todo", "inprogress", "onhold", "done"\}/);
   assert.match(apiSource, /api\/kanban/);
-  assert.match(apiSource, /api\/chat/);
-  assert.match(apiSource, /chat_slot/);
-  assert.match(chatSource, /openai\/gpt-5\.6-sol/);
-  assert.match(chatSource, /THINKING = os\.environ\.get\("FAMILYBOT_CHAT_THINKING", "medium"\)/);
-  assert.match(chatSource, /--session-id/);
-  assert.match(chatSource, /FAMILYBOT_DATA/);
-  assert.match(chatSource, /Bruk nettsøk/);
-  assert.match(chatSource, /aldri brukes til å lete etter familien/);
-  assert.doesNotMatch(chatSource, /--deliver/);
+  assert.match(apiSource, /api\/oda\/oauth\/callback/);
+  assert.match(apiSource, /api\/oda\/search/);
+  assert.match(apiSource, /api\/oda\/cart/);
+  assert.doesNotMatch(apiSource, /api\/chat|chat_slot|chat_answer/);
+  assert.match(odaSource, /https:\/\/oda\.com\/mcp/);
+  assert.match(odaSource, /\.openclaw\/credentials\/oda-mcp\.json/);
+  assert.match(odaSource, /product_search/);
+  assert.match(odaSource, /likely_to_buy/);
+  assert.match(odaSource, /manipulate_cart/);
+  assert.match(odaSource, /clear_cart/);
+  assert.match(odaSource, /code_challenge_method/);
+  assert.match(odaSource, /Mcp-Session-Id/);
+  assert.doesNotMatch(odaSource, /OpenAI|openclaw agent|tools\/call.*payload/i);
   assert.match(apiSource, /NOT EXISTS \(SELECT 1 FROM family_chore_meta/);
   assert.match(apiSource, /weekly_achievement_cycles/);
   assert.match(apiSource, /weekly_surprise_levels/);

@@ -79,12 +79,12 @@ Evidence: parent API authorization tests and iPad browser interaction.
 ### AC-08 — Family information is glanceable
 
 - The same dashboard exposes today's school information, activities, weather,
-  transport and household status without entering the chatbot.
+  transport and household status without entering another add-on.
 - Each child has a separate weekly-plan surface for school goals, homework,
   reminders and things to bring; these are not presented as reward chores.
 - Missing/stale sources are labelled honestly; raw email, Spond payloads and
   internal errors are not shown to children.
-- A separate conversation entry remains available for complex questions.
+- A separate Oda entry remains available for household grocery preparation.
 
 Evidence: sanitized API contract tests and browser content assertions.
 
@@ -217,29 +217,27 @@ live deployed runtime script.
 Evidence: curated detail endpoint, repository test, rendered detail view and
 live child navigation.
 
-### AC-18 — Grounded, read-only family chat
+### AC-18 — Direct Oda grocery integration
 
-- `Spør FamilyBot` is a top-level tab next to Kanban and is available to every
-  valid local dashboard session without a parent PIN.
-- The local API runs `openai/gpt-5.6-sol` with medium reasoning through a
-  dedicated agent and a fresh isolated model session for each request.
-- The model receives only an identifier-free allowlist of the Portal's curated
-  facts plus the browser-visible bounded conversation. The UI discloses that
-  this material is sent to OpenAI.
-- Raw email, addresses, Telegram IDs, raw Spond data, credentials, filesystem
-  paths and configuration are excluded. Questions and answers are not stored in
-  SQLite or Portal logs; browser history is session-only and can be cleared.
-- The agent has no mutation, shell, filesystem, arbitrary URL fetch, browser,
-  message, memory, automation or plugin tools. Its only external tool is hosted
-  public web search. Input, concurrency, request rate and execution time are
-  bounded. Provider errors expose no provider output or prompt text.
-- The temporary harness answers family questions from supplied data, labels
-  uncertainty/staleness, permits general knowledge, uses live search for fresh
-  public facts, keeps private family facts out of search queries and treats
-  application content as data rather than instructions.
+- `Oda` is a top-level tab next to Kanban and is available to every valid local
+  dashboard session without a parent PIN.
+- The browser can connect the household account through Oda OAuth with state
+  and PKCE, search products, load `likely_to_buy`, read/edit/clear the cart and
+  open Oda's returned cart URL.
+- The Portal does not use an AI model for this workflow and exposes no generic
+  MCP proxy. Only the named Oda tools selected by the API adapter can run.
+- OAuth access and refresh tokens are stored outside Git in an owner-only local
+  file and are never returned to the browser or written to logs. Callback query
+  values are redacted.
+- Clearing the cart and disconnecting require explicit browser confirmation.
+  Oda checkout and payment are never available through the Portal; final review
+  and payment happen at oda.com.
+- An unavailable Oda service or expired grant produces an isolated
+  unavailable/reconnect state without breaking the dashboard, chores, Kanban or
+  Ukeplan.
 
-Evidence: chat adapter/API unit tests, dedicated agent configuration, rendered
-UI assertions, production health check and a bounded text-only model smoke test.
+Evidence: OAuth/MCP adapter unit tests, local-session API authorization tests,
+rendered UI assertions, credential permissions and production status route.
 
 ## Release measurement
 
@@ -249,7 +247,8 @@ criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
 These 18 criteria cover the currently deployed family dashboard, its Telegram
-child-chore add-on and week-plan detail view. A new user-visible add-on such as Smart Home must
+child-chore add-on, week-plan detail view and Oda grocery tab. A new
+user-visible add-on such as Smart Home must
 add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be
 declared supported; planned criteria live in the core repository's

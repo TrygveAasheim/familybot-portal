@@ -31,7 +31,7 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 from family_config import integration, member_profiles, portal_settings
-from familybot_chat import ChatUnavailable, ChatValidationError, answer as chat_answer
+from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable, OdaValidationError
 
 
 DEFAULT_WORKSPACE = Path(
@@ -1688,7 +1688,13 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         return self.server  # type: ignore[return-value]
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        print(f"[familybot-api] {self.address_string()} {fmt % args}")
+        message = fmt % args
+        message = re.sub(
+            r"/api/oda/oauth/callback\?[^ ]+",
+            "/api/oda/oauth/callback?[redacted]",
+            message,
+        )
+        print(f"[familybot-api] {self.address_string()} {message}")
 
     def trusted_origin(self) -> bool:
         origin = self.headers.get("Origin")
@@ -1713,6 +1719,36 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def respond_html(self, status: int, title: str, message: str, portal_origin: str | None = None) -> None:
+        safe_title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        safe_message = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        origin_json = json.dumps(portal_origin or "")
+        script = ""
+        if portal_origin:
+            script = (
+                "<script>"
+                f"if(window.opener)window.opener.postMessage('familybot-oda-connected',{origin_json});"
+                "window.setTimeout(()=>window.close(),900);"
+                "</script>"
+            )
+        body = (
+            "<!doctype html><html lang='nb'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            f"<title>{safe_title}</title></head>"
+            "<body style='font-family:system-ui;padding:3rem;background:#f4faf9;color:#00343e'>"
+            f"<h1>{safe_title}</h1><p>{safe_message}</p>{script}</body></html>"
+        ).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_OPTIONS(self) -> None:  # noqa: N802
         if not self.trusted_origin():
             self.respond(403, {"error": "Ukjent origin."})
@@ -1734,6 +1770,15 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             except sqlite3.Error:
                 self.respond(503, {"ok": False, "service": "familybot-dashboard-api"})
             return
+        if parsed.path == "/api/oda/oauth/callback":
+            try:
+                portal_origin = self.app.oda.finish_authorization(parse_qs(parsed.query))
+                self.respond_html(200, "Oda er koblet til", "Du kan lukke dette vinduet og gå tilbake til Familieportalen.", portal_origin)
+            except OdaAuthRequired as exc:
+                self.respond_html(400, "Oda ble ikke koblet til", str(exc))
+            except OdaUnavailable as exc:
+                self.respond_html(503, "Oda svarer ikke", str(exc))
+            return
         if not self.trusted_origin():
             self.respond(403, {"error": "Ukjent origin."})
             return
@@ -1753,6 +1798,25 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             except sqlite3.Error as exc:
                 self.log_error("dashboard database error: %s", type(exc).__name__)
                 self.respond(503, {"error": "Familiedata er midlertidig utilgjengelig."})
+            return
+        if parsed.path.startswith("/api/oda/"):
+            try:
+                if parsed.path == "/api/oda/status":
+                    self.respond(200, self.app.oda.status())
+                elif parsed.path == "/api/oda/cart":
+                    self.respond(200, {"cart": self.app.oda.cart()})
+                elif parsed.path == "/api/oda/suggestions":
+                    kind = (parse_qs(parsed.query).get("kind") or ["likely"])[0]
+                    self.respond(200, {"suggestions": self.app.oda.suggestions(kind)})
+                else:
+                    self.respond(404, {"error": "Ikke funnet."})
+            except OdaValidationError as exc:
+                self.respond(400, {"error": str(exc)})
+            except OdaAuthRequired as exc:
+                self.respond(401, {"error": str(exc), "reconnect": True})
+            except OdaUnavailable as exc:
+                self.log_error("oda read unavailable: %s", type(exc).__name__)
+                self.respond(503, {"error": str(exc)})
             return
         week_plan = re.fullmatch(r"/api/children/(\d+)/week-plans/(\d+)", parsed.path)
         if week_plan:
@@ -1801,18 +1865,6 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             return
         path = urlparse(self.path).path
         try:
-            if method == "POST" and path == "/api/chat":
-                if not self.app.chat_allowed(self.client_address[0]):
-                    self.respond(429, {"error": "Chatten er opptatt. Vent litt og prøv igjen."})
-                    return
-                if not self.app.chat_slot.acquire(blocking=False):
-                    self.respond(429, {"error": "FamilyBot tenker allerede på et annet spørsmål."})
-                    return
-                try:
-                    self.respond(200, chat_answer(self.app.repository, self.read_payload()))
-                finally:
-                    self.app.chat_slot.release()
-                return
             if method == "POST" and path == "/api/parent/session":
                 if not self.app.parent_login_allowed(self.client_address[0]):
                     self.respond(429, {"error": "For mange forsøk. Vent fem minutter."})
@@ -1824,6 +1876,24 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 else:
                     self.app.record_parent_login(self.client_address[0], succeeded=False)
                     self.respond(403, {"error": "Feil foreldrekode."})
+                return
+            if path.startswith("/api/oda/"):
+                if method == "POST" and path == "/api/oda/connect":
+                    origin = self.headers.get("Origin", "")
+                    self.respond(200, {"authorization_url": self.app.oda.begin_authorization(origin)})
+                elif method == "POST" and path == "/api/oda/search":
+                    payload = self.read_payload()
+                    self.respond(200, {"search": self.app.oda.search_products(payload.get("query", ""), payload.get("page", 1))})
+                elif method == "POST" and path == "/api/oda/cart":
+                    payload = self.read_payload()
+                    self.respond(200, {"cart": self.app.oda.change_product(payload.get("product_id"), payload.get("quantity"))})
+                elif method == "DELETE" and path == "/api/oda/cart":
+                    self.respond(200, {"cart": self.app.oda.clear_cart()})
+                elif method == "DELETE" and path == "/api/oda/connection":
+                    self.app.oda.disconnect()
+                    self.respond(200, {"connected": False})
+                else:
+                    self.respond(404, {"error": "Ikke funnet."})
                 return
             complete = re.fullmatch(r"/api/chores/(\d+)/complete", path)
             if method == "POST" and complete:
@@ -1915,16 +1985,18 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 self.respond(405, {"error": "Metoden støttes ikke."})
         except ValidationError as exc:
             self.respond(400, {"error": str(exc)})
-        except ChatValidationError as exc:
+        except OdaValidationError as exc:
             self.respond(400, {"error": str(exc)})
-        except ChatUnavailable as exc:
-            self.log_error("chat inference unavailable: %s", type(exc).__name__)
+        except OdaAuthRequired as exc:
+            self.respond(401, {"error": str(exc), "reconnect": True})
+        except OdaUnavailable as exc:
+            self.log_error("oda mutation unavailable: %s", type(exc).__name__)
             self.respond(503, {"error": str(exc)})
         except KeyError:
             self.respond(404, {"error": "Gjøremålet finnes ikke eller har allerede denne statusen."})
         except sqlite3.Error as exc:
             self.log_error("database error on %s: %s", path, type(exc).__name__)
-            self.respond(503, {"error": "Familiedata er midlertidig utilgjengelig." if path == "/api/chat" else "Endringen kunne ikke lagres akkurat nå."})
+            self.respond(503, {"error": "Endringen kunne ikke lagres akkurat nå."})
 
     def do_POST(self) -> None:  # noqa: N802
         self.mutate("POST")
@@ -1938,7 +2010,7 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
 
 class FamilyApiServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], repository: FamilyRepository, parent_pin: str,
-                 allowed_origins: set[str] | None = None):
+                 allowed_origins: set[str] | None = None, oda_client: OdaMcpClient | None = None):
         super().__init__(address, FamilyApiHandler)
         self.repository = repository
         self.session_token = secrets.token_urlsafe(32)
@@ -1947,23 +2019,17 @@ class FamilyApiServer(ThreadingHTTPServer):
         self.allowed_origins = allowed_origins or configured_origins(repository.workspace)
         self._parent_failures: dict[str, list[float]] = {}
         self._parent_failure_lock = threading.Lock()
-        self.chat_slot = threading.BoundedSemaphore(1)
-        self._chat_requests: dict[str, list[float]] = {}
-        self._chat_request_lock = threading.Lock()
+        settings = portal_settings(repository.workspace)
+        callback_host = str(settings.get("hostname") or "familie.local")
+        callback_port = int(settings.get("api_port") or 8788)
+        callback_url = os.environ.get(
+            "FAMILYBOT_ODA_CALLBACK_URL",
+            f"http://{callback_host}:{callback_port}/api/oda/oauth/callback",
+        )
+        self.oda = oda_client or OdaMcpClient(callback_url)
         with repository.connect() as connection:
             parent = connection.execute("SELECT id FROM family_members WHERE role='parent' ORDER BY id LIMIT 1").fetchone()
         self.parent_member_id = int(parent[0]) if parent else 1
-
-    def chat_allowed(self, client: str) -> bool:
-        cutoff = time.monotonic() - 300
-        with self._chat_request_lock:
-            recent = [value for value in self._chat_requests.get(client, []) if value >= cutoff]
-            if len(recent) >= 8:
-                self._chat_requests[client] = recent
-                return False
-            recent.append(time.monotonic())
-            self._chat_requests[client] = recent
-            return True
 
     def parent_login_allowed(self, client: str) -> bool:
         cutoff = time.monotonic() - 300

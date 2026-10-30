@@ -26,6 +26,47 @@ CREATE TABLE school_calendar(id INTEGER PRIMARY KEY,year_label TEXT,event_type T
 """
 
 
+class FakeOdaClient:
+    def __init__(self):
+        self.connected = True
+        self.calls = []
+
+    def status(self):
+        return {"connected": self.connected, "client_registered": True, "server_url": "https://oda.com/mcp"}
+
+    def begin_authorization(self, origin):
+        self.calls.append(("connect", origin))
+        return "https://oda.example/authorize"
+
+    def finish_authorization(self, query):
+        self.calls.append(("callback", query))
+        return "http://localhost:3000"
+
+    def search_products(self, query, page=1):
+        self.calls.append(("search", query, page))
+        return {"result": [{"query": query, "hasMore": False, "products": []}]}
+
+    def suggestions(self, kind):
+        self.calls.append(("suggestions", kind))
+        return {"result": []}
+
+    def cart(self):
+        self.calls.append(("cart",))
+        return {"groups": [], "productQuantityCount": 0, "totalGrossAmount": "0 kr", "url": "https://oda.com/"}
+
+    def change_product(self, product_id, quantity):
+        self.calls.append(("change", product_id, quantity))
+        return self.cart()
+
+    def clear_cart(self):
+        self.calls.append(("clear",))
+        return self.cart()
+
+    def disconnect(self):
+        self.calls.append(("disconnect",))
+        self.connected = False
+
+
 class RepositoryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -478,38 +519,59 @@ class RepositoryTests(unittest.TestCase):
         finally:
             server.server_close()
 
-    def test_chat_is_available_without_parent_token_but_requires_local_session(self):
-        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+    def test_oda_is_available_without_parent_token_but_requires_local_session(self):
+        oda = FakeOdaClient()
+        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456", {"http://localhost:3000"}, oda)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
             port = server.server_address[1]
-            headers = {"Origin": "http://localhost:3000", "Content-Type": "application/json"}
+            headers = {"Origin": "http://localhost:3000"}
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
-            connection.request("POST", "/api/chat", json.dumps({"question": "Hei"}), headers)
+            connection.request("GET", "/api/oda/status", headers=headers)
             self.assertEqual(connection.getresponse().status, 403)
             connection.close()
 
             headers["X-FamilyBot-Local-Token"] = server.session_token
-            with patch("familybot_api.chat_answer", return_value={"answer": "Hei", "model": "test", "reasoning": "medium"}):
-                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
-                connection.request("POST", "/api/chat", json.dumps({"question": "Hei"}), headers)
-                response = connection.getresponse()
-                self.assertEqual(response.status, 200)
-                self.assertEqual(json.loads(response.read())["answer"], "Hei")
-                connection.close()
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            connection.request("GET", "/api/oda/status", headers=headers)
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertTrue(json.loads(response.read())["connected"])
+            connection.close()
+
+            headers["Content-Type"] = "application/json"
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            connection.request("POST", "/api/oda/search", json.dumps({"query": "melk"}), headers)
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(json.loads(response.read())["search"]["result"][0]["query"], "melk")
+            self.assertIn(("search", "melk", 1), oda.calls)
+            connection.close()
         finally:
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)
 
-    def test_chat_rate_limit_is_bounded(self):
-        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+    def test_oda_oauth_callback_uses_state_instead_of_portal_headers(self):
+        oda = FakeOdaClient()
+        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456", {"http://localhost:3000"}, oda)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
         try:
-            self.assertTrue(all(server.chat_allowed("192.168.1.30") for _ in range(8)))
-            self.assertFalse(server.chat_allowed("192.168.1.30"))
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request("GET", "/api/oda/oauth/callback?code=secret-code&state=random-state")
+            response = connection.getresponse()
+            body = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn("Oda er koblet til", body)
+            self.assertNotIn("secret-code", body)
+            self.assertIn(("callback", {"code": ["secret-code"], "state": ["random-state"]}), oda.calls)
+            connection.close()
         finally:
+            server.shutdown()
             server.server_close()
+            thread.join(timeout=2)
 
     def test_dashboard_migration_is_idempotent(self):
         first = migrate(self.db, seed=True)

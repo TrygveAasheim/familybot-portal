@@ -79,12 +79,12 @@ Evidence: parent API authorization tests and iPad browser interaction.
 ### AC-08 — Family information is glanceable
 
 - The same dashboard exposes today's school information, activities, weather,
-  transport and household status without entering the chatbot.
+  transport and household status without entering another add-on.
 - Each child has a separate weekly-plan surface for school goals, homework,
   reminders and things to bring; these are not presented as reward chores.
 - Missing/stale sources are labelled honestly; raw email, Spond payloads and
   internal errors are not shown to children.
-- A separate conversation entry remains available for complex questions.
+- A separate Oda entry remains available for household grocery preparation.
 
 Evidence: sanitized API contract tests and browser content assertions.
 
@@ -190,8 +190,16 @@ live deployed runtime script.
 
 ### AC-17 — Full child week-plan detail
 
-- Each child page keeps its compact per-day week-plan summary and offers a
-  clear action to open the full free-text plan.
+- Monday through Friday select the current ISO week's plan for each child;
+  Saturday and Sunday select the coming week's plan. A future plan arriving
+  early cannot displace the current school-week plan. The previous-week label
+  appears only for an actual fallback, including across ISO year boundaries.
+- Core-resolved child/week metadata (including explicit parent subject
+  overrides of stale PDF headings) is authoritative for the compact entry and
+  detail view; Portal does not infer a different week from PDF text.
+- Each child page keeps a compact Ukeplan entry with the week number and one
+  clear action to open the dedicated plan page; it does not render the full
+  summary inline.
 - The detail view is scoped to that child’s plan, preserves structured day
   details, and provides a “Tilbake” action to return to the child page.
 - The full plan text is rendered as readable structured content: original line
@@ -199,7 +207,8 @@ live deployed runtime script.
   weekday labels become headings instead of one large text blob.
 - When a validated interpretation is available, the detail view groups
   source-backed items under weekdays and categories; if interpretation is
-  unavailable, it falls back to the deterministic structured text.
+  unavailable, the detail view falls back to deterministic structured text/day
+  facts. The child overview remains a compact link in either case.
 - The detail route excludes source email identifiers, attachments and raw
   integration payloads. When a PDF is present, plan text comes only from the
   parsed PDF context; email headers, addresses and body text are not used as a
@@ -208,15 +217,38 @@ live deployed runtime script.
 Evidence: curated detail endpoint, repository test, rendered detail view and
 live child navigation.
 
+### AC-18 — Direct Oda grocery integration
+
+- `Oda` is a top-level tab next to Kanban and is available to every valid local
+  dashboard session without a parent PIN.
+- The browser can connect the household account through Oda OAuth with state
+  and PKCE, search products, load `likely_to_buy`, read/edit/clear the cart and
+  open Oda's returned cart URL.
+- The Portal does not use an AI model for this workflow and exposes no generic
+  MCP proxy. Only the named Oda tools selected by the API adapter can run.
+- OAuth access and refresh tokens are stored outside Git in an owner-only local
+  file and are never returned to the browser or written to logs. Callback query
+  values are redacted.
+- Clearing the cart and disconnecting require explicit browser confirmation.
+  Oda checkout and payment are never available through the Portal; final review
+  and payment happen at oda.com.
+- An unavailable Oda service or expired grant produces an isolated
+  unavailable/reconnect state without breaking the dashboard, chores, Kanban or
+  Ukeplan.
+
+Evidence: OAuth/MCP adapter unit tests, local-session API authorization tests,
+rendered UI assertions, credential permissions and production status route.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **17/17 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **18/18 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
-These 17 criteria cover the currently deployed family dashboard, its Telegram
-child-chore add-on and week-plan detail view. A new user-visible add-on such as Smart Home must
+These 18 criteria cover the currently deployed family dashboard, its Telegram
+child-chore add-on, week-plan detail view and Oda grocery tab. A new
+user-visible add-on such as Smart Home must
 add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be
 declared supported; planned criteria live in the core repository's

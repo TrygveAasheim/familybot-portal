@@ -9,7 +9,9 @@ always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
 mode manages chores, goals, approvals, weekly achievement surprises and the
-family Kanban board.
+family Kanban board. The adjacent `Oda` tab lets everyone on the trusted home
+dashboard search for groceries and prepare the household cart through Oda MCP;
+review, checkout and payment remain on Oda.
 
 > **Built for local family life:** the UI and chores model are reusable, while
 > the included adapters can be configured for local school, activity, weather
@@ -36,10 +38,15 @@ A coding agent or session without prior context starts at
 2. [Local data boundary](docs/DATA_BOUNDARY.md)
 3. [iPad acceptance criteria](docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md)
 4. [Supported/planned feature map](docs/FEATURE_MAP.md)
-5. [New-session verification](docs/NEW_SESSION_VERIFICATION.md)
+5. [Change protocol](docs/CHANGE_PROTOCOL.md)
+6. [New-session verification](docs/NEW_SESSION_VERIFICATION.md)
 
 The sibling `familybot-core` repository owns the canonical system architecture,
 configuration, reliability invariants and Smart Home specification.
+Its shared change-record standard is the basis for all Core and Portal bug
+fixes, features and improvements; this repository adds the Portal-specific
+acceptance and data-boundary checks in
+[`docs/CHANGE_PROTOCOL.md`](docs/CHANGE_PROTOCOL.md).
 
 ## Dependencies and repository layout
 
@@ -61,6 +68,8 @@ Runtime dependencies are:
 - Node.js/npm for the portal build and Python 3 for the local API/service;
 - macOS `launchd` for the local service; OpenClaw is optional for conversational
   and Telegram features, but is part of the normal workspace convention.
+- an ordinary Oda account for the optional grocery tab; the hosted
+  `https://oda.com/mcp` service uses OAuth and needs no API key.
 
 Set up and deploy Core first, then install and deploy Portal. Keep both
 repositories on compatible `dev` commits and run both repositories' verification
@@ -134,6 +143,7 @@ Clone `familybot-core` and `familybot-portal` as sibling directories, then:
 
 ```bash
 npm ci
+npm run security:audit
 npm run docs:check
 npm run preflight
 npm run dev:family
@@ -145,6 +155,21 @@ npm test
 The API reads curated columns only: no raw email bodies, sender addresses,
 Telegram identifiers, raw Spond JSON, credentials or filesystem paths are
 returned to the browser.
+
+The optional Oda tab talks directly to Oda's hosted MCP server; it does not use
+an AI model. Any valid local dashboard session can search, load personal
+suggestions and edit the shared Oda cart. OAuth tokens stay in the owner-only
+`$HOME/.openclaw/credentials/oda-mcp.json` file and never enter browser
+responses or Git. Checkout and payment are intentionally handed off to Oda.
+See [Oda grocery integration](docs/ODA_GROCERIES.md).
+
+For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;
+Core respects explicit parent subject metadata over stale PDF headings. Portal
+shows a compact child-page link and the accepted interpretation on the full-plan
+page. It selects the current week Monday–Friday and the coming week on weekends,
+using the previous week only when the target plan is missing. See
+Core's `docs/UKEPLAN_INTERPRETATION.md` when both repositories are checked out
+as siblings.
 
 ## Local deployment
 

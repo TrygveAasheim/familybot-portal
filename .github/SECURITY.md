@@ -13,3 +13,7 @@ details.
 
 Security-sensitive changes must be reviewed and approved by `@TrygveAasheim`
 before they are promoted to `main`.
+
+The `dev` and pull-request checks run `npm audit` at the low threshold. New
+known dependency advisories therefore fail the security gate instead of being
+left only as dashboard alerts.

@@ -170,7 +170,19 @@ def main() -> None:
             detail_payload=json.loads(detail_raw)
             detail_text=detail_payload.get("week_plan",{}).get("full_text","")
             detail_ok=detail_status==200 and detail_payload.get("week_plan",{}).get("member")==plan["member"] and bool(detail_text) and not any(marker in detail_text for marker in ("@", "From:", "To:", "Subject:", "[Attachment:"))
-    record("AC-17",detail_source and detail_api and detail_ok,"Child week-plan summary remains on the child page and full text opens through the scoped detail route",started)
+    record("AC-17",detail_source and detail_api and detail_ok,"Child page keeps a compact Ukeplan link and full interpreted text opens through the scoped detail route",started)
+
+    started=time.monotonic()
+    unauthenticated_oda,_=request(API_PORT,"GET","/api/oda/status")
+    oda_status_code,oda_status_raw=request(API_PORT,"GET","/api/oda/status",{"X-FamilyBot-Local-Token":local})
+    oda_status=json.loads(oda_status_raw) if oda_status_code==200 else {}
+    oda_source=(ROOT/"local_api/oda_mcp.py").read_text()
+    oda_ui=all(text in source for text in (">Oda</button>","Hva trenger dere?","Dette kjøper dere ofte","Se gjennom og betal hos Oda","kan ikke betale eller fullføre bestillingen","/api/oda/search"))
+    oda_api=all(text in api_source for text in ("/api/oda/oauth/callback","/api/oda/status","/api/oda/search","/api/oda/cart","OdaMcpClient")) and "/api/chat" not in api_source
+    oauth_boundary=all(text in oda_source for text in ("https://oda.com/mcp","code_challenge_method","Mcp-Session-Id",".openclaw/credentials/oda-mcp.json","product_search","likely_to_buy","manipulate_cart","clear_cart"))
+    credential_path=Path.home()/".openclaw/credentials/oda-mcp.json"
+    credentials_safe=not credential_path.exists() or credential_path.stat().st_mode & 0o777==0o600
+    record("AC-18",unauthenticated_oda==403 and oda_status_code==200 and oda_ui and oda_api and oauth_boundary and credentials_safe,f"Oda unauthenticated={unauthenticated_oda}; status={oda_status_code}, connected={oda_status.get('connected')}; direct OAuth/MCP allowlist and local credential mode={credentials_safe}",started)
 
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}

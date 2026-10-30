@@ -20,10 +20,14 @@ a general-purpose OpenClaw administration surface.
 
 `GET /api/dashboard` returns selected fields for family members, upcoming
 events, Spond events, activities, the active parent Kanban task list, child chores, compact current week plans, school dates,
-weekly achievement progress, configured surprise levels, redemption history,
-source freshness and scheduled-job state. If the upcoming Monday's plan has not
-arrived yet, the most recent prior week's plan is retained as a one-week
-fallback so the child screens do not go blank between school emails. It does not return raw week-plan text,
+  weekly achievement progress, configured surprise levels, redemption history,
+  source freshness and scheduled-job state. Current plans contain only compact
+  identity, week and fallback fields; full plan interpretation is fetched only
+  by the scoped detail route. Monday through Friday use the current ISO week;
+  Saturday and Sunday use the coming Monday's ISO week. If that plan has not arrived yet,
+  the most recent prior week's plan is retained as a one-week fallback so the
+  child screens do not go blank between school emails. It does not return raw
+  week-plan text,
 email sender addresses, Telegram IDs, Spond `raw_json`, message bodies, secrets
 or attachments.
 
@@ -37,6 +41,26 @@ the parsed PDF context only; the email body is not a fallback.
 The bridge may inspect unlinked week-plan email summaries locally to identify a
 likely grade. Only the message ID, subject, timestamps, status and inferred child
 are returned to the browser.
+
+## Oda account boundary
+
+The Oda tab calls only `https://oda.com/mcp` through the server-side
+`OdaMcpClient`. There is no browser-visible bearer token, generic MCP endpoint,
+arbitrary tool-name input or AI model in this path. OAuth uses dynamic client
+registration, state and PKCE; tokens are written with mode `0600` beneath the
+owner-only `$HOME/.openclaw/credentials` directory. Callback query values are
+redacted from API request logs.
+
+Every valid local dashboard session may read Oda suggestions and the household
+cart and may add/remove products or clear that cart. This is an explicit trusted
+household policy: the Oda tab is not parent-PIN gated. The API allowlist is
+limited to product search, `likely_to_buy`, cart read/change/clear and OAuth
+connect/disconnect. It does not expose order history, saved addresses or a
+generic MCP proxy. Oda checkout and payment cannot be called through MCP; the
+browser receives only Oda's cart URL for final review and payment at oda.com.
+
+An Oda outage or expired OAuth grant returns an isolated unavailable/reconnect
+state and must not affect `/api/dashboard`, chores, Ukeplan or Kanban.
 
 ## Write allowlist
 
@@ -54,6 +78,10 @@ Writes are limited to the dashboard's chores and rewards model:
 - configure surprise levels for full-block achievements;
 - reset a selected child's full-block achievement counter after a surprise is taken.
 - create a child chore through the confirmed Telegram interview bridge.
+
+The separate Oda allowlist permits household cart changes and local OAuth
+connect/disconnect for every valid LAN dashboard session. These operations
+change only the Oda account; they never write FamilyBot SQLite.
 
 The bridge creates a consistent SQLite backup before the first mutation in each
 session and appends a local audit record. Resetting a child archives/hides active

@@ -5,8 +5,13 @@ import test from "node:test";
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } }, { waitUntil() {}, passThroughOnException() {} });
+  const { default: handler } = await import(workerUrl.href);
+  const request = new Request("http://localhost/", { headers: { accept: "text/html" } });
+  const environment = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
+  const context = { waitUntil() {}, passThroughOnException() {} };
+  return typeof handler === "function"
+    ? handler(request, environment, context)
+    : handler.fetch(request, environment, context);
 }
 
 test("server-renders the iPad family dashboard shell", async () => {
@@ -20,10 +25,11 @@ test("server-renders the iPad family dashboard shell", async () => {
 });
 
 test("source keeps the data boundary and functional surfaces explicit", async () => {
-  const [page, consoleSource, apiSource, styles] = await Promise.all([
+  const [page, consoleSource, apiSource, odaSource, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/FamilyConsole.tsx", import.meta.url), "utf8"),
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/oda_mcp.py", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(page, /codex-preview/);
@@ -68,10 +74,19 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Done/);
   assert.match(consoleSource, /api\/kanban/);
   assert.match(consoleSource, /Kanban er skrivebeskyttet/);
+  assert.match(consoleSource, />Oda<\/button>/);
+  assert.match(consoleSource, /Hva trenger dere\?/);
+  assert.match(consoleSource, /Dette kjøper dere ofte/);
+  assert.match(consoleSource, /Se gjennom og betal hos Oda/);
+  assert.match(consoleSource, /kan ikke betale eller fullføre bestillingen/);
+  assert.match(consoleSource, /api\/oda\/search/);
+  assert.doesNotMatch(consoleSource, /Spør FamilyBot|api\/chat|OpenAI/);
   assert.match(consoleSource, /function TransportCountdown/);
-  assert.match(consoleSource, /Familiebot fungerer/);
-  assert.match(consoleSource, /Familiebot har stoppet/);
-  assert.match(consoleSource, /Familiebot fungerer med avvik/);
+  assert.match(consoleSource, /dashboardClockFormat/);
+  assert.match(consoleSource, /second:"2-digit"/);
+  assert.match(consoleSource, /Klokken er nå:/);
+  assert.match(consoleSource, /Synket fra FamilyBot/);
+  assert.match(consoleSource, /hero-clock/);
   assert.doesNotMatch(consoleSource, /<p className="eyebrow">Hjemme<\/p><h2>FamilyBot<\/h2>/);
   assert.match(consoleSource, /God morgen/);
   assert.match(consoleSource, /God dag/);
@@ -101,6 +116,19 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /reset_child/);
   assert.match(apiSource, /LANES = \{"todo", "inprogress", "onhold", "done"\}/);
   assert.match(apiSource, /api\/kanban/);
+  assert.match(apiSource, /api\/oda\/oauth\/callback/);
+  assert.match(apiSource, /api\/oda\/search/);
+  assert.match(apiSource, /api\/oda\/cart/);
+  assert.doesNotMatch(apiSource, /api\/chat|chat_slot|chat_answer/);
+  assert.match(odaSource, /https:\/\/oda\.com\/mcp/);
+  assert.match(odaSource, /\.openclaw\/credentials\/oda-mcp\.json/);
+  assert.match(odaSource, /product_search/);
+  assert.match(odaSource, /likely_to_buy/);
+  assert.match(odaSource, /manipulate_cart/);
+  assert.match(odaSource, /clear_cart/);
+  assert.match(odaSource, /code_challenge_method/);
+  assert.match(odaSource, /Mcp-Session-Id/);
+  assert.doesNotMatch(odaSource, /OpenAI|openclaw agent|tools\/call.*payload/i);
   assert.match(apiSource, /NOT EXISTS \(SELECT 1 FROM family_chore_meta/);
   assert.match(apiSource, /weekly_achievement_cycles/);
   assert.match(apiSource, /weekly_surprise_levels/);

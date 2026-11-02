@@ -16,7 +16,7 @@
     "start:lan": "vinext start --hostname 0.0.0.0 --port 3000",
     "start:service": "python3 local_service/run_service.py",
     "preflight": "bash scripts/preflight.sh",
-    "security:audit": "npm audit --audit-level=low",
+    "security:audit": "node scripts/audit-dependencies.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run security:audit && python3 -m unittest discover -s local_api -p 'test_*.py' && npm run docs:check && npm run typecheck && npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"

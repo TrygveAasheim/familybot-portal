@@ -218,11 +218,11 @@ def main() -> None:
         and account_menu_status in {200,401}
         and not any(secret in account_status_raw.decode("utf-8",errors="replace") for secret in ("access_token","refresh_token","email"))
     ) if account_enabled else account_status_code==404
-    account_ui=all(text in source for text in ("features.hellofresh_account","første gangs bruk","Send innloggingslenke","Godkjenn lenken her","/api/hellofresh/auth/start","/api/hellofresh/auth/complete","/api/hellofresh/account/menu","Koble fra")) and "window.open(" not in source
-    account_boundary=all(text in account_source for text in ("/gw/v1/passwordless/start","/gw/v1/passwordless/magic-link/finish","/gw/refresh",".openclaw/credentials/hellofresh-no.json","0o600","read_only")) and not any(text in account_source for text in ("HELLOFRESH_PASSWORD","playwright","selenium","select_meal","change_delivery","checkout"))
+    account_ui=all(text in source for text in ("features.hellofresh_account","første gangs bruk","Logg inn hos HelloFresh","current-password","private hjemmenett","/api/hellofresh/auth/login","/api/hellofresh/account/menu","Koble fra")) and not any(text in source for text in ("window.open(","Send innloggingslenke","Godkjenn lenken her","/api/hellofresh/auth/start","/api/hellofresh/auth/complete"))
+    account_boundary=all(text in account_source for text in ("/gw/login","/gw/refresh",".openclaw/credentials/hellofresh-no.json","0o600","read_only")) and not any(text in account_source for text in ("passwordless","magic-link","HELLOFRESH_PASSWORD","playwright","selenium","select_meal","change_delivery","checkout"))
     account_credentials=Path.home()/".openclaw/credentials/hellofresh-no.json"
     account_credentials_safe=not account_credentials.exists() or account_credentials.stat().st_mode & 0o777==0o600
-    record("AC-20",account_ui and account_boundary and account_live and account_credentials_safe,f"HelloFresh account flag={account_enabled}; status={account_status_code}; menu={account_menu_status}; popup-free passwordless read-only account boundary and credential mode={account_credentials_safe}",started)
+    record("AC-20",account_ui and account_boundary and account_live and account_credentials_safe,f"HelloFresh account flag={account_enabled}; status={account_status_code}; menu={account_menu_status}; transient password, persistent token-only read-only account boundary and credential mode={account_credentials_safe}",started)
 
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}

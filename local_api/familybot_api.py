@@ -1698,7 +1698,7 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         message = fmt % args
         message = re.sub(
-            r"/api/(?:oda/oauth|hellofresh/auth)/callback\?[^ ]+",
+            r"/api/oda/oauth/callback\?[^ ]+",
             lambda match: match.group(0).split("?", 1)[0] + "?[redacted]",
             message,
         )
@@ -1806,25 +1806,6 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 self.respond_html(400, "Oda ble ikke koblet til", str(exc))
             except OdaUnavailable as exc:
                 self.respond_html(503, "Oda svarer ikke", str(exc))
-            return
-        if parsed.path == "/api/hellofresh/auth/callback":
-            if not self.app.features["hellofresh_account"]:
-                self.respond_html(404, "HelloFresh er ikke aktivert", "Kontotilkoblingen er slått av.")
-                return
-            try:
-                portal_origin = self.app.hellofresh_account.finish_callback(parse_qs(parsed.query))
-                self.respond_html(
-                    200,
-                    "HelloFresh er koblet til",
-                    "Du blir sendt tilbake til Familieportalen.",
-                    portal_origin,
-                    return_path="/?hellofresh=1&hellofresh_connected=1",
-                    popup_return=False,
-                )
-            except HelloFreshAccountAuthRequired as exc:
-                self.respond_html(400, "HelloFresh ble ikke koblet til", str(exc))
-            except HelloFreshAccountUnavailable as exc:
-                self.respond_html(503, "HelloFresh svarer ikke", str(exc))
             return
         if not self.trusted_origin():
             self.respond(403, {"error": "Ukjent origin."})
@@ -1988,19 +1969,24 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 if not self.app.features["hellofresh"] or not self.app.features["hellofresh_account"]:
                     self.respond(404, {"error": "HelloFresh-kontotilkoblingen er ikke aktivert."})
                     return
-                if method == "POST" and path == "/api/hellofresh/auth/start":
+                if method == "POST" and path == "/api/hellofresh/auth/login":
                     if not self.app.hellofresh_login_allowed(self.client_address[0]):
                         self.respond(429, {"error": "For mange innloggingsforsøk. Vent fem minutter."})
                         return
-                    self.app.record_hellofresh_login(self.client_address[0])
                     payload = self.read_payload()
-                    result = self.app.hellofresh_account.begin_login(
-                        payload.get("email"), self.headers.get("Origin", "")
+                    try:
+                        result = self.app.hellofresh_account.login(
+                            payload.get("email"), payload.get("password")
+                        )
+                    except (HelloFreshAccountValidation, HelloFreshAccountAuthRequired):
+                        self.app.record_hellofresh_login(
+                            self.client_address[0], succeeded=False
+                        )
+                        raise
+                    self.app.record_hellofresh_login(
+                        self.client_address[0], succeeded=True
                     )
                     self.respond(200, result)
-                elif method == "POST" and path == "/api/hellofresh/auth/complete":
-                    self.app.hellofresh_account.finish_magic_link(self.read_payload().get("url"))
-                    self.respond(200, self.app.hellofresh_account.status())
                 elif method == "DELETE" and path == "/api/hellofresh/connection":
                     self.app.hellofresh_account.disconnect()
                     self.respond(200, {"connected": False})
@@ -2175,13 +2161,7 @@ class FamilyApiServer(ThreadingHTTPServer):
         )
         self.oda = oda_client or OdaMcpClient(callback_url)
         self.hellofresh = hellofresh_client or HelloFreshNorwayClient()
-        hellofresh_callback_url = os.environ.get(
-            "FAMILYBOT_HELLOFRESH_CALLBACK_URL",
-            f"http://{callback_host}:{callback_port}/api/hellofresh/auth/callback",
-        )
-        self.hellofresh_account = hellofresh_account_client or HelloFreshAccountClient(
-            hellofresh_callback_url
-        )
+        self.hellofresh_account = hellofresh_account_client or HelloFreshAccountClient()
         self._hellofresh_login_attempts: dict[str, list[float]] = {}
         self._hellofresh_login_lock = threading.Lock()
         self.dinner_planner = dinner_planner or recommend_dinner
@@ -2215,9 +2195,12 @@ class FamilyApiServer(ThreadingHTTPServer):
             self._hellofresh_login_attempts[client] = recent
             return len(recent) < 5
 
-    def record_hellofresh_login(self, client: str) -> None:
+    def record_hellofresh_login(self, client: str, *, succeeded: bool) -> None:
         with self._hellofresh_login_lock:
-            self._hellofresh_login_attempts.setdefault(client, []).append(time.monotonic())
+            if succeeded:
+                self._hellofresh_login_attempts.pop(client, None)
+            else:
+                self._hellofresh_login_attempts.setdefault(client, []).append(time.monotonic())
 
 
 def main() -> None:

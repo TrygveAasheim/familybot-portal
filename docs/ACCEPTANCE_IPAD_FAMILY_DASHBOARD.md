@@ -275,18 +275,23 @@ Evidence: adapter normalization, host rejection, secret-exclusion, stale-cache
 and route authorization unit tests; rendered UI assertions; live flag-off or
 flag-on acceptance probe.
 
-### AC-20 — Popup-free persistent HelloFresh account test
+### AC-20 — Transient-login persistent HelloFresh account test
 
 - `portal.features.hellofresh_account` defaults to `false` and requires the
   parent `hellofresh` flag. When enabled, HelloFresh occupies Oda's former
   top-level navigation position; the Oda implementation remains available for
   rollback but is not shown beside it.
-- First use starts HelloFresh passwordless email login inside the Portal. It
-  never opens a popup. A same-window callback and a paste-the-full-link fallback
-  both work, and polling detects completion performed on another device.
+- First use accepts the household's HelloFresh email and password inside the
+  Portal and exchanges them only with the fixed Norwegian login endpoint. It
+  never opens a popup or sends a password-creation email. The password is never
+  stored, logged, returned to the browser, placed in model context or committed.
 - Access and refresh credentials are server-side only, stored outside Git in an
   owner-only local file, survive service restarts and are refreshed before use.
-  Callback query values and credentials never appear in logs or browser JSON.
+  Credentials never appear in logs or browser JSON. Five failed attempts per
+  client in five minutes trigger a temporary limit; success clears the failures.
+- The first-use screen states that the Portal runs over the trusted private LAN.
+  Account login must not be enabled on public or untrusted networks without
+  adding local TLS.
 - The connected test surface exposes only a curated Norwegian weekly menu and
   selected quantities. It cannot select meals, skip or change deliveries,
   modify subscriptions, addresses or payments, or place an order.
@@ -294,9 +299,10 @@ flag-on acceptance probe.
   failures remain isolated from the family dashboard and show a reconnect or
   unavailable state.
 
-Evidence: passwordless correlation, redirect allowlist, refresh persistence,
-file-mode and curated-menu unit tests; local-session API authorization; popup
-exclusion and rendered touch UI assertions; live disconnected/connected probe.
+Evidence: transient-password non-persistence, provider-rejection, refresh
+persistence, file-mode and curated-menu unit tests; local-session API
+authorization and response secret exclusion; popup/email-link exclusion and
+rendered touch UI assertions; live disconnected/connected probe.
 
 ## Release measurement
 

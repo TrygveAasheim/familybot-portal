@@ -10,6 +10,7 @@ from hellofresh_account import (
     HelloFreshAccountAuthRequired,
     HelloFreshAccountClient,
     HelloFreshAccountValidation,
+    _HttpError,
 )
 
 
@@ -21,76 +22,47 @@ class HelloFreshAccountTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.credentials = Path(self.temp.name) / "credentials/hellofresh-no.json"
-        self.client = HelloFreshAccountClient(
-            "http://familie.local:8788/api/hellofresh/auth/callback",
-            self.credentials,
-        )
+        self.client = HelloFreshAccountClient(self.credentials)
 
     def tearDown(self):
         self.temp.cleanup()
 
-    def begin(self):
-        with patch.object(self.client, "_send_magic_link") as send:
-            result = self.client.begin_login("Family@Example.no", "http://familie.local:3000")
-        self.assertTrue(result["sent"])
-        self.assertTrue(result["automatic_return"])
-        self.assertEqual(send.call_count, 1)
-        return json.loads(self.credentials.read_text(encoding="utf-8"))["pending"]
-
-    def test_begin_login_persists_only_pending_state_with_owner_permissions(self):
-        self.client._save({"access_token": ACCESS, "refresh_token": REFRESH, "expires_at": time.time() + 300})
-        pending = self.begin()
-        self.assertEqual(pending["email"], "family@example.no")
-        self.assertEqual(stat.S_IMODE(self.credentials.stat().st_mode), 0o600)
-        saved = json.loads(self.credentials.read_text(encoding="utf-8"))
-        self.assertNotIn("access_token", saved)
-        self.assertNotIn("refresh_token", saved)
-        self.assertEqual(
-            self.client.status(),
-            {
-                "connected": False,
-                "pending": True,
-                "automatic_return": True,
-                "credentials_local": True,
-                "read_only": True,
-            },
-        )
-        self.assertNotIn("email", self.client.status())
-
-    def test_callback_persists_refresh_credential_and_survives_restart(self):
-        pending = self.begin()
-        query = {
-            "code": ["one-time-code"],
-            "email": [pending["email"]],
-            "public_id": [pending["public_id"]],
-        }
+    def test_login_persists_tokens_only_with_owner_permissions(self):
         with patch.object(self.client, "_guest_token", return_value=ACCESS), patch.object(
             self.client,
             "_request_json",
             return_value={"access_token": ACCESS, "refresh_token": REFRESH, "expires_in": 900},
-        ):
-            origin = self.client.finish_callback(query)
-        self.assertEqual(origin, "http://familie.local:3000")
+        ) as request:
+            status = self.client.login("Family@Example.no", "not-stored-password")
+        self.assertTrue(status["connected"])
+        self.assertEqual(stat.S_IMODE(self.credentials.stat().st_mode), 0o600)
         saved = json.loads(self.credentials.read_text(encoding="utf-8"))
         self.assertEqual(saved["refresh_token"], REFRESH)
-        self.assertNotIn("pending", saved)
-        restarted = HelloFreshAccountClient(self.client.callback_url, self.credentials)
+        serialized = json.dumps(saved)
+        self.assertNotIn("not-stored-password", serialized)
+        self.assertNotIn("family@example.no", serialized)
+        self.assertEqual(
+            request.call_args.kwargs["json_value"],
+            {"username": "family@example.no", "password": "not-stored-password"},
+        )
+        restarted = HelloFreshAccountClient(self.credentials)
         self.assertTrue(restarted.status()["connected"])
 
-    def test_callback_rejects_a_different_login_correlation(self):
-        pending = self.begin()
-        with self.assertRaises(HelloFreshAccountAuthRequired):
-            self.client.finish_callback({
-                "code": ["one-time-code"],
-                "email": [pending["email"]],
-                "public_id": ["different-public-id"],
-            })
+    def test_login_validates_email_and_password_without_calling_provider(self):
+        with patch.object(self.client, "_request_json") as request:
+            with self.assertRaises(HelloFreshAccountValidation):
+                self.client.login("not-an-email", "password")
+            with self.assertRaises(HelloFreshAccountValidation):
+                self.client.login("family@example.no", "")
+        request.assert_not_called()
 
-    def test_pasted_link_rejects_untrusted_hosts(self):
-        with self.assertRaises(HelloFreshAccountValidation):
-            self.client.finish_magic_link(
-                "https://example.invalid/login?code=secret&email=family@example.no&public_id=12345678"
-            )
+    def test_login_maps_provider_rejection_without_saving_credentials(self):
+        with patch.object(self.client, "_guest_token", return_value=ACCESS), patch.object(
+            self.client, "_request_json", side_effect=_HttpError(403)
+        ):
+            with self.assertRaises(HelloFreshAccountAuthRequired):
+                self.client.login("family@example.no", "wrong-password")
+        self.assertFalse(self.credentials.exists())
 
     def test_refresh_replaces_tokens_in_owner_only_file(self):
         self.client._save({"refresh_token": REFRESH, "expires_at": time.time() - 1})

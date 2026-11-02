@@ -100,16 +100,20 @@ bootstrap token, recipe URL, cookies or response headers.
 
 The public adapter has no login, account cookie store or browser automation.
 The separately gated `portal.features.hellofresh_account` adapter implements
-passwordless email login only. The browser receives no password, email address,
-one-time code, access/refresh token, customer/subscription identifier or raw
-account payload. Callback query values are redacted from request logs.
+an email/password exchange against the fixed HelloFresh Norway login endpoint.
+The password exists only in the bounded request and provider exchange; it is
+never written to disk, logs, responses, model context or Git. Browser responses
+contain no email address, access/refresh token, customer/subscription identifier
+or raw account payload. Login is rate limited to five failed attempts per client
+in five minutes and a successful login clears the failure window.
 
-Pending login correlation and renewable credentials are stored outside Git in
+Renewable credentials are stored outside Git in
 `$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
-`0600`. Only fixed HelloFresh Norway endpoints and an allowlist of HelloFresh
-magic-link hosts are accepted. A local same-window callback is preferred; the
-Portal also supports pasting the full provider link and polls for completion on
-another device. No popup is required.
+`0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup or email
+link is required. The Portal itself is plain HTTP on a trusted private LAN, so
+first-use credentials must not be entered over guest, public or otherwise
+untrusted networks; deployments requiring an untrusted network need local TLS
+before enabling account login.
 
 Authenticated reads expose the same curated recipe contract plus selected
 quantity and total selected count. No email, meal selection, delivery,

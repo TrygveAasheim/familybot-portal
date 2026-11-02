@@ -33,9 +33,10 @@ When the sibling core repository is available, also read
   its dinner model is tool-free, recipe/cart actions stay allowlisted and
   explicit, and checkout/payment still happen at Oda.
 - Experimental meal providers remain disabled by default. HelloFresh account
-  access is passwordless, server-side, owner-only and separately flagged. It is
-  read-only during physical testing; provider writes require a new mutation
-  security review and explicit acceptance criteria.
+  access uses a transient password exchange, persists only owner-protected
+  tokens server-side and is separately flagged. Passwords must never be stored,
+  logged or returned. It is read-only during physical testing; provider writes
+  require a new mutation security review and explicit acceptance criteria.
 - User-visible unavailable/stale states are honest. Do not convert a missing
   source into a healthy or empty-looking result.
 - Smart Home is an add-on behind a narrow provider adapter. The browser must not

@@ -14,7 +14,8 @@ The planner connects the services Norwegian families already use:
 - **Oda MCP** for recipes, dinner suggestions, product search and the shared
   grocery cart;
 - an optional, experimental **HelloFresh Norway** weekly-menu and account view,
-  with popup-free passwordless first use and provider writes disabled;
+  with one-time credential exchange, persistent token renewal and provider
+  writes disabled;
 - school email, PDF `ukeplan` documents and Norwegian calendars; and
 - **Telegram** for intentional notifications outside the home network.
 
@@ -187,11 +188,13 @@ See [Oda grocery integration](docs/ODA_GROCERIES.md).
 
 The experimental HelloFresh integration uses two flags. `hellofresh` exposes a
 curated public Norwegian menu; `hellofresh_account` replaces Oda in the visible
-navigation with popup-free passwordless first use, persistent owner-only local
-refresh credentials, the household menu and selected quantities. Passwords,
-provider tokens and raw account payloads never enter the browser or Git. Meal,
-delivery, subscription and payment changes remain disabled. Both flags default
-to `false`; Oda remains in code for rollback. See
+navigation with an in-Portal email/password exchange, persistent owner-only
+local refresh credentials, the household menu and selected quantities. The
+password is used once and is never stored or logged; provider tokens and raw
+account payloads never enter browser responses or Git. Because the Portal is a
+trusted-LAN HTTP appliance, first-use credentials should be entered only on the
+private home network. Meal, delivery, subscription and payment changes remain
+disabled. Both flags default to `false`; Oda remains in code for rollback. See
 [HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;

@@ -14,8 +14,8 @@
   return navigation, explicit add-all-ingredients actions, direct OAuth/MCP
   product search, personal suggestions, cart editing and checkout handoff;
 - optional HelloFresh Norway experiment behind disabled-by-default public and
-  account feature flags. It supports popup-free passwordless first use,
-  persistent local refresh credentials, the household's suggested weekly menu
+  account feature flags. It supports transient email/password first use,
+  persistent token-only local renewal, the household's suggested weekly menu
   and selected quantities, with provider writes disabled; see
   [the experiment contract](HELLOFRESH_NORWAY.md);
 - Telegram/OpenClaw child-chore interview bridge with preview, explicit confirmation and idempotent creation;

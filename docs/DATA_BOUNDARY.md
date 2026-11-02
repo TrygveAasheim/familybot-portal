@@ -99,21 +99,27 @@ extra charge. It does not return the source page, embedded application state,
 bootstrap token, recipe URL, cookies or response headers.
 
 The public adapter has no login, account cookie store or browser automation.
-The separately gated `portal.features.hellofresh_account` adapter implements
-an email/password exchange against the fixed HelloFresh Norway login endpoint.
-The password exists only in the bounded request and provider exchange; it is
-never written to disk, logs, responses, model context or Git. Browser responses
-contain no email address, access/refresh token, customer/subscription identifier
-or raw account payload. Login is rate limited to five failed attempts per client
-in five minutes and a successful login clears the failure window.
+The separately gated `portal.features.hellofresh_account` adapter bootstraps an
+email/password exchange against the fixed HelloFresh Norway login endpoint.
+The browser sends the password directly to that provider endpoint over HTTPS;
+the password never enters the Portal API, disk, logs, model context or Git.
+HelloFresh's access and refresh tokens exist transiently in first-use browser
+memory and are immediately posted to the authenticated local completion route.
+The completion route accepts only token and expiry fields, persists no provider
+account payload, and returns status booleans only. No email address,
+customer/subscription identifier or raw provider payload is stored or exposed.
+Obtaining login bootstrap material is rate limited to five attempts per client
+in five minutes and successful completion clears the failure window.
 
 Renewable credentials are stored outside Git in
 `$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
 `0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup or email
-link is required. Temporary provider or network failures preserve the renewable
-credential for retry; only an explicit provider authentication rejection clears
-it and returns the first-use login form. The Portal itself is plain HTTP on a trusted private LAN, so
-first-use credentials must not be entered over guest, public or otherwise
+link is required. A Cloudflare HTML challenge or other non-JSON provider block
+is an unavailable state, never an invalid-password result. Temporary provider
+or network failures preserve the renewable credential for retry; only an
+explicit provider authentication rejection clears it and returns the first-use
+login form. The Portal itself is plain HTTP on a trusted private LAN, so the
+one-time provider-token handoff must not run over guest, public or otherwise
 untrusted networks; deployments requiring an untrusted network need local TLS
 before enabling account login.
 

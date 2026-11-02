@@ -23,8 +23,10 @@ enabled independently with:
 ```
 
 The first flag exposes public menu data. The second replaces the visible Oda
-tab with in-Portal HelloFresh email/password login. The password is exchanged
-once and never stored; only refresh credentials are written to
+tab with in-Portal HelloFresh email/password login. On first use the browser
+sends the password directly to HelloFresh over HTTPS and immediately hands the
+allowlisted token result to the Portal; the password is never sent to the local
+API or stored. Only refresh credentials are written to
 `$HOME/.openclaw/credentials/hellofresh-no.json` with mode `0600`. Account
 access is read-only: meal selection, ordering, delivery and subscription writes
 remain disabled.

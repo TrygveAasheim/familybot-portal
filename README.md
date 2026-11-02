@@ -14,7 +14,7 @@ The planner connects the services Norwegian families already use:
 - **Oda MCP** for recipes, dinner suggestions, product search and the shared
   grocery cart;
 - an optional, experimental **HelloFresh Norway** weekly-menu and account view,
-  with one-time credential exchange, persistent token renewal and provider
+  with one-time browser-assisted login, persistent token renewal and provider
   writes disabled;
 - school email, PDF `ukeplan` documents and Norwegian calendars; and
 - **Telegram** for intentional notifications outside the home network.
@@ -188,13 +188,16 @@ See [Oda grocery integration](docs/ODA_GROCERIES.md).
 
 The experimental HelloFresh integration uses two flags. `hellofresh` exposes a
 curated public Norwegian menu; `hellofresh_account` replaces Oda in the visible
-navigation with an in-Portal email/password exchange, persistent owner-only
-local refresh credentials, the household menu and selected quantities. The
-password is used once and is never stored or logged; provider tokens and raw
-account payloads never enter browser responses or Git. Because the Portal is a
-trusted-LAN HTTP appliance, first-use credentials should be entered only on the
-private home network. The renewable token survives restarts and temporary
-provider outages; the login form returns only after HelloFresh rejects it.
+navigation with an in-Portal email/password form, persistent owner-only local
+refresh credentials, the household menu and selected quantities. On first use,
+the browser sends the password directly to HelloFresh's fixed HTTPS endpoint;
+the password never reaches the Portal API. The returned provider tokens exist
+briefly in browser memory, are immediately handed to the Mac over the trusted
+LAN and are never stored in the browser, logs, model context or Git. Subsequent
+Portal responses contain no provider credentials. Because the Portal is a
+trusted-LAN HTTP appliance, first use should run only on the private home
+network. The renewable token survives restarts and temporary provider outages;
+the login form returns only after an explicit authentication rejection.
 Meal, delivery, subscription and payment changes remain
 disabled. Both flags default to `false`; Oda remains in code for rollback. See
 [HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).

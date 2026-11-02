@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Credential-exchange, read-only HelloFresh Norway account connector.
+"""Browser-assisted, read-only HelloFresh Norway account connector.
 
-The supplied account password is exchanged once and is never stored.  The
-browser never receives provider tokens or raw account payloads.  Refresh
-credentials are stored in an owner-only local file so a completed first-use
-login survives Portal and machine restarts.  This module intentionally has no
-meal-selection, delivery, subscription, address or payment mutation methods.
+The account password is sent directly from the first-use browser to HelloFresh
+and never reaches this service.  The browser immediately hands the resulting
+allowlisted tokens to the Portal, which stores them in an owner-only local file
+so login survives Portal and machine restarts.  This module intentionally has
+no meal-selection, delivery, subscription, address or payment mutation methods.
 """
 
 from __future__ import annotations
@@ -37,9 +37,14 @@ LOCALE = "nb-NO"
 BRAND = "BRAND_HELLOFRESH"
 MAX_JSON_BYTES = 4_000_000
 MAX_HTML_BYTES = 8_000_000
-EMAIL = re.compile(r"^[^\s@]{1,120}@[^\s@]{1,190}\.[^\s@]{2,63}$")
 TOKEN = re.compile(r"^[A-Za-z0-9_-]{8,4096}(?:\.[A-Za-z0-9_-]{8,4096}){0,2}$")
-MAX_PASSWORD_CHARS = 512
+ERROR_CODE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
+AUTH_REJECTION_CODES = {
+    "access_denied",
+    "access_denied_password_must_be_rotated",
+    "invalid_grant",
+    "invalid_token",
+}
 
 
 class HelloFreshAccountValidation(ValueError):
@@ -55,9 +60,11 @@ class HelloFreshAccountUnavailable(RuntimeError):
 
 
 class _HttpError(RuntimeError):
-    def __init__(self, status: int):
+    def __init__(self, status: int, *, code: str | None = None, challenge: bool = False):
         super().__init__(f"HTTP {status}")
         self.status = status
+        self.code = code
+        self.challenge = challenge
 
 
 def _token(value: Any) -> str | None:
@@ -102,7 +109,7 @@ def _number(value: Any, default: float = 0) -> float:
 
 
 class HelloFreshAccountClient:
-    """Transient password login and curated account reads for Norway."""
+    """Browser-assisted first use and curated account reads for Norway."""
 
     def __init__(
         self,
@@ -196,8 +203,25 @@ class HelloFreshAccountClient:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 raw = response.read(MAX_JSON_BYTES + 1)
         except urllib.error.HTTPError as exc:
-            exc.read(4096)
-            raise _HttpError(exc.code) from exc
+            raw_error = exc.read(4096)
+            content_type = exc.headers.get_content_type() if exc.headers else ""
+            provider_code = None
+            if content_type == "application/json":
+                try:
+                    error_value = json.loads(raw_error.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    error_value = None
+                if isinstance(error_value, dict):
+                    for key in ("error", "error_code", "code"):
+                        candidate = error_value.get(key)
+                        if isinstance(candidate, str) and ERROR_CODE.fullmatch(candidate):
+                            provider_code = candidate
+                            break
+            challenge = content_type == "text/html" and any(
+                marker in raw_error.lower()
+                for marker in (b"attention required", b"cf-chl", b"challenge-platform", b"just a moment")
+            )
+            raise _HttpError(exc.code, code=provider_code, challenge=challenge) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise HelloFreshAccountUnavailable(
                 "HelloFresh-kontoen svarer ikke akkurat nå."
@@ -251,45 +275,27 @@ class HelloFreshAccountClient:
             )
         return token
 
-    def login(self, email: Any, password: Any) -> dict[str, Any]:
-        """Exchange credentials once, persist tokens only, and discard the password."""
-        if not isinstance(email, str) or not EMAIL.fullmatch(email.strip()):
-            raise HelloFreshAccountValidation("Skriv inn en gyldig e-postadresse.")
-        if (
-            not isinstance(password, str)
-            or not password
-            or len(password) > MAX_PASSWORD_CHARS
-            or "\x00" in password
-        ):
-            raise HelloFreshAccountValidation("Skriv inn HelloFresh-passordet.")
-        try:
-            tokens = self._request_json(
-                "/gw/login",
-                method="POST",
-                params={"country": COUNTRY, "locale": LOCALE},
-                json_value={"username": email.strip().lower(), "password": password},
-                bearer=self._guest_token(),
-            )
-        except _HttpError as exc:
-            if exc.status in {400, 401, 403, 404, 422}:
-                raise HelloFreshAccountAuthRequired(
-                    "E-post eller passord ble ikke godtatt av HelloFresh."
-                ) from exc
-            raise HelloFreshAccountUnavailable(
-                "HelloFresh-innloggingen svarer ikke akkurat nå."
-            ) from exc
-        if not isinstance(tokens, dict) or not _token(tokens.get("access_token")):
-            raise HelloFreshAccountAuthRequired(
-                "HelloFresh returnerte ingen kontotilgang."
-            )
-        refresh = _token(tokens.get("refresh_token"))
-        credentials = {
-            "access_token": tokens["access_token"],
-            "expires_at": time.time()
-            + max(60, int(_number(tokens.get("expires_in"), 1800))),
+    def login_bootstrap(self) -> dict[str, Any]:
+        """Return only the public material needed for a direct browser login."""
+        return {
+            "login_url": f"{BASE_URL}/gw/login?{urllib.parse.urlencode({'country': COUNTRY, 'locale': LOCALE})}",
+            "guest_token": self._guest_token(),
         }
-        if refresh:
-            credentials["refresh_token"] = refresh
+
+    def complete_login(self, tokens: Any) -> dict[str, Any]:
+        """Persist the allowlisted result of a successful direct provider login."""
+        if not isinstance(tokens, dict):
+            raise HelloFreshAccountValidation("HelloFresh returnerte ingen kontotilgang.")
+        access = _token(tokens.get("access_token"))
+        refresh = _token(tokens.get("refresh_token"))
+        if not access or not refresh:
+            raise HelloFreshAccountValidation("HelloFresh returnerte ingen fornybar kontotilgang.")
+        credentials = {
+            "access_token": access,
+            "expires_at": time.time()
+            + max(60, min(86_400, int(_number(tokens.get("expires_in"), 1800)))),
+            "refresh_token": refresh,
+        }
         self._save(credentials)
         return self.status()
 
@@ -307,7 +313,9 @@ class HelloFreshAccountClient:
                 bearer=self._guest_token(),
             )
         except _HttpError as exc:
-            if exc.status in {400, 401, 403, 422}:
+            if exc.code in AUTH_REJECTION_CODES or (
+                exc.status in {400, 401, 422} and not exc.challenge
+            ):
                 self.disconnect()
                 raise HelloFreshAccountAuthRequired(
                     "HelloFresh-tilgangen er utløpt. Logg inn på nytt."
@@ -337,7 +345,7 @@ class HelloFreshAccountClient:
         try:
             return self._request_json(path, params=params, bearer=access)
         except _HttpError as exc:
-            if exc.status not in {401, 403}:
+            if exc.challenge or exc.status not in {401, 403}:
                 raise HelloFreshAccountUnavailable(
                     "HelloFresh-kontoen svarer ikke akkurat nå."
                 ) from exc
@@ -349,6 +357,10 @@ class HelloFreshAccountClient:
                     bearer=_token(credentials.get("access_token")),
                 )
             except _HttpError as retry_exc:
+                if retry_exc.challenge:
+                    raise HelloFreshAccountUnavailable(
+                        "HelloFresh-kontoen svarer ikke akkurat nå."
+                    ) from retry_exc
                 if retry_exc.status in {401, 403}:
                     self.disconnect()
                     raise HelloFreshAccountAuthRequired(

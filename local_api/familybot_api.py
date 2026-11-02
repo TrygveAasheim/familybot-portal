@@ -1969,20 +1969,19 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 if not self.app.features["hellofresh"] or not self.app.features["hellofresh_account"]:
                     self.respond(404, {"error": "HelloFresh-kontotilkoblingen er ikke aktivert."})
                     return
-                if method == "POST" and path == "/api/hellofresh/auth/login":
+                if method == "POST" and path == "/api/hellofresh/auth/bootstrap":
                     if not self.app.hellofresh_login_allowed(self.client_address[0]):
                         self.respond(429, {"error": "For mange innloggingsforsøk. Vent fem minutter."})
                         return
-                    payload = self.read_payload()
-                    try:
-                        result = self.app.hellofresh_account.login(
-                            payload.get("email"), payload.get("password")
-                        )
-                    except (HelloFreshAccountValidation, HelloFreshAccountAuthRequired):
-                        self.app.record_hellofresh_login(
-                            self.client_address[0], succeeded=False
-                        )
-                        raise
+                    result = self.app.hellofresh_account.login_bootstrap()
+                    self.app.record_hellofresh_login(
+                        self.client_address[0], succeeded=False
+                    )
+                    self.respond(200, result)
+                elif method == "POST" and path == "/api/hellofresh/auth/complete":
+                    result = self.app.hellofresh_account.complete_login(
+                        self.read_payload()
+                    )
                     self.app.record_hellofresh_login(
                         self.client_address[0], succeeded=True
                     )

@@ -108,9 +108,11 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Logg inn hos HelloFresh/);
   assert.match(consoleSource, /autoComplete="current-password"/);
   assert.match(consoleSource, /private hjemmenett/);
-  assert.match(consoleSource, /api\/hellofresh\/auth\/login/);
+  assert.match(consoleSource, /https:\/\/www\.hellofresh\.no\/gw\/login\?country=NO&locale=nb-NO/);
+  assert.match(consoleSource, /api\/hellofresh\/auth\/bootstrap/);
+  assert.match(consoleSource, /api\/hellofresh\/auth\/complete/);
   assert.match(consoleSource, /api\/hellofresh\/account\/menu/);
-  assert.doesNotMatch(consoleSource, /Send innloggingslenke|Godkjenn lenken her|auth\/start|auth\/complete/);
+  assert.doesNotMatch(consoleSource, /Send innloggingslenke|Godkjenn lenken her|auth\/start|auth\/login/);
   assert.doesNotMatch(consoleSource, /window\.open\(/);
   assert.match(consoleSource, /HelloFreshRecipeImage/);
   assert.match(apiSource, /HelloFreshNorwayClient/);
@@ -128,6 +130,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   );
   assert.match(helloFreshAccountSource, /\/gw\/login/);
   assert.match(helloFreshAccountSource, /\/gw\/refresh/);
+  assert.match(helloFreshAccountSource, /complete_login/);
+  assert.match(helloFreshAccountSource, /challenge/);
   assert.match(helloFreshAccountSource, /hellofresh-no\.json/);
   assert.match(helloFreshAccountSource, /0o600/);
   assert.doesNotMatch(helloFreshAccountSource, /passwordless|magic-link|pending/);
@@ -185,7 +189,9 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /api\/oda\/cart/);
   assert.doesNotMatch(apiSource, /api\/chat|chat_slot|chat_answer/);
   assert.match(apiSource, /api\/hellofresh\/menu/);
-  assert.match(apiSource, /api\/hellofresh\/auth\/login/);
+  assert.match(apiSource, /api\/hellofresh\/auth\/bootstrap/);
+  assert.match(apiSource, /api\/hellofresh\/auth\/complete/);
+  assert.doesNotMatch(apiSource, /api\/hellofresh\/auth\/login/);
   assert.doesNotMatch(apiSource, /api\/hellofresh\/auth\/callback/);
   assert.match(apiSource, /api\/hellofresh\/account\/menu/);
   assert.match(odaSource, /https:\/\/oda\.com\/mcp/);

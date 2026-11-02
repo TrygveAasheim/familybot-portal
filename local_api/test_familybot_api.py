@@ -11,7 +11,6 @@ from unittest.mock import patch
 
 from dashboard_migration import clear_active_setup, ensure_default_rewards, migrate
 from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, health_summary, transport_summary, trusted_portal_origin, weather_summary
-from hellofresh_account import HelloFreshAccountAuthRequired
 
 
 SCHEMA = """
@@ -114,8 +113,15 @@ class FakeHelloFreshAccountClient:
             "read_only": True,
         }
 
-    def login(self, email, password):
-        self.calls.append(("login", email, bool(password)))
+    def login_bootstrap(self):
+        self.calls.append(("login_bootstrap",))
+        return {
+            "login_url": "https://www.hellofresh.no/gw/login?country=NO&locale=nb-NO",
+            "guest_token": "aaaaaaaa.bbbbbbbb.cccccccc",
+        }
+
+    def complete_login(self, tokens):
+        self.calls.append(("complete_login", set(tokens)))
         self.connected = True
         return self.status()
 
@@ -743,7 +749,7 @@ class RepositoryTests(unittest.TestCase):
             enabled.server_close()
             enabled_thread.join(timeout=2)
 
-    def test_hellofresh_password_login_is_transient_and_local(self):
+    def test_hellofresh_browser_login_handoff_is_transient_and_local(self):
         public_menu = FakeHelloFreshClient()
         account = FakeHelloFreshAccountClient()
         server = FamilyApiServer(
@@ -776,16 +782,32 @@ class RepositoryTests(unittest.TestCase):
             connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
             connection.request(
                 "POST",
-                "/api/hellofresh/auth/login",
-                json.dumps({"email": "family@example.no", "password": "transient-secret"}),
+                "/api/hellofresh/auth/bootstrap",
+                "{}",
+                headers,
+            )
+            response = connection.getresponse()
+            bootstrap = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertEqual(bootstrap["login_url"], "https://www.hellofresh.no/gw/login?country=NO&locale=nb-NO")
+            self.assertIn(("login_bootstrap",), account.calls)
+            self.assertNotIn("email", bootstrap)
+            self.assertNotIn("password", bootstrap)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/auth/complete",
+                json.dumps({"access_token": "access", "refresh_token": "refresh", "expires_in": 900}),
                 headers,
             )
             response = connection.getresponse()
             login_body = response.read().decode("utf-8")
             self.assertEqual(response.status, 200)
-            self.assertIn(("login", "family@example.no", True), account.calls)
-            self.assertNotIn("transient-secret", login_body)
-            self.assertNotIn("family@example.no", login_body)
+            self.assertIn(("complete_login", {"access_token", "refresh_token", "expires_in"}), account.calls)
+            self.assertNotIn("access", login_body)
+            self.assertNotIn("refresh", login_body)
             connection.close()
 
             connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
@@ -809,7 +831,7 @@ class RepositoryTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2)
 
-    def test_hellofresh_password_login_limits_consecutive_failures(self):
+    def test_hellofresh_login_bootstrap_limits_consecutive_attempts(self):
         account = FakeHelloFreshAccountClient()
         server = FamilyApiServer(
             ("127.0.0.1", 0),
@@ -828,26 +850,20 @@ class RepositoryTests(unittest.TestCase):
             "X-FamilyBot-Local-Token": server.session_token,
             "Content-Type": "application/json",
         }
-        payload = json.dumps({"email": "family@example.no", "password": "wrong"})
         try:
-            with patch.object(
-                account,
-                "login",
-                side_effect=HelloFreshAccountAuthRequired("Avvist."),
-            ):
-                statuses = []
-                for _ in range(6):
-                    connection = http.client.HTTPConnection(
-                        "127.0.0.1", server.server_address[1], timeout=2
-                    )
-                    connection.request(
-                        "POST", "/api/hellofresh/auth/login", payload, headers
-                    )
-                    response = connection.getresponse()
-                    statuses.append(response.status)
-                    self.assertNotIn("wrong", response.read().decode("utf-8"))
-                    connection.close()
-            self.assertEqual(statuses, [401, 401, 401, 401, 401, 429])
+            statuses = []
+            for _ in range(6):
+                connection = http.client.HTTPConnection(
+                    "127.0.0.1", server.server_address[1], timeout=2
+                )
+                connection.request(
+                    "POST", "/api/hellofresh/auth/bootstrap", "{}", headers
+                )
+                response = connection.getresponse()
+                statuses.append(response.status)
+                response.read()
+                connection.close()
+            self.assertEqual(statuses, [200, 200, 200, 200, 200, 429])
         finally:
             server.shutdown()
             server.server_close()

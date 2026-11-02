@@ -6,6 +6,7 @@ TARGET="${FAMILYBOT_PORTAL_RUNTIME:-$HOME/.openclaw/runtime/familybot-portal}"
 PLIST="$HOME/Library/LaunchAgents/ai.familybot.portal.plist"
 UID_VALUE="$(id -u)"
 PLIST_TEMP="$(mktemp -t familybot-portal-plist)"
+UV_BIN="${FAMILYBOT_UV:-$(command -v uv || true)}"
 trap 'rm -f "$PLIST_TEMP"' EXIT
 
 cd "$ROOT"
@@ -19,19 +20,30 @@ npm run lint
 npm test
 ./scripts/configure-oda-dinner-agent.sh
 python3 local_api/dashboard_migration.py --repair-default-rewards
+if [[ -z "$UV_BIN" ]]; then
+  echo "uv is required to build the isolated Portal Python runtime (brew install uv)." >&2
+  exit 1
+fi
+mkdir -p "$TARGET/local_api" "$TARGET/local_service" "$TARGET/scripts" "$TARGET/runtime"
+if [[ ! -x "$TARGET/.venv/bin/python" ]]; then
+  "$UV_BIN" venv --python 3.12 "$TARGET/.venv"
+fi
+"$UV_BIN" pip sync --python "$TARGET/.venv/bin/python" "$ROOT/requirements.txt"
+"$UV_BIN" pip check --python "$TARGET/.venv/bin/python"
+"$TARGET/.venv/bin/python" -c "import curl_cffi"
 
 # Stop the managed service before replacing its runtime tree. Updating files
 # underneath a running Node process can otherwise trigger a restart against a
 # half-copied node_modules directory.
 launchctl bootout "gui/$UID_VALUE/ai.familybot.portal" 2>/dev/null || true
 
-mkdir -p "$TARGET/local_api" "$TARGET/local_service" "$TARGET/scripts" "$TARGET/runtime"
 rm -f "$TARGET/local_api/familybot_chat.py"
 rsync -a --delete dist/standalone/ "$TARGET/dist/standalone/"
 rsync -a node_modules/react node_modules/react-dom node_modules/scheduler "$TARGET/dist/standalone/node_modules/"
 rsync -a local_api/familybot_api.py local_api/hellofresh_account.py local_api/hellofresh_norway.py local_api/oda_mcp.py local_api/oda_dinner.py local_api/dashboard_migration.py local_api/family_config.py "$TARGET/local_api/"
 rsync -a local_service/run_service.py "$TARGET/local_service/"
 rsync -a scripts/child_chore.py "$TARGET/scripts/"
+rsync -a requirements.txt "$TARGET/"
 if [[ -f "$ROOT/runtime/parent-pin.txt" ]]; then
   rsync -a "$ROOT/runtime/parent-pin.txt" "$TARGET/runtime/"
 fi

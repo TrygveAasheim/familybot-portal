@@ -14,7 +14,7 @@ The planner connects the services Norwegian families already use:
 - **Oda MCP** for recipes, dinner suggestions, product search and the shared
   grocery cart;
 - an optional, experimental **HelloFresh Norway** weekly-menu and account view,
-  with one-time browser-assisted login, persistent token renewal and provider
+  with one-time transient login, persistent token renewal and provider
   writes disabled;
 - school email, PDF `ukeplan` documents and Norwegian calendars; and
 - **Telegram** for intentional notifications outside the home network.
@@ -80,7 +80,8 @@ Runtime dependencies are:
 - one shared owner-only
   `$HOME/.openclaw/workspace/config/family.local.json` and
   `$HOME/.openclaw/workspace/db/family.db`;
-- Node.js/npm for the portal build and Python 3 for the local API/service;
+- Node.js/npm for the portal build, and `uv` for the isolated Python 3.12
+  API/service runtime (`brew install uv` on macOS);
 - macOS `launchd` for the local service; the local agent runtime is optional for
   conversational and Telegram features, and existing installations use the
   `.openclaw` workspace convention;
@@ -159,6 +160,8 @@ Clone `familybot-core` and `familybot-portal` as sibling directories, then:
 
 ```bash
 npm ci
+uv venv --python 3.12 .venv
+uv pip sync --python .venv/bin/python requirements.txt
 npm run security:audit
 npm run docs:check
 npm run preflight
@@ -190,18 +193,17 @@ The experimental HelloFresh integration uses two flags. `hellofresh` exposes a
 curated public Norwegian menu; `hellofresh_account` replaces Oda in the visible
 navigation with an in-Portal email/password form, persistent owner-only local
 refresh credentials, the household menu and selected quantities. On first use,
-the browser sends the password directly to HelloFresh's fixed HTTPS endpoint;
-the password never reaches the Portal API. If HelloFresh blocks that browser
-request, the same screen offers HelloFresh's one-time sign-in link as a
-fallback—not a password reset. The copied link is matched to an in-memory,
-short-lived login flow and exchanged by the Mac against fixed HelloFresh HTTPS
-hosts. The returned provider tokens exist briefly in browser or server memory,
-are allowlisted into the owner-only credential file and are never stored in
-browser storage, logs, model context or Git. Subsequent Portal responses
-contain no provider credentials. Because the Portal is a trusted-LAN HTTP
-appliance, first use should run only on the private home network. The renewable
-token survives restarts and temporary provider outages; the login form returns
-only after an explicit authentication rejection.
+the password reaches the Portal API once over the trusted home LAN. The Mac
+forwards it to HelloFresh's fixed Norway endpoint through a pinned
+Chrome-fingerprinted, certificate-verified HTTPS transport, then discards it.
+The password is never stored, logged, returned, placed in model context or
+committed. Only allowlisted provider tokens are written to the owner-only
+credential file. The former email-link fallback was removed after live evidence
+showed that HelloFresh sends a password-reset email for this market/account.
+Subsequent Portal responses contain no provider credentials. Because the Portal
+is a trusted-LAN HTTP appliance, first use should run only on the private home
+network. The renewable token survives restarts and temporary provider outages;
+the login form returns only after an explicit authentication rejection.
 Meal, delivery, subscription and payment changes remain
 disabled. Both flags default to `false`; Oda remains in code for rollback. See
 [HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).

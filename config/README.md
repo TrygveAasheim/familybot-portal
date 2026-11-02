@@ -23,12 +23,12 @@ enabled independently with:
 ```
 
 The first flag exposes public menu data. The second replaces the visible Oda
-tab with in-Portal HelloFresh email/password login. On first use the browser
-sends the password directly to HelloFresh over HTTPS and immediately hands the
-allowlisted token result to the Portal; the password is never sent to the local
-API or stored. A one-time sign-in-link fallback is available when HelloFresh
-blocks the password route; it is distinct from password reset and accepts only
-a short-lived, flow-matched link from an allowlisted HelloFresh HTTPS host.
+tab with in-Portal HelloFresh email/password login. On first use the password
+travels once over the trusted home LAN to the local API, which forwards it to
+the fixed HelloFresh Norway endpoint using a Chrome-fingerprinted, verified
+HTTPS transport. The password remains transient request data and is never
+stored, logged, returned or placed in model context. There is no email-link
+fallback: HelloFresh maps that flow to password reset for this market/account.
 Only refresh credentials are written to
 `$HOME/.openclaw/credentials/hellofresh-no.json` with mode `0600`. Account
 access is read-only: meal selection, ordering, delivery and subscription writes

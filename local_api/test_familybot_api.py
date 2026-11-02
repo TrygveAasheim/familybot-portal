@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from dashboard_migration import clear_active_setup, ensure_default_rewards, migrate
 from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, health_summary, transport_summary, trusted_portal_origin, weather_summary
+from hellofresh_account import HelloFreshAccountValidation
 
 
 SCHEMA = """
@@ -105,6 +106,7 @@ class FakeHelloFreshAccountClient:
     def __init__(self):
         self.connected = False
         self.calls = []
+        self.login_error = None
 
     def status(self):
         return {
@@ -113,24 +115,10 @@ class FakeHelloFreshAccountClient:
             "read_only": True,
         }
 
-    def login_bootstrap(self):
-        self.calls.append(("login_bootstrap",))
-        return {
-            "login_url": "https://www.hellofresh.no/gw/login?country=NO&locale=nb-NO",
-            "guest_token": "aaaaaaaa.bbbbbbbb.cccccccc",
-        }
-
-    def complete_login(self, tokens):
-        self.calls.append(("complete_login", set(tokens)))
-        self.connected = True
-        return self.status()
-
-    def start_passwordless_login(self, email):
-        self.calls.append(("start_passwordless_login", email))
-        return {"login_id": "a" * 43, "expires_in": 900}
-
-    def complete_passwordless_login(self, payload):
-        self.calls.append(("complete_passwordless_login", set(payload)))
+    def login(self, payload):
+        self.calls.append(("login", set(payload)))
+        if self.login_error:
+            raise self.login_error
         self.connected = True
         return self.status()
 
@@ -758,7 +746,7 @@ class RepositoryTests(unittest.TestCase):
             enabled.server_close()
             enabled_thread.join(timeout=2)
 
-    def test_hellofresh_browser_login_handoff_is_transient_and_local(self):
+    def test_hellofresh_backend_login_is_transient_and_local(self):
         public_menu = FakeHelloFreshClient()
         account = FakeHelloFreshAccountClient()
         server = FamilyApiServer(
@@ -791,64 +779,16 @@ class RepositoryTests(unittest.TestCase):
             connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
             connection.request(
                 "POST",
-                "/api/hellofresh/auth/bootstrap",
-                "{}",
-                headers,
-            )
-            response = connection.getresponse()
-            bootstrap = json.loads(response.read())
-            self.assertEqual(response.status, 200)
-            self.assertEqual(bootstrap["login_url"], "https://www.hellofresh.no/gw/login?country=NO&locale=nb-NO")
-            self.assertIn(("login_bootstrap",), account.calls)
-            self.assertNotIn("email", bootstrap)
-            self.assertNotIn("password", bootstrap)
-            connection.close()
-
-            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
-            connection.request(
-                "POST",
-                "/api/hellofresh/auth/link/start",
-                json.dumps({"email": "parent@example.no"}),
-                headers,
-            )
-            response = connection.getresponse()
-            link_start_body = response.read().decode("utf-8")
-            self.assertEqual(response.status, 200)
-            self.assertIn(("start_passwordless_login", "parent@example.no"), account.calls)
-            self.assertNotIn("parent@example.no", link_start_body)
-            self.assertNotIn("public_id", link_start_body)
-            connection.close()
-
-            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
-            connection.request(
-                "POST",
-                "/api/hellofresh/auth/link/complete",
-                json.dumps({"login_id": "a" * 43, "link": "https://www.hellofresh.no/link"}),
-                headers,
-            )
-            response = connection.getresponse()
-            link_complete_body = response.read().decode("utf-8")
-            self.assertEqual(response.status, 200)
-            self.assertIn(
-                ("complete_passwordless_login", {"login_id", "link"}),
-                account.calls,
-            )
-            self.assertNotIn("hellofresh.no/link", link_complete_body)
-            connection.close()
-
-            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
-            connection.request(
-                "POST",
-                "/api/hellofresh/auth/complete",
-                json.dumps({"access_token": "access", "refresh_token": "refresh", "expires_in": 900}),
+                "/api/hellofresh/auth/login",
+                json.dumps({"email": "parent@example.no", "password": "site-only"}),
                 headers,
             )
             response = connection.getresponse()
             login_body = response.read().decode("utf-8")
             self.assertEqual(response.status, 200)
-            self.assertIn(("complete_login", {"access_token", "refresh_token", "expires_in"}), account.calls)
-            self.assertNotIn("access", login_body)
-            self.assertNotIn("refresh", login_body)
+            self.assertIn(("login", {"email", "password"}), account.calls)
+            self.assertNotIn("parent@example.no", login_body)
+            self.assertNotIn("site-only", login_body)
             connection.close()
 
             connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
@@ -872,8 +812,9 @@ class RepositoryTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2)
 
-    def test_hellofresh_login_bootstrap_limits_consecutive_attempts(self):
+    def test_hellofresh_login_limits_consecutive_failures(self):
         account = FakeHelloFreshAccountClient()
+        account.login_error = HelloFreshAccountValidation("Ikke godkjent.")
         server = FamilyApiServer(
             ("127.0.0.1", 0),
             self.repo,
@@ -898,13 +839,16 @@ class RepositoryTests(unittest.TestCase):
                     "127.0.0.1", server.server_address[1], timeout=2
                 )
                 connection.request(
-                    "POST", "/api/hellofresh/auth/bootstrap", "{}", headers
+                    "POST",
+                    "/api/hellofresh/auth/login",
+                    json.dumps({"email": "parent@example.no", "password": "wrong"}),
+                    headers,
                 )
                 response = connection.getresponse()
                 statuses.append(response.status)
                 response.read()
                 connection.close()
-            self.assertEqual(statuses, [200, 200, 200, 200, 200, 429])
+            self.assertEqual(statuses, [400, 400, 400, 400, 400, 429])
         finally:
             server.shutdown()
             server.server_close()

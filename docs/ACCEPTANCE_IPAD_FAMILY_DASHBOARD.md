@@ -282,25 +282,21 @@ flag-on acceptance probe.
   top-level navigation position; the Oda implementation remains available for
   rollback but is not shown beside it.
 - First use accepts the household's HelloFresh email and password inside the
-  Portal and sends them directly from the browser to the fixed Norwegian HTTPS
-  login endpoint. It never opens a popup or sends a password-creation email.
-  The password never reaches the Portal API and is never stored, logged, placed
-  in model context or committed.
-- When HelloFresh blocks the password endpoint before checking credentials,
-  first use offers HelloFresh's official one-time sign-in link as a fallback.
-  The UI clearly distinguishes it from password reset, instructs the user to
-  copy rather than open the link, and requires no popup. The email/public ID
-  pair exists only in a 15-minute in-memory flow. The completion endpoint
-  accepts only bounded HTTPS links from allowlisted HelloFresh domains,
-  resolves only allowlisted redirects, and requires the link email and public
-  ID to match the initiating flow before exchanging it for tokens.
-- Access and refresh credentials exist only transiently in first-use browser
-  memory, are immediately handed to the authenticated local completion route,
-  and are not persisted by the browser. The Portal stores only allowlisted
+  Portal. It never opens a popup or sends an email. The password crosses the
+  trusted home LAN to the authenticated local API once, then is sent only to
+  the fixed Norwegian HTTPS login endpoint through a pinned
+  Chrome-fingerprinted TLS/HTTP2 transport with certificate verification and
+  same-origin browser metadata. It is never stored, logged, returned, placed in
+  model context or committed.
+- No email-link fallback is offered. Live evidence for this account/market
+  showed that the provider's nominal passwordless endpoint sends a password
+  reset, so presenting it as login is a release-blocking defect.
+- Access and refresh credentials exist only transiently in provider-response
+  memory. The Portal stores only allowlisted
   tokens outside Git in an owner-only local file; they survive service restarts
   and are refreshed before use. Subsequent browser responses and logs contain
-  no credentials. Five bootstrap attempts per client in five minutes trigger a
-  temporary limit; successful completion clears the attempts.
+  no credentials. Five failed login attempts per client in five minutes trigger
+  a temporary limit; successful login clears the attempts.
 - A Cloudflare HTML challenge or non-JSON provider response is reported as a
   provider security block, not as an incorrect email or password.
 - The login form remains hidden while a renewable credential exists. Temporary
@@ -316,12 +312,12 @@ flag-on acceptance probe.
   failures remain isolated from the family dashboard and show a reconnect or
   unavailable state.
 
-Evidence: password-exclusion, browser bootstrap/completion handoff, provider
-challenge classification, one-time-link host/flow validation, refresh
+Evidence: transient-password exclusion from disk/responses, fixed provider URL,
+browser-TLS request metadata, provider challenge classification, refresh
 rejection, temporary-failure retention, restart/refresh persistence, file-mode
 and curated-menu unit tests; local-session API authorization and response
-secret exclusion; popup exclusion and rendered touch UI assertions; live
-disconnected/connected probe.
+secret exclusion; popup/email-flow exclusion and rendered touch UI assertions;
+live disconnected/connected probe.
 
 ## Release measurement
 

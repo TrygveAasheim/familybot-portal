@@ -14,10 +14,10 @@
   return navigation, explicit add-all-ingredients actions, direct OAuth/MCP
   product search, personal suggestions, cart editing and checkout handoff;
 - optional HelloFresh Norway experiment behind disabled-by-default public and
-  account feature flags. It supports direct-browser email/password first use,
-  an official one-time-sign-in-link fallback, transient allowlisted token
-  handoff, persistent token-only local renewal, the household's suggested
-  weekly menu and selected quantities, with provider writes disabled; see
+  account feature flags. It supports transient email/password first use through
+  a browser-fingerprinted provider transport, persistent token-only local
+  renewal, the household's suggested weekly menu and selected quantities, with
+  provider writes disabled; see
   [the experiment contract](HELLOFRESH_NORWAY.md);
 - Telegram/OpenClaw child-chore interview bridge with preview, explicit confirmation and idempotent creation;
 - child-specific week-plan detail view with structured full plan text, optional validated day/category interpretation, preserved line breaks and bullets, structured days and return navigation;

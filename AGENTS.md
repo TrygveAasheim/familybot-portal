@@ -33,14 +33,14 @@ When the sibling core repository is available, also read
   its dinner model is tool-free, recipe/cart actions stay allowlisted and
   explicit, and checkout/payment still happen at Oda.
 - Experimental meal providers remain disabled by default. HelloFresh account
-  access uses a browser-assisted direct provider password exchange with an
-  official one-time-link fallback, then persists only owner-protected tokens
-  server-side and is separately flagged. Passwords must never reach the Portal
-  API or be stored, logged or returned. One-time links must be short-lived,
-  matched to the initiating flow and accepted only from allowlisted HelloFresh
-  HTTPS hosts; provider tokens may exist only transiently before the allowlisted
-  handoff. It is read-only during physical testing; provider writes require a
-  new mutation security review and explicit acceptance criteria.
+  access uses one rate-limited trusted-LAN API request and a pinned
+  browser-fingerprinted HTTPS transport to the fixed Norway provider endpoint,
+  then persists only owner-protected tokens. The password may exist only in the
+  first-use form and transient request memory; it must never be stored, logged,
+  returned or placed in model context. Provider tokens may exist only
+  transiently before the allowlisted handoff. It is read-only during physical
+  testing; provider writes require a new mutation security review and explicit
+  acceptance criteria.
 - User-visible unavailable/stale states are honest. Do not convert a missing
   source into a healthy or empty-looking result.
 - Smart Home is an add-on behind a narrow provider adapter. The browser must not

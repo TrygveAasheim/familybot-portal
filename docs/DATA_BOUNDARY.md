@@ -99,34 +99,35 @@ extra charge. It does not return the source page, embedded application state,
 bootstrap token, recipe URL, cookies or response headers.
 
 The public adapter has no login, account cookie store or browser automation.
-The separately gated `portal.features.hellofresh_account` adapter bootstraps an
-email/password exchange against the fixed HelloFresh Norway login endpoint.
-The browser sends the password directly to that provider endpoint over HTTPS;
-the password never enters the Portal API, disk, logs, model context or Git.
-HelloFresh's access and refresh tokens exist transiently in first-use browser
-memory and are immediately posted to the authenticated local completion route.
-The completion route accepts only token and expiry fields, persists no provider
-account payload, and returns status booleans only. No email address,
-customer/subscription identifier or raw provider payload is stored or exposed.
-Obtaining login bootstrap material is rate limited to five attempts per client
-in five minutes and successful completion clears the failure window. If the
-password route is blocked, the fallback requests HelloFresh's official
-one-time sign-in link. The email and provider public ID exist only in a
-15-minute in-memory flow. Completion accepts a bounded HTTPS link only from an
-allowlisted HelloFresh domain, resolves only allowlisted redirects, requires
-the email and public ID to match that flow, and never returns or logs the link,
-code, email or resulting tokens.
+The separately gated `portal.features.hellofresh_account` adapter accepts one
+email/password request from a valid local dashboard session, rate limited to
+five failed attempts per client in five minutes. The password crosses the
+Portal's plain-HTTP private-LAN boundary once and exists only in the first-use
+form and transient API/provider-request memory. The API forwards it only to the
+fixed `https://www.hellofresh.no/gw/login` endpoint using a pinned
+Chrome-fingerprinted TLS/HTTP2 transport, same-origin browser metadata and TLS
+certificate verification. It never stores, logs, returns or places the
+password or email in model context or Git. Successful login clears the local
+failure window. The email-link fallback is intentionally absent because live
+Norwegian account testing showed that provider flow sends password-reset mail,
+not a usable login link.
+
+HelloFresh's access and refresh tokens exist transiently in provider-response
+memory and are immediately allowlisted into the owner-only credential. The API
+persists no provider account payload and returns status booleans only. No email
+address, customer/subscription identifier or raw provider payload is stored or
+exposed.
 
 Renewable credentials are stored outside Git in
 `$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
 `0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup is
-required; the email link is an explicit fallback and is exchanged without
-opening it. A Cloudflare HTML challenge or other non-JSON provider block is an
+required and no email is requested. A Cloudflare HTML challenge or other
+non-JSON provider block is an
 unavailable state, never an invalid-password result. Temporary provider
 or network failures preserve the renewable credential for retry; only an
 explicit provider authentication rejection clears it and returns the first-use
 login form. The Portal itself is plain HTTP on a trusted private LAN, so the
-one-time provider-token handoff must not run over guest, public or otherwise
+one-time password request must not run over guest, public or otherwise
 untrusted networks; deployments requiring an untrusted network need local TLS
 before enabling account login.
 

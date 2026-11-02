@@ -14,9 +14,10 @@ details.
 Security-sensitive changes must be reviewed and approved by `@TrygveAasheim`
 before they are promoted to `main`.
 
-The `dev` and pull-request checks audit production and development dependencies
-at the low threshold. Production findings always fail. A development-only
-finding may pass only when its exact GHSA identifier is documented in
+Dependabot monitors the pinned Python runtime dependencies. The `dev` and
+pull-request checks audit production and development npm dependencies at the
+low threshold. Production findings always fail. A development-only finding may
+pass only when its exact GHSA identifier is documented in
 `scripts/audit-dependencies.mjs`; unknown or additional advisories still fail.
 The current `minimatch` exception covers lint tooling that cannot yet consume
 the patched major version and must be removed once that toolchain is compatible.

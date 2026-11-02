@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Browser-assisted, read-only HelloFresh Norway account connector.
+"""Read-only HelloFresh Norway account connector.
 
-The account password is sent directly from the first-use browser to HelloFresh
-and never reaches this service.  The browser immediately hands the resulting
-allowlisted tokens to the Portal, which stores them in an owner-only local file
-so login survives Portal and machine restarts.  This module intentionally has
-no meal-selection, delivery, subscription, address or payment mutation methods.
+The account password reaches this trusted-LAN service for one first-use request,
+is forwarded to HelloFresh through a Chrome-fingerprinted TLS connection and is
+never stored.  Only allowlisted renewable tokens are written to an owner-only
+local file so login survives Portal and machine restarts.  This module
+intentionally has no meal-selection, delivery, subscription, address or payment
+mutation methods.
 """
 
 from __future__ import annotations
@@ -16,14 +17,21 @@ import re
 import secrets
 import stat
 import tempfile
-import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 from pathlib import Path
 from typing import Any
+
+try:
+    from curl_cffi import CurlOpt as _CurlOpt
+    from curl_cffi.requests import Session as _BrowserSession
+    from curl_cffi.requests.errors import RequestsError as _BrowserRequestError
+except ImportError:  # Unit tests run on the macOS system Python; deployment uses its venv.
+    _CurlOpt = None
+    _BrowserSession = None
+    _BrowserRequestError = OSError
 
 from hellofresh_norway import (
     ISO_WEEK,
@@ -43,11 +51,42 @@ MAX_HTML_BYTES = 8_000_000
 TOKEN = re.compile(r"^[A-Za-z0-9_-]{8,4096}(?:\.[A-Za-z0-9_-]{8,4096}){0,2}$")
 ERROR_CODE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}$")
-LOGIN_ID = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
-MAGIC_LINK_MAX_BYTES = 8192
-MAGIC_LINK_TTL_SECONDS = 15 * 60
-MAGIC_LINK_REDIRECT = f"{BASE_URL}/my-account/deliveries/menu"
-MAGIC_LINK_HOSTS = ("hellofresh.no", "hellofresh.com", "hellofresh.co.uk")
+PASSWORD_MAX_LENGTH = 512
+GW_CLIENT_ID = "senf"
+CHROME_VERSION = 150  # curl_cffi 0.16.3's pinned rolling Chrome target.
+CHROME_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    f"(KHTML, like Gecko) Chrome/{CHROME_VERSION}.0.0.0 Safari/537.36"
+)
+CHROME_SEC_UA = (
+    '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"'
+)
+LOGIN_HEADER_ORDER = ",".join(
+    (
+        "content-length",
+        "x-b3-spanid",
+        "sec-ch-ua-platform",
+        "viewport-width",
+        "x-b3-sampled",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "traceparent",
+        "dpr",
+        "x-b3-traceid",
+        "user-agent",
+        "accept",
+        "content-type",
+        "origin",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "sec-fetch-dest",
+        "referer",
+        "accept-encoding",
+        "accept-language",
+        "cookie",
+        "priority",
+    )
+)
 AUTH_REJECTION_CODES = {
     "access_denied",
     "access_denied_password_must_be_rotated",
@@ -74,11 +113,6 @@ class _HttpError(RuntimeError):
         self.status = status
         self.code = code
         self.challenge = challenge
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
-        return None
 
 
 def _token(value: Any) -> str | None:
@@ -123,13 +157,14 @@ def _number(value: Any, default: float = 0) -> float:
 
 
 class HelloFreshAccountClient:
-    """Browser-assisted first use and curated account reads for Norway."""
+    """Transient first-use login and curated account reads for Norway."""
 
     def __init__(
         self,
         credentials_path: Path | None = None,
         *,
         timeout: int = 20,
+        browser_session_factory: Any | None = None,
     ) -> None:
         self.credentials_path = credentials_path or Path(
             os.environ.get(
@@ -138,8 +173,7 @@ class HelloFreshAccountClient:
             )
         ).expanduser()
         self.timeout = timeout
-        self._pending_logins: dict[str, dict[str, Any]] = {}
-        self._pending_lock = threading.Lock()
+        self._browser_session_factory = browser_session_factory
 
     def _load(self) -> dict[str, Any]:
         try:
@@ -203,7 +237,7 @@ class HelloFreshAccountClient:
     ) -> Any:
         query = urllib.parse.urlencode(params or {})
         url = f"{BASE_URL}{path}{'?' + query if query else ''}"
-        headers = {
+        headers: dict[str, str] = {
             "Accept": "application/json",
             "Accept-Language": "nb-NO,nb;q=0.9",
             "User-Agent": "FamilyBot-Portal/1.0 (HelloFresh Norway account connector)",
@@ -291,13 +325,6 @@ class HelloFreshAccountClient:
             )
         return token
 
-    def login_bootstrap(self) -> dict[str, Any]:
-        """Return only the public material needed for a direct browser login."""
-        return {
-            "login_url": f"{BASE_URL}/gw/login?{urllib.parse.urlencode({'country': COUNTRY, 'locale': LOCALE})}",
-            "guest_token": self._guest_token(),
-        }
-
     @staticmethod
     def _validated_email(value: Any) -> str:
         email = value.strip().lower() if isinstance(value, str) else ""
@@ -306,159 +333,150 @@ class HelloFreshAccountClient:
         return email
 
     @staticmethod
-    def _validated_magic_link(value: Any) -> str:
-        if not isinstance(value, str) or not value.strip():
-            raise HelloFreshAccountValidation("Lim inn hele engangskoblingen fra e-posten.")
-        link = value.strip()
-        if len(link.encode("utf-8")) > MAGIC_LINK_MAX_BYTES:
-            raise HelloFreshAccountValidation("Engangskoblingen var større enn forventet.")
-        parsed = urllib.parse.urlparse(link)
-        hostname = (parsed.hostname or "").lower().rstrip(".")
-        try:
-            port = parsed.port
-        except ValueError as exc:
-            raise HelloFreshAccountValidation(
-                "Engangskoblingen må komme fra HelloFresh over HTTPS."
-            ) from exc
-        allowed = parsed.scheme == "https" and any(
-            hostname == domain or hostname.endswith(f".{domain}")
-            for domain in MAGIC_LINK_HOSTS
-        )
-        if not allowed or parsed.username or parsed.password or port not in {None, 443}:
-            raise HelloFreshAccountValidation(
-                "Engangskoblingen må komme fra HelloFresh over HTTPS."
-            )
-        return link
-
-    def _prune_pending_logins(self) -> None:
-        now = time.monotonic()
-        with self._pending_lock:
-            self._pending_logins = {
-                key: value
-                for key, value in self._pending_logins.items()
-                if _number(value.get("expires_at")) > now
-            }
-
-    def start_passwordless_login(self, email_value: Any) -> dict[str, Any]:
-        """Send an official one-time sign-in link without retaining the email."""
-        email = self._validated_email(email_value)
-        public_id = str(uuid.uuid4())
-        try:
-            self._request_json(
-                "/gw/v1/passwordless/start",
-                method="POST",
-                params={"country": COUNTRY, "locale": LOCALE},
-                json_value={
-                    "email": email,
-                    "channel": "email",
-                    "send": "link",
-                    "redirect_url": MAGIC_LINK_REDIRECT,
-                    "public_id": public_id,
-                },
-                bearer=self._guest_token(),
-            )
-        except _HttpError as exc:
-            raise HelloFreshAccountUnavailable(
-                "HelloFresh kunne ikke sende engangskoblingen akkurat nå."
-            ) from exc
-        self._prune_pending_logins()
-        login_id = secrets.token_urlsafe(32)
-        with self._pending_lock:
-            self._pending_logins[login_id] = {
-                "email": email,
-                "public_id": public_id,
-                "expires_at": time.monotonic() + MAGIC_LINK_TTL_SECONDS,
-            }
-        return {"login_id": login_id, "expires_in": MAGIC_LINK_TTL_SECONDS}
+    def _validated_password(value: Any) -> str:
+        if not isinstance(value, str) or not value or len(value) > PASSWORD_MAX_LENGTH:
+            raise HelloFreshAccountValidation("Skriv inn HelloFresh-passordet.")
+        return value
 
     @staticmethod
-    def _magic_link_fields(link_value: Any) -> dict[str, str]:
-        link = HelloFreshAccountClient._validated_magic_link(link_value)
-        opener = urllib.request.build_opener(_NoRedirect)
-        for _ in range(4):
-            parsed = urllib.parse.urlparse(link)
-            query = urllib.parse.parse_qs(parsed.query, keep_blank_values=False)
-            fields = {
-                key: values[0]
-                for key in ("code", "email", "public_id")
-                if (values := query.get(key)) and values[0]
-            }
-            if len(fields) == 3:
-                return fields
-            request = urllib.request.Request(
-                link,
-                headers={
-                    "Accept": "text/html,application/xhtml+xml",
-                    "User-Agent": "FamilyBot-Portal/1.0 (HelloFresh Norway account connector)",
-                },
-            )
-            try:
-                with opener.open(request, timeout=20) as response:
-                    location = response.headers.get("Location")
-            except urllib.error.HTTPError as exc:
-                if exc.code not in {301, 302, 303, 307, 308}:
-                    raise HelloFreshAccountUnavailable(
-                        "Engangskoblingen kunne ikke kontrolleres akkurat nå."
-                    ) from exc
-                location = exc.headers.get("Location")
-            except (urllib.error.URLError, TimeoutError, OSError) as exc:
-                raise HelloFreshAccountUnavailable(
-                    "Engangskoblingen kunne ikke kontrolleres akkurat nå."
-                ) from exc
-            if not location:
-                break
-            link = HelloFreshAccountClient._validated_magic_link(
-                urllib.parse.urljoin(link, location)
-            )
-        raise HelloFreshAccountValidation(
-            "Fant ikke en gyldig HelloFresh-kode i engangskoblingen. Ikke åpne lenken før du kopierer den."
-        )
+    def _browser_headers(*, login: bool) -> dict[str, str | None]:
+        trace_id = secrets.token_hex(16)
+        span_id = secrets.token_hex(8)
+        headers: dict[str, str | None] = {
+            "Accept": "application/json, text/plain, */*" if login else "*/*",
+            "Accept-Language": "nb-NO,nb;q=0.9,en-US;q=0.8,en;q=0.7",
+            "User-Agent": CHROME_USER_AGENT,
+            "Origin": BASE_URL,
+            "Referer": f"{BASE_URL}/login",
+            "Priority": "u=1, i",
+            "sec-ch-ua": CHROME_SEC_UA,
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"macOS"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "DPR": "1",
+            "Viewport-Width": "1280",
+            "traceparent": f"00-{trace_id}-{span_id}-01",
+            "x-b3-traceid": trace_id,
+            "x-b3-spanid": span_id,
+            "x-b3-sampled": "1",
+        }
+        # curl otherwise labels an empty POST as form data; a browser fetch with
+        # no body sends no Content-Type at all.
+        headers["Content-Type"] = "application/json" if login else None
+        return headers
 
-    def complete_passwordless_login(self, payload: Any) -> dict[str, Any]:
-        """Exchange one allowlisted email link and persist only renewable tokens."""
+    def _new_browser_session(self) -> Any:
+        if self._browser_session_factory is not None:
+            return self._browser_session_factory()
+        if _BrowserSession is None:
+            raise HelloFreshAccountUnavailable(
+                "HelloFresh-innloggingen mangler nettlesertransport på Familieportalens Mac."
+            )
+        options = {}
+        header_order = getattr(_CurlOpt, "HTTPHEADER_ORDER", None)
+        if header_order is not None:
+            options["curl_options"] = {header_order: LOGIN_HEADER_ORDER}
+        return _BrowserSession(**options)
+
+    @staticmethod
+    def _response_payload(response: Any) -> dict[str, Any]:
+        raw = bytes(response.content)
+        if len(raw) > MAX_JSON_BYTES:
+            raise HelloFreshAccountUnavailable("HelloFresh-svaret var større enn forventet.")
+        content_type = str(response.headers.get("content-type", "")).lower()
+        lowered = raw[:8192].lower()
+        if "text/html" in content_type and any(
+            marker in lowered
+            for marker in (b"attention required", b"cf-chl", b"challenge-platform", b"just a moment")
+        ):
+            raise HelloFreshAccountUnavailable(
+                "HelloFresh stoppet innloggingen i en sikkerhetskontroll. Vent litt før du prøver igjen."
+            )
+        if "application/json" not in content_type:
+            raise HelloFreshAccountUnavailable(
+                "HelloFresh svarte i et ukjent format under innloggingen."
+            )
+        try:
+            value = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HelloFreshAccountUnavailable(
+                "HelloFresh svarte i et ukjent format under innloggingen."
+            ) from exc
+        return value if isinstance(value, dict) else {}
+
+    def _provider_login(self, email: str, password: str) -> dict[str, Any]:
+        session = self._new_browser_session()
+        try:
+            # The current web client performs this anonymous request before /gw/login.
+            # Its result is intentionally discarded; the cookie/session priming is useful.
+            prime = session.post(
+                f"{BASE_URL}/gw/auth/token",
+                params={"client_id": GW_CLIENT_ID, "grant_type": "client_credentials"},
+                headers=self._browser_headers(login=False),
+                impersonate="chrome",
+                default_headers=False,
+                timeout=self.timeout,
+                verify=True,
+            )
+            if str(prime.headers.get("content-type", "")).lower().startswith("text/html"):
+                self._response_payload(prime)
+            response = session.post(
+                f"{BASE_URL}/gw/login",
+                params={"country": COUNTRY, "locale": LOCALE},
+                json={"username": email, "password": password},
+                headers=self._browser_headers(login=True),
+                impersonate="chrome",
+                default_headers=False,
+                timeout=self.timeout,
+                verify=True,
+            )
+        except _BrowserRequestError:
+            raise HelloFreshAccountUnavailable(
+                "HelloFresh-innloggingen svarer ikke akkurat nå."
+            ) from None
+        finally:
+            try:
+                session.close()
+            except Exception:  # noqa: BLE001 - close must not replace the provider result.
+                pass
+        payload = self._response_payload(response)
+        status = int(response.status_code)
+        code = payload.get("error") if isinstance(payload.get("error"), str) else None
+        if status == 429:
+            raise HelloFreshAccountUnavailable(
+                "HelloFresh har midlertidig sperret nye innloggingsforsøk. Vent før du prøver igjen."
+            )
+        if status >= 400:
+            if code == "access_denied_password_must_be_rotated":
+                raise HelloFreshAccountValidation(
+                    "HelloFresh krever at passordet fornyes på hellofresh.no før kontoen kan kobles til."
+                )
+            if code in {"access_denied", "invalid_grant"}:
+                raise HelloFreshAccountValidation(
+                    "E-post eller passord ble ikke godtatt av HelloFresh."
+                )
+            if status in {401, 403}:
+                raise HelloFreshAccountUnavailable(
+                    "HelloFresh avviste innloggingskanalen før passordet kunne kontrolleres."
+                )
+            raise HelloFreshAccountUnavailable(
+                "HelloFresh kunne ikke fullføre innloggingen akkurat nå."
+            )
+        return payload
+
+    def login(self, payload: Any) -> dict[str, Any]:
+        """Perform one transient provider login and persist only renewable tokens."""
         if not isinstance(payload, dict):
             raise HelloFreshAccountValidation("HelloFresh-innloggingen manglet nødvendig informasjon.")
-        login_id = payload.get("login_id")
-        if not isinstance(login_id, str) or not LOGIN_ID.fullmatch(login_id):
-            raise HelloFreshAccountValidation("Be om en ny engangskobling.")
-        self._prune_pending_logins()
-        with self._pending_lock:
-            pending = self._pending_logins.get(login_id)
-        if not pending:
-            raise HelloFreshAccountValidation("Engangskoblingen er utløpt. Be om en ny.")
-        fields = self._magic_link_fields(payload.get("link"))
-        if (
-            fields.get("public_id") != pending["public_id"]
-            or self._validated_email(fields.get("email")) != pending["email"]
-        ):
-            raise HelloFreshAccountValidation("Engangskoblingen tilhører ikke denne innloggingen.")
+        email = self._validated_email(payload.get("email"))
+        password = self._validated_password(payload.get("password"))
         try:
-            tokens = self._request_json(
-                "/gw/v1/passwordless/magic-link/finish",
-                params={
-                    "channel": "email",
-                    "code": fields["code"],
-                    "country": COUNTRY.lower(),
-                    "email": pending["email"],
-                    "public_id": pending["public_id"],
-                    "redirect_url": MAGIC_LINK_REDIRECT,
-                },
-                bearer=self._guest_token(),
-            )
-        except _HttpError as exc:
-            if exc.status in {400, 401, 403, 404, 410, 422} and not exc.challenge:
-                with self._pending_lock:
-                    self._pending_logins.pop(login_id, None)
-                raise HelloFreshAccountValidation(
-                    "Engangskoblingen er ugyldig, utløpt eller allerede brukt. Be om en ny."
-                ) from exc
-            raise HelloFreshAccountUnavailable(
-                "HelloFresh kunne ikke godkjenne engangskoblingen akkurat nå."
-            ) from exc
-        result = self.complete_login(tokens)
-        with self._pending_lock:
-            self._pending_logins.pop(login_id, None)
-        return result
+            tokens = self._provider_login(email, password)
+        finally:
+            password = ""
+        return self.complete_login(tokens)
 
     def complete_login(self, tokens: Any) -> dict[str, Any]:
         """Persist the allowlisted result of a successful direct provider login."""

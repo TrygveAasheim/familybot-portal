@@ -42,6 +42,7 @@ from hellofresh_norway import (
     RECIPE_ID,
     _bounded_text,
     _calories,
+    _meal_categories,
     _safe_image_url,
 )
 
@@ -167,6 +168,25 @@ def _number(value: Any, default: float = 0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _bounded_lines(value: Any, maximum: int, maximum_lines: int = 30) -> str:
+    if not isinstance(value, str):
+        return ""
+    lines = [" ".join(line.split()) for line in value.splitlines() if line.strip()]
+    return "\n".join(lines[:maximum_lines])[:maximum]
+
+
+def _bounded_amount(value: Any) -> int | float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not 0 <= amount <= 100_000 or amount != amount or amount in {float("inf"), float("-inf")}:
+        return None
+    return int(amount) if amount.is_integer() else round(amount, 2)
 
 
 class HelloFreshAccountClient:
@@ -866,6 +886,7 @@ class HelloFreshAccountClient:
             "difficulty": int(recipe.get("difficulty")) if recipe.get("difficulty") in {1, 2, 3} else None,
             "calories": _calories(recipe.get("nutrition")),
             "tags": tags[:6],
+            "filter_categories": _meal_categories(recipe),
             "sold_out": meal.get("isSoldOut") is True,
             "extra_charge_ore": extra_charge,
             "selected_quantity": _selection_quantity(meal.get("selection")),
@@ -1009,6 +1030,124 @@ class HelloFreshAccountClient:
 
     def menu(self, week: str) -> dict[str, Any]:
         return self._menu_contract(self._menu_bundle(week))
+
+    def recipe_detail(self, recipe_id: str, servings: int | None = None) -> dict[str, Any]:
+        """Return one allowlisted recipe; never expose the provider's raw object."""
+        if not isinstance(recipe_id, str) or not RECIPE_ID.fullmatch(recipe_id):
+            raise HelloFreshAccountValidation("Ugyldig HelloFresh-rett.")
+        if servings is not None and (isinstance(servings, bool) or not 1 <= servings <= 12):
+            raise HelloFreshAccountValidation("Ugyldig antall porsjoner.")
+        value = self._authorized_json(
+            f"/gw/recipes/recipes/{urllib.parse.quote(recipe_id, safe='')}",
+            params={"country": COUNTRY, "locale": LOCALE},
+        )
+        if not isinstance(value, dict) or value.get("id") != recipe_id:
+            raise HelloFreshAccountUnavailable("HelloFresh-oppskriften svarte i et ukjent format.")
+
+        raw_ingredients = value.get("ingredients") if isinstance(value.get("ingredients"), list) else []
+        raw_yields = value.get("yields") if isinstance(value.get("yields"), list) else []
+        selected_yield = next(
+            (
+                item for item in raw_yields[:12]
+                if isinstance(item, dict) and item.get("yields") == servings
+            ),
+            next((item for item in raw_yields[:12] if isinstance(item, dict)), {}),
+        )
+        selected_servings = selected_yield.get("yields") if isinstance(selected_yield, dict) else None
+        if not isinstance(selected_servings, int) or not 1 <= selected_servings <= 12:
+            selected_servings = servings
+        yield_ingredients = (
+            selected_yield.get("ingredients")
+            if isinstance(selected_yield, dict) and isinstance(selected_yield.get("ingredients"), list)
+            else []
+        )
+        amounts: dict[str, tuple[int | float | None, str]] = {}
+        for item in yield_ingredients[:80]:
+            if not isinstance(item, dict):
+                continue
+            ingredient_id = str(item.get("id", ""))[:200]
+            if ingredient_id:
+                amounts[ingredient_id] = (
+                    _bounded_amount(item.get("amount")),
+                    _bounded_text(item.get("unit"), 30),
+                )
+
+        referenced_allergens: set[str] = set()
+        ingredients = []
+        for item in raw_ingredients[:40]:
+            if not isinstance(item, dict):
+                continue
+            name = _bounded_text(item.get("name"), 100)
+            if not name:
+                continue
+            ingredient_id = str(item.get("id", ""))[:200]
+            amount, unit = amounts.get(ingredient_id, (None, ""))
+            ingredients.append(
+                {
+                    "name": name,
+                    "amount": amount,
+                    "unit": unit,
+                    "shipped": item.get("shipped") is not False,
+                }
+            )
+            for allergen in item.get("allergens", [])[:20] if isinstance(item.get("allergens"), list) else []:
+                if isinstance(allergen, str) and 1 <= len(allergen) <= 200:
+                    referenced_allergens.add(allergen)
+
+        allergens = []
+        may_contain = []
+        raw_allergens = value.get("allergens") if isinstance(value.get("allergens"), list) else []
+        for item in raw_allergens[:40]:
+            if not isinstance(item, dict) or str(item.get("id", "")) not in referenced_allergens:
+                continue
+            name = _bounded_text(item.get("name"), 80)
+            if not name or item.get("triggersTracesOf") is True:
+                continue
+            if item.get("tracesOf") is True and name not in may_contain:
+                may_contain.append(name)
+            elif name not in allergens:
+                allergens.append(name)
+
+        nutrition = []
+        for item in value.get("nutrition", [])[:20] if isinstance(value.get("nutrition"), list) else []:
+            if not isinstance(item, dict):
+                continue
+            name = _bounded_text(item.get("name"), 80)
+            amount = _bounded_amount(item.get("amount"))
+            if name and amount is not None:
+                nutrition.append(
+                    {"name": name, "amount": amount, "unit": _bounded_text(item.get("unit"), 30)}
+                )
+
+        steps = []
+        for position, item in enumerate(value.get("steps", [])[:12] if isinstance(value.get("steps"), list) else []):
+            if not isinstance(item, dict):
+                continue
+            instructions = _bounded_lines(item.get("instructions"), 1_600)
+            if instructions:
+                index = item.get("index") if isinstance(item.get("index"), int) else position
+                steps.append({"index": max(0, min(index, 100)), "instructions": instructions})
+        steps.sort(key=lambda item: item["index"])
+
+        name = _bounded_text(value.get("name"), 120)
+        if not name:
+            raise HelloFreshAccountUnavailable("HelloFresh-oppskriften manglet navn.")
+        return {
+            "id": recipe_id,
+            "name": name,
+            "headline": _bounded_text(value.get("headline"), 180),
+            "description": _bounded_text(value.get("description"), 1_000),
+            "image_url": _safe_image_url(value.get("image") or value.get("imageLink")),
+            "prep_time": _bounded_text(value.get("prepTime"), 20),
+            "total_time": _bounded_text(value.get("totalTime"), 20),
+            "difficulty": int(value.get("difficulty")) if value.get("difficulty") in {1, 2, 3} else None,
+            "servings": selected_servings,
+            "ingredients": ingredients,
+            "allergens": allergens[:24],
+            "may_contain": may_contain[:24],
+            "nutrition": nutrition,
+            "steps": steps,
+        }
 
     @staticmethod
     def _expected_snapshot(payload: Any, key: str = "snapshot") -> str:

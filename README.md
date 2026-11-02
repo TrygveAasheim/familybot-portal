@@ -15,7 +15,8 @@ The planner connects the services Norwegian families already use:
   grocery cart;
 - an optional, experimental **HelloFresh Norway** planner for upcoming boxes,
   with one-time transient login, persistent token renewal, dish images and
-  guarded meal replacement/add/remove plus per-week pause/resume;
+  guarded meal replacement/add/remove, per-week pause/resume, quick dish
+  filters and inline ingredients and cooking steps;
 - school email, PDF `ukeplan` documents and Norwegian calendars; and
 - **Telegram** for intentional notifications outside the home network.
 
@@ -193,7 +194,9 @@ The experimental HelloFresh integration uses two flags. `hellofresh` exposes a
 curated public Norwegian menu; `hellofresh_account` replaces Oda in the visible
 navigation with an in-Portal email/password form, persistent owner-only local
 refresh credentials and the household's upcoming boxes. Selected meals are
-shown first with images; the next modifiable week opens by default. On first use,
+shown first with images; the next modifiable week opens by default. Meals can be
+filtered by broad family-friendly categories and expanded in place to show the
+portion-matched recipe without opening another page. On first use,
 the password reaches the Portal API once over the trusted home LAN. The Mac
 forwards it to HelloFresh's fixed Norway endpoint through a pinned
 Chrome-fingerprinted, certificate-verified HTTPS transport, then discards it.

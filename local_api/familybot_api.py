@@ -1869,6 +1869,20 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                     if not week:
                         raise HelloFreshAccountUnavailable("Fant ingen publisert HelloFresh-meny.")
                     self.respond(200, {"menu": self.app.hellofresh_account.menu(week)})
+                elif self.app.features["hellofresh_account"] and (
+                    recipe_match := re.fullmatch(
+                        r"/api/hellofresh/account/recipes/([0-9a-f]{24})", parsed.path
+                    )
+                ):
+                    query = parse_qs(parsed.query)
+                    raw_servings = (query.get("servings") or [""])[0]
+                    if raw_servings and not raw_servings.isdigit():
+                        raise HelloFreshAccountValidation("Ugyldig antall porsjoner.")
+                    servings = int(raw_servings) if raw_servings.isdigit() else None
+                    self.respond(
+                        200,
+                        {"recipe": self.app.hellofresh_account.recipe_detail(recipe_match.group(1), servings)},
+                    )
                 else:
                     self.respond(404, {"error": "Ikke funnet."})
             except HelloFreshAccountValidation as exc:

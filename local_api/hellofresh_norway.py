@@ -117,6 +117,40 @@ def _calories(nutrition: Any) -> int | None:
     return None
 
 
+def _meal_categories(recipe: Any) -> list[str]:
+    """Derive a small, deterministic set of family-facing menu filters."""
+    if not isinstance(recipe, dict):
+        return []
+    values = [recipe.get("name"), recipe.get("headline")]
+    for key in ("tags", "cuisines"):
+        collection = recipe.get(key) if isinstance(recipe.get(key), list) else []
+        for item in collection[:40]:
+            if isinstance(item, dict):
+                values.extend((item.get("name"), item.get("type")))
+            elif isinstance(item, str):
+                values.append(item)
+    haystack = " ".join(value for value in values if isinstance(value, str)).casefold()
+    rules = {
+        "meat": (
+            "kjøtt", "storfe", "biff", "okse", "svin", "bacon", "chorizo",
+            "pølse", "kylling", "kalkun", "lam", "beef", "pork", "chicken",
+            "turkey", "sausage", "meat",
+        ),
+        "fish": (
+            "fisk", "laks", "ørret", "torsk", "hyse", "sei", "tunfisk",
+            "reke", "scampi", "fish", "salmon", "trout", "cod", "haddock",
+            "shrimp", "prawn", "seafood",
+        ),
+        "pasta": (
+            "pasta", "spaghetti", "linguine", "tagliatelle", "tortelloni",
+            "ravioli", "lasagne", "gnocchi", "orzo", "penne", "fusilli",
+            "nudel", "noodle", "ramen",
+        ),
+        "vegetarian": ("vegetar", "veggie", "vegetarian", "vegan"),
+    }
+    return [key for key, needles in rules.items() if any(needle in haystack for needle in needles)]
+
+
 class HelloFreshNorwayClient:
     """Fetch and normalize only public Norwegian menu information."""
 
@@ -201,6 +235,7 @@ class HelloFreshNorwayClient:
             "difficulty": int(recipe.get("difficulty")) if recipe.get("difficulty") in {1, 2, 3} else None,
             "calories": _calories(recipe.get("nutrition")),
             "tags": tags[:6],
+            "filter_categories": _meal_categories(recipe),
             "sold_out": course.get("isSoldOut") is True,
             "extra_charge_ore": int(extra_charge) if isinstance(extra_charge, int) and 0 <= extra_charge <= 100_000 else None,
         }

@@ -398,6 +398,75 @@ class HelloFreshAccountTests(unittest.TestCase):
         self.assertNotIn("customer-secret", serialized)
         self.assertNotIn("NO-BOX", serialized)
 
+    def test_menu_filter_categories_use_existing_recipe_metadata(self):
+        meal = {
+            "index": 7,
+            "selection": {},
+            "recipe": {
+                "id": "7".zfill(24),
+                "name": "Kremet laksepasta",
+                "headline": "med ferske grønnsaker",
+                "tags": [{"name": "Familievennlig", "displayLabel": True}],
+                "cuisines": [{"name": "Italian", "type": "italian"}],
+            },
+        }
+        normalized = self.client._normalize_meal(meal, 0)
+        self.assertEqual(normalized["filter_categories"], ["fish", "pasta"])
+
+    def test_recipe_detail_is_portion_aware_curated_and_bounded(self):
+        recipe_id = "a" * 24
+        provider = {
+            "id": recipe_id,
+            "name": "Familiepasta",
+            "headline": "med tomat",
+            "description": "En enkel middag.",
+            "image": "https://img.hellofresh.com/test/detail.jpg",
+            "prepTime": "PT20M",
+            "totalTime": "PT35M",
+            "difficulty": 1,
+            "privateAccountValue": "must-not-leak",
+            "ingredients": [
+                {"id": "pasta", "name": "Pasta", "shipped": True, "allergens": ["gluten"]},
+                {"id": "salt", "name": "Salt", "shipped": False, "allergens": ["milk"]},
+            ],
+            "allergens": [
+                {"id": "gluten", "name": "Gluten"},
+                {"id": "milk", "name": "Melk", "tracesOf": True},
+            ],
+            "nutrition": [{"name": "Energi", "amount": 650, "unit": "kcal"}],
+            "yields": [
+                {"yields": 2, "ingredients": [{"id": "pasta", "amount": 180, "unit": "g"}]},
+                {"yields": 4, "ingredients": [{"id": "pasta", "amount": 360, "unit": "g"}]},
+            ],
+            "steps": [
+                {"index": 1, "instructions": "Kok pasta.\nServer varm."},
+                {"index": 0, "instructions": "Finn frem en kjele."},
+            ],
+        }
+        with patch.object(self.client, "_authorized_json", return_value=provider) as request:
+            detail = self.client.recipe_detail(recipe_id, 4)
+        request.assert_called_once_with(
+            f"/gw/recipes/recipes/{recipe_id}", params={"country": "NO", "locale": "nb-NO"}
+        )
+        self.assertEqual(detail["servings"], 4)
+        self.assertEqual(detail["ingredients"][0]["amount"], 360)
+        self.assertFalse(detail["ingredients"][1]["shipped"])
+        self.assertEqual(detail["allergens"], ["Gluten"])
+        self.assertEqual(detail["may_contain"], ["Melk"])
+        self.assertEqual(detail["steps"][0]["index"], 0)
+        self.assertIn("\n", detail["steps"][1]["instructions"])
+        serialized = json.dumps(detail)
+        self.assertNotIn("privateAccountValue", serialized)
+        self.assertNotIn("must-not-leak", serialized)
+
+    def test_recipe_detail_rejects_invalid_recipe_and_serving_values(self):
+        with patch.object(self.client, "_authorized_json") as provider:
+            with self.assertRaises(HelloFreshAccountValidation):
+                self.client.recipe_detail("not-a-recipe", 4)
+            with self.assertRaises(HelloFreshAccountValidation):
+                self.client.recipe_detail("a" * 24, 100)
+        provider.assert_not_called()
+
     def test_upcoming_weeks_start_on_next_modifiable_and_mark_publication(self):
         subscription = account_subscription()
         deliveries = [delivery_week(), {**delivery_week(), "id": "2026-W50"}]

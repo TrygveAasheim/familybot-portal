@@ -140,6 +140,19 @@ class FakeHelloFreshAccountClient:
             "recipes": [],
         }
 
+    def recipe_detail(self, recipe_id, servings):
+        self.calls.append(("recipe_detail", recipe_id, servings))
+        return {
+            "id": recipe_id,
+            "name": "Testrett",
+            "servings": servings,
+            "ingredients": [],
+            "allergens": [],
+            "may_contain": [],
+            "nutrition": [],
+            "steps": [],
+        }
+
     def weeks(self):
         self.calls.append(("weeks",))
         return {
@@ -836,6 +849,20 @@ class RepositoryTests(unittest.TestCase):
             self.assertEqual(response.status, 200)
             self.assertTrue(menu["account"])
             self.assertIn(("menu", "2026-W46"), account.calls)
+            connection.close()
+
+            recipe_id = "a" * 24
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "GET",
+                f"/api/hellofresh/account/recipes/{recipe_id}?servings=4",
+                headers=headers,
+            )
+            response = connection.getresponse()
+            recipe = json.loads(response.read())["recipe"]
+            self.assertEqual(response.status, 200)
+            self.assertEqual(recipe["name"], "Testrett")
+            self.assertIn(("recipe_detail", recipe_id, 4), account.calls)
             connection.close()
 
             connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)

@@ -310,7 +310,15 @@ flag-on acceptance probe.
 - The connected surface opens the provider's next modifiable published week by
   default and lets the household traverse later delivery weeks. Unpublished
   weeks are visible but disabled. The selected dishes are shown first with
-  reviewed HelloFresh CDN images; all other dishes follow as options.
+  reviewed HelloFresh CDN images; all other dishes follow as options. Option
+  dishes can be narrowed with touch-friendly meat, fish, pasta and vegetarian
+  filters derived from existing menu metadata.
+- Any selected or optional dish expands in place and collapses again without
+  navigation or a popup. Detail is fetched only on first expansion, then cached
+  in the browser. It shows portion-matched ingredients, referenced allergens,
+  nutrition and plaintext cooking steps. The API accepts only a validated
+  recipe ID and 1–12 servings and returns a bounded allowlist rather than the
+  provider payload.
 - A valid dashboard session can replace one selected dish, add or remove a
   dish within provider-supported box sizes, and pause or resume one exact week.
   Every action requires explicit confirmation. Sold-out dishes, expired
@@ -330,7 +338,8 @@ Evidence: transient-password exclusion from disk/responses, fixed provider URL,
 browser-TLS request metadata, provider challenge classification, refresh
 rejection, opaque-token acceptance, unsafe-token rejection, temporary-failure
 retention, restart/refresh persistence, file-mode, exact range-boundary,
-selected-first/image, add-on preservation, stale-state, product-size,
+selected-first/image, category classification, curated portion-aware recipe
+detail, inline expand/collapse, add-on preservation, stale-state, product-size,
 replacement/add/remove and pause/read-after-write unit tests; local-session API
 authorization and response secret exclusion; popup/email-flow exclusion and
 rendered touch UI assertions; read-only live connected probe.

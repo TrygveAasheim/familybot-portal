@@ -7,7 +7,8 @@
 - Problem or intent: model the household's real weekly journey: open the next
   editable box, see the selected meals first with images, inspect later weeks,
   replace or add/remove dishes, and pause or resume a week without leaving the
-  kiosk browser.
+  kiosk browser. A follow-up adds quick meat, fish, pasta and vegetarian filters
+  plus inline recipe expansion for ingredients, allergens, nutrition and steps.
 - Evidence: read-only live probes on 2026-11-02 found provider delivery weeks
   W46–W01, published menus through W49, 70 dishes with 70 reviewed CDN images
   in W46, three selected dishes identified by provider course indexes, and
@@ -23,6 +24,8 @@
   `ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md`.
 - Tests: transient-password and credential safety; exact week bracketing;
   selected-first normalization and image allowlisting; product-size mapping;
+  deterministic category classification; portion-aware, curated recipe detail;
+  inline expansion and accessible filter controls;
   replacement preserving unrelated meals and add-ons; add/remove; stale-view
   rejection before provider access; exact-week pause; read-after-write
   verification; route authorization and error mapping; rendered touch UI; full
@@ -69,7 +72,15 @@ weeks remain visible as "Meny kommer" but cannot be opened. A selected box shows
 - delivery date, cutoff, paused/running state, servings and meal count;
 - selected dishes first, including images and selected quantities;
 - all remaining dishes as replace/add options, with sold-out options disabled;
+- quick filters derived locally from recipe names, cuisine and provider tags;
+- an inline expandable recipe with portion-matched ingredients, allergens,
+  nutrition and cooking steps, without leaving or opening another page;
 - explicit confirmation before replace, add, remove, pause or resume.
+
+Recipe detail is loaded only when a card is expanded and cached in that browser
+session. The local API calls one fixed recipe-detail endpoint, validates the
+24-character recipe ID and serving count, and returns a bounded allowlist. Raw
+provider recipe/account objects, identifiers and HTML are never forwarded.
 
 Meal writes use the provider's full-cart contract, so the adapter re-reads the
 week immediately before each action. It derives the exact course indexes,

@@ -140,6 +140,11 @@ Authenticated reads expose upcoming delivery weeks plus the same curated recipe
 contract, selected quantities and total selected count. The provider's next
 modifiable delivery week is the default. Recipe images are returned only from
 reviewed HTTPS HelloFresh CDN hosts; no raw account identifiers are exposed.
+Menu filters are derived locally from bounded names, cuisines and tags. Opening
+one meal performs a read-only lookup by a validated 24-character recipe ID and
+returns only bounded description, timing, portion-matched ingredients,
+referenced allergens, nutrition and plaintext cooking steps. The browser never
+receives raw recipe/account payloads, HTML or a generic provider URL.
 
 The bounded write allowlist contains only meal replacement/add/remove and
 pause/resume for one exact ISO week. The server derives customer, subscription,

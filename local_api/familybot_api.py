@@ -1986,6 +1986,25 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                         self.client_address[0], succeeded=True
                     )
                     self.respond(200, result)
+                elif method == "POST" and path == "/api/hellofresh/auth/link/start":
+                    if not self.app.hellofresh_login_allowed(self.client_address[0]):
+                        self.respond(429, {"error": "For mange innloggingsforsøk. Vent fem minutter."})
+                        return
+                    result = self.app.hellofresh_account.start_passwordless_login(
+                        self.read_payload().get("email")
+                    )
+                    self.app.record_hellofresh_login(
+                        self.client_address[0], succeeded=False
+                    )
+                    self.respond(200, result)
+                elif method == "POST" and path == "/api/hellofresh/auth/link/complete":
+                    result = self.app.hellofresh_account.complete_passwordless_login(
+                        self.read_payload()
+                    )
+                    self.app.record_hellofresh_login(
+                        self.client_address[0], succeeded=True
+                    )
+                    self.respond(200, result)
                 elif method == "DELETE" and path == "/api/hellofresh/connection":
                     self.app.hellofresh_account.disconnect()
                     self.respond(200, {"connected": False})

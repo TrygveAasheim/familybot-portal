@@ -109,13 +109,20 @@ The completion route accepts only token and expiry fields, persists no provider
 account payload, and returns status booleans only. No email address,
 customer/subscription identifier or raw provider payload is stored or exposed.
 Obtaining login bootstrap material is rate limited to five attempts per client
-in five minutes and successful completion clears the failure window.
+in five minutes and successful completion clears the failure window. If the
+password route is blocked, the fallback requests HelloFresh's official
+one-time sign-in link. The email and provider public ID exist only in a
+15-minute in-memory flow. Completion accepts a bounded HTTPS link only from an
+allowlisted HelloFresh domain, resolves only allowlisted redirects, requires
+the email and public ID to match that flow, and never returns or logs the link,
+code, email or resulting tokens.
 
 Renewable credentials are stored outside Git in
 `$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
-`0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup or email
-link is required. A Cloudflare HTML challenge or other non-JSON provider block
-is an unavailable state, never an invalid-password result. Temporary provider
+`0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup is
+required; the email link is an explicit fallback and is exchanged without
+opening it. A Cloudflare HTML challenge or other non-JSON provider block is an
+unavailable state, never an invalid-password result. Temporary provider
 or network failures preserve the renewable credential for retry; only an
 explicit provider authentication rejection clears it and returns the first-use
 login form. The Portal itself is plain HTTP on a trusted private LAN, so the

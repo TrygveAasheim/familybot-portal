@@ -125,6 +125,15 @@ class FakeHelloFreshAccountClient:
         self.connected = True
         return self.status()
 
+    def start_passwordless_login(self, email):
+        self.calls.append(("start_passwordless_login", email))
+        return {"login_id": "a" * 43, "expires_in": 900}
+
+    def complete_passwordless_login(self, payload):
+        self.calls.append(("complete_passwordless_login", set(payload)))
+        self.connected = True
+        return self.status()
+
     def menu(self, week):
         self.calls.append(("menu", week))
         return {
@@ -793,6 +802,38 @@ class RepositoryTests(unittest.TestCase):
             self.assertIn(("login_bootstrap",), account.calls)
             self.assertNotIn("email", bootstrap)
             self.assertNotIn("password", bootstrap)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/auth/link/start",
+                json.dumps({"email": "parent@example.no"}),
+                headers,
+            )
+            response = connection.getresponse()
+            link_start_body = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn(("start_passwordless_login", "parent@example.no"), account.calls)
+            self.assertNotIn("parent@example.no", link_start_body)
+            self.assertNotIn("public_id", link_start_body)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/auth/link/complete",
+                json.dumps({"login_id": "a" * 43, "link": "https://www.hellofresh.no/link"}),
+                headers,
+            )
+            response = connection.getresponse()
+            link_complete_body = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn(
+                ("complete_passwordless_login", {"login_id", "link"}),
+                account.calls,
+            )
+            self.assertNotIn("hellofresh.no/link", link_complete_body)
             connection.close()
 
             connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)

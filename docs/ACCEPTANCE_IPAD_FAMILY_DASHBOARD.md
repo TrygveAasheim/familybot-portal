@@ -286,6 +286,14 @@ flag-on acceptance probe.
   login endpoint. It never opens a popup or sends a password-creation email.
   The password never reaches the Portal API and is never stored, logged, placed
   in model context or committed.
+- When HelloFresh blocks the password endpoint before checking credentials,
+  first use offers HelloFresh's official one-time sign-in link as a fallback.
+  The UI clearly distinguishes it from password reset, instructs the user to
+  copy rather than open the link, and requires no popup. The email/public ID
+  pair exists only in a 15-minute in-memory flow. The completion endpoint
+  accepts only bounded HTTPS links from allowlisted HelloFresh domains,
+  resolves only allowlisted redirects, and requires the link email and public
+  ID to match the initiating flow before exchanging it for tokens.
 - Access and refresh credentials exist only transiently in first-use browser
   memory, are immediately handed to the authenticated local completion route,
   and are not persisted by the browser. The Portal stores only allowlisted
@@ -309,10 +317,11 @@ flag-on acceptance probe.
   unavailable state.
 
 Evidence: password-exclusion, browser bootstrap/completion handoff, provider
-challenge classification, refresh rejection, temporary-failure retention,
-restart/refresh persistence, file-mode and curated-menu unit tests;
-local-session API authorization and response secret exclusion; popup/email-link
-exclusion and rendered touch UI assertions; live disconnected/connected probe.
+challenge classification, one-time-link host/flow validation, refresh
+rejection, temporary-failure retention, restart/refresh persistence, file-mode
+and curated-menu unit tests; local-session API authorization and response
+secret exclusion; popup exclusion and rendered touch UI assertions; live
+disconnected/connected probe.
 
 ## Release measurement
 

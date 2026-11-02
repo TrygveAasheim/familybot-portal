@@ -63,6 +63,87 @@ class HelloFreshAccountTests(unittest.TestCase):
             },
         )
 
+    def test_passwordless_start_retains_pending_state_only_in_memory(self):
+        with patch.object(self.client, "_guest_token", return_value=ACCESS), patch.object(
+            self.client, "_request_json", return_value={}
+        ) as request:
+            result = self.client.start_passwordless_login(" Parent@Example.No ")
+        self.assertEqual(set(result), {"login_id", "expires_in"})
+        self.assertFalse(self.credentials.exists())
+        pending = self.client._pending_logins[result["login_id"]]
+        self.assertEqual(pending["email"], "parent@example.no")
+        payload = request.call_args.kwargs["json_value"]
+        self.assertEqual(payload["channel"], "email")
+        self.assertEqual(payload["send"], "link")
+        self.assertNotIn("password", payload)
+        self.assertNotIn("email", json.dumps(result))
+
+    def test_passwordless_finish_matches_pending_link_and_persists_tokens(self):
+        with patch.object(self.client, "_guest_token", return_value=ACCESS), patch.object(
+            self.client, "_request_json", return_value={}
+        ):
+            started = self.client.start_passwordless_login("parent@example.no")
+        pending = self.client._pending_logins[started["login_id"]]
+        fields = {
+            "code": "one-time-code",
+            "email": pending["email"],
+            "public_id": pending["public_id"],
+        }
+        with patch.object(self.client, "_magic_link_fields", return_value=fields), patch.object(
+            self.client,
+            "_guest_token",
+            return_value=ACCESS,
+        ), patch.object(
+            self.client,
+            "_request_json",
+            return_value={"access_token": ACCESS, "refresh_token": REFRESH, "expires_in": 900},
+        ) as request:
+            status = self.client.complete_passwordless_login(
+                {"login_id": started["login_id"], "link": "https://www.hellofresh.no/link"}
+            )
+        self.assertTrue(status["connected"])
+        self.assertNotIn(started["login_id"], self.client._pending_logins)
+        self.assertEqual(request.call_args.args[0], "/gw/v1/passwordless/magic-link/finish")
+        self.assertEqual(request.call_args.kwargs["params"]["country"], "no")
+        self.assertEqual(stat.S_IMODE(self.credentials.stat().st_mode), 0o600)
+
+    def test_magic_link_fields_accept_only_https_hellofresh_hosts(self):
+        fields = self.client._magic_link_fields(
+            "https://www.hellofresh.no/auth?code=abc&email=parent%40example.no&public_id=flow-id"
+        )
+        self.assertEqual(
+            fields,
+            {"code": "abc", "email": "parent@example.no", "public_id": "flow-id"},
+        )
+        for link in (
+            "http://www.hellofresh.no/auth?code=x",
+            "https://hellofresh.no.evil.example/auth?code=x",
+            "https://127.0.0.1/auth?code=x",
+            "https://www.hellofresh.no:invalid/auth?code=x",
+        ):
+            with self.subTest(link=link), self.assertRaises(HelloFreshAccountValidation):
+                self.client._magic_link_fields(link)
+
+    def test_passwordless_finish_rejects_a_link_for_another_flow(self):
+        with patch.object(self.client, "_guest_token", return_value=ACCESS), patch.object(
+            self.client, "_request_json", return_value={}
+        ):
+            started = self.client.start_passwordless_login("parent@example.no")
+        with patch.object(
+            self.client,
+            "_magic_link_fields",
+            return_value={
+                "code": "one-time-code",
+                "email": "parent@example.no",
+                "public_id": "different-flow",
+            },
+        ), patch.object(self.client, "_request_json") as request:
+            with self.assertRaises(HelloFreshAccountValidation):
+                self.client.complete_passwordless_login(
+                    {"login_id": started["login_id"], "link": "https://www.hellofresh.no/link"}
+                )
+        request.assert_not_called()
+
     def test_http_error_classifies_cloudflare_html_challenge_without_retaining_body(self):
         headers = Message()
         headers["Content-Type"] = "text/html; charset=UTF-8"

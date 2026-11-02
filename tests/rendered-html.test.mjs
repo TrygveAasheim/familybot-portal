@@ -111,8 +111,12 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /https:\/\/www\.hellofresh\.no\/gw\/login\?country=NO&locale=nb-NO/);
   assert.match(consoleSource, /api\/hellofresh\/auth\/bootstrap/);
   assert.match(consoleSource, /api\/hellofresh\/auth\/complete/);
+  assert.match(consoleSource, /Send engangskobling/);
+  assert.match(consoleSource, /Kopier hele lenken/);
+  assert.match(consoleSource, /api\/hellofresh\/auth\/link\/start/);
+  assert.match(consoleSource, /api\/hellofresh\/auth\/link\/complete/);
   assert.match(consoleSource, /api\/hellofresh\/account\/menu/);
-  assert.doesNotMatch(consoleSource, /Send innloggingslenke|Godkjenn lenken her|auth\/start|auth\/login/);
+  assert.doesNotMatch(consoleSource, /auth\/start|auth\/login/);
   assert.doesNotMatch(consoleSource, /window\.open\(/);
   assert.match(consoleSource, /HelloFreshRecipeImage/);
   assert.match(apiSource, /HelloFreshNorwayClient/);
@@ -134,7 +138,10 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(helloFreshAccountSource, /challenge/);
   assert.match(helloFreshAccountSource, /hellofresh-no\.json/);
   assert.match(helloFreshAccountSource, /0o600/);
-  assert.doesNotMatch(helloFreshAccountSource, /passwordless|magic-link|pending/);
+  assert.match(helloFreshAccountSource, /\/gw\/v1\/passwordless\/start/);
+  assert.match(helloFreshAccountSource, /\/gw\/v1\/passwordless\/magic-link\/finish/);
+  assert.match(helloFreshAccountSource, /MAGIC_LINK_HOSTS/);
+  assert.match(helloFreshAccountSource, /MAGIC_LINK_TTL_SECONDS/);
   assert.doesNotMatch(helloFreshAccountSource, /HELLOFRESH_PASSWORD|playwright|selenium|select_meal|change_delivery|checkout/i);
   assert.match(odaSource, /recipe_search/);
   assert.match(odaSource, /get_liked_recipes/);

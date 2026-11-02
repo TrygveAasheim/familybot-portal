@@ -191,13 +191,17 @@ curated public Norwegian menu; `hellofresh_account` replaces Oda in the visible
 navigation with an in-Portal email/password form, persistent owner-only local
 refresh credentials, the household menu and selected quantities. On first use,
 the browser sends the password directly to HelloFresh's fixed HTTPS endpoint;
-the password never reaches the Portal API. The returned provider tokens exist
-briefly in browser memory, are immediately handed to the Mac over the trusted
-LAN and are never stored in the browser, logs, model context or Git. Subsequent
-Portal responses contain no provider credentials. Because the Portal is a
-trusted-LAN HTTP appliance, first use should run only on the private home
-network. The renewable token survives restarts and temporary provider outages;
-the login form returns only after an explicit authentication rejection.
+the password never reaches the Portal API. If HelloFresh blocks that browser
+request, the same screen offers HelloFresh's one-time sign-in link as a
+fallback—not a password reset. The copied link is matched to an in-memory,
+short-lived login flow and exchanged by the Mac against fixed HelloFresh HTTPS
+hosts. The returned provider tokens exist briefly in browser or server memory,
+are allowlisted into the owner-only credential file and are never stored in
+browser storage, logs, model context or Git. Subsequent Portal responses
+contain no provider credentials. Because the Portal is a trusted-LAN HTTP
+appliance, first use should run only on the private home network. The renewable
+token survives restarts and temporary provider outages; the login form returns
+only after an explicit authentication rejection.
 Meal, delivery, subscription and payment changes remain
 disabled. Both flags default to `false`; Oda remains in code for rollback. See
 [HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).

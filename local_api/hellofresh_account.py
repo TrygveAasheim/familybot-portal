@@ -170,13 +170,6 @@ def _number(value: Any, default: float = 0) -> float:
         return default
 
 
-def _bounded_lines(value: Any, maximum: int, maximum_lines: int = 30) -> str:
-    if not isinstance(value, str):
-        return ""
-    lines = [" ".join(line.split()) for line in value.splitlines() if line.strip()]
-    return "\n".join(lines[:maximum_lines])[:maximum]
-
-
 def _bounded_amount(value: Any) -> int | float | None:
     if isinstance(value, bool):
         return None
@@ -1119,16 +1112,6 @@ class HelloFreshAccountClient:
                     {"name": name, "amount": amount, "unit": _bounded_text(item.get("unit"), 30)}
                 )
 
-        steps = []
-        for position, item in enumerate(value.get("steps", [])[:12] if isinstance(value.get("steps"), list) else []):
-            if not isinstance(item, dict):
-                continue
-            instructions = _bounded_lines(item.get("instructions"), 1_600)
-            if instructions:
-                index = item.get("index") if isinstance(item.get("index"), int) else position
-                steps.append({"index": max(0, min(index, 100)), "instructions": instructions})
-        steps.sort(key=lambda item: item["index"])
-
         name = _bounded_text(value.get("name"), 120)
         if not name:
             raise HelloFreshAccountUnavailable("HelloFresh-oppskriften manglet navn.")
@@ -1149,7 +1132,6 @@ class HelloFreshAccountClient:
             "allergens": allergens[:24],
             "may_contain": may_contain[:24],
             "nutrition": nutrition,
-            "steps": steps,
         }
 
     @staticmethod

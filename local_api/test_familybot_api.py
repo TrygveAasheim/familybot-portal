@@ -150,7 +150,6 @@ class FakeHelloFreshAccountClient:
             "allergens": [],
             "may_contain": [],
             "nutrition": [],
-            "steps": [],
         }
 
     def weeks(self):

@@ -315,8 +315,8 @@ flag-on acceptance probe.
   filters derived from existing menu metadata.
 - Any selected or optional dish expands in place and collapses again without
   navigation or a popup. Detail is fetched only on first expansion, then cached
-  in the browser. It shows portion-matched ingredients, referenced allergens,
-  nutrition and plaintext cooking steps. The API accepts only a validated
+  in the browser. It shows portion-matched ingredients, referenced allergens
+  and nutrition. The API accepts only a validated
   recipe ID and 1–12 servings and returns a bounded allowlist rather than the
   provider payload.
 - A valid dashboard session can replace one selected dish, add or remove a

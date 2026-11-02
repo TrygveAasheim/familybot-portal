@@ -143,7 +143,7 @@ reviewed HTTPS HelloFresh CDN hosts; no raw account identifiers are exposed.
 Menu filters are derived locally from bounded names, cuisines and tags. Opening
 one meal performs a read-only lookup by a validated 24-character recipe ID and
 returns only bounded description, timing, portion-matched ingredients,
-referenced allergens, nutrition and plaintext cooking steps. The browser never
+referenced allergens and nutrition. The browser never
 receives raw recipe/account payloads, HTML or a generic provider URL.
 
 The bounded write allowlist contains only meal replacement/add/remove and

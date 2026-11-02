@@ -16,7 +16,7 @@ The planner connects the services Norwegian families already use:
 - an optional, experimental **HelloFresh Norway** planner for upcoming boxes,
   with one-time transient login, persistent token renewal, dish images and
   guarded meal replacement/add/remove, per-week pause/resume, quick dish
-  filters and inline ingredients and cooking steps;
+  filters and inline ingredients;
 - school email, PDF `ukeplan` documents and Norwegian calendars; and
 - **Telegram** for intentional notifications outside the home network.
 

@@ -118,7 +118,7 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Se innhold/);
   assert.match(consoleSource, /Skjul innhold/);
   assert.match(consoleSource, /Ingredienser/);
-  assert.match(consoleSource, /Fremgangsmåte/);
+  assert.doesNotMatch(consoleSource, /detail\.steps|Fremgangsmåte/);
   assert.match(consoleSource, /Filtrer på type rett/);
   assert.match(consoleSource, /Kjøtt/);
   assert.match(consoleSource, /Vegetar/);

@@ -8,7 +8,7 @@
   editable box, see the selected meals first with images, inspect later weeks,
   replace or add/remove dishes, and pause or resume a week without leaving the
   kiosk browser. A follow-up adds quick meat, fish, pasta and vegetarian filters
-  plus inline recipe expansion for ingredients, allergens, nutrition and steps.
+  plus inline recipe expansion for ingredients, allergens and nutrition.
 - Evidence: read-only live probes on 2026-11-02 found provider delivery weeks
   W46–W01, published menus through W49, 70 dishes with 70 reviewed CDN images
   in W46, three selected dishes identified by provider course indexes, and
@@ -73,8 +73,8 @@ weeks remain visible as "Meny kommer" but cannot be opened. A selected box shows
 - selected dishes first, including images and selected quantities;
 - all remaining dishes as replace/add options, with sold-out options disabled;
 - quick filters derived locally from recipe names, cuisine and provider tags;
-- an inline expandable recipe with portion-matched ingredients, allergens,
-  nutrition and cooking steps, without leaving or opening another page;
+- an inline expandable recipe with portion-matched ingredients, allergens and
+  nutrition, without leaving or opening another page;
 - explicit confirmation before replace, add, remove, pause or resume.
 
 Recipe detail is loaded only when a card is expanded and cached in that browser

@@ -224,7 +224,7 @@ def main() -> None:
     detail_boundary=(
         account_detail_status==200
         and isinstance(json.loads(account_detail_raw).get("recipe",{}).get("ingredients"),list)
-        and isinstance(json.loads(account_detail_raw).get("recipe",{}).get("steps"),list)
+        and "steps" not in json.loads(account_detail_raw).get("recipe",{})
         and "subscriptionId" not in account_detail_raw.decode("utf-8",errors="replace")
     ) if account_enabled and account_menu_status==200 else True
     account_live=(

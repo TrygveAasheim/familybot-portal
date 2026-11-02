@@ -13,6 +13,8 @@ The planner connects the services Norwegian families already use:
 - **MET Norway / Yr** for local weather forecasts and practical advice;
 - **Oda MCP** for recipes, dinner suggestions, product search and the shared
   grocery cart;
+- an optional, experimental **HelloFresh Norway** public weekly-menu view,
+  disabled by default while account integration is evaluated;
 - school email, PDF `ukeplan` documents and Norwegian calendars; and
 - **Telegram** for intentional notifications outside the home network.
 
@@ -182,6 +184,12 @@ OAuth tokens stay in the owner-only
 responses, model prompts or Git. Checkout and payment are intentionally handed
 off to Oda.
 See [Oda grocery integration](docs/ODA_GROCERIES.md).
+
+The experimental HelloFresh tab is a separate read-only adapter. When
+`portal.features.hellofresh` is `true`, it displays a curated copy of the public
+Norwegian weekly menu from `hellofresh.no`; it does not log in, store cookies or
+passwords, select meals, change deliveries or replace Oda. The flag defaults to
+`false`. See [HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;
 Core respects explicit parent subject metadata over stale PDF headings. Portal

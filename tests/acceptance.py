@@ -186,6 +186,25 @@ def main() -> None:
     credentials_safe=not credential_path.exists() or credential_path.stat().st_mode & 0o777==0o600
     record("AC-18",unauthenticated_oda==403 and oda_status_code==200 and oda_ui and oda_api and oauth_boundary and dinner_boundary and credentials_safe,f"Oda unauthenticated={unauthenticated_oda}; status={oda_status_code}, connected={oda_status.get('connected')}; in-portal recipe return path, bounded dinner planner, direct OAuth/MCP allowlist and local credential mode={credentials_safe}",started)
 
+    started=time.monotonic()
+    hellofresh_source=(ROOT/"local_api/hellofresh_norway.py").read_text()
+    configured_features=PORTAL.get("features",{}) if isinstance(PORTAL.get("features",{}),dict) else {}
+    hellofresh_enabled=configured_features.get("hellofresh") is True
+    hellofresh_status,hellofresh_raw=request(API_PORT,"GET","/api/hellofresh/menu",{"X-FamilyBot-Local-Token":local})
+    hellofresh_payload=json.loads(hellofresh_raw) if hellofresh_status==200 else {}
+    menu=hellofresh_payload.get("menu",{})
+    live_boundary=(
+        hellofresh_status==200
+        and menu.get("country")=="NO"
+        and menu.get("locale")=="nb-NO"
+        and menu.get("read_only") is True
+        and isinstance(menu.get("recipes"),list)
+        and "access_token" not in hellofresh_raw.decode("utf-8",errors="replace")
+    ) if hellofresh_enabled else hellofresh_status==404
+    hellofresh_ui=all(text in source for text in ("features.hellofresh",">HelloFresh</button>","Eksperimentell · kun lesing","Ingen innlogging eller bestilling","/api/hellofresh/menu"))
+    hellofresh_boundary=all(text in hellofresh_source for text in ("https://www.hellofresh.no","MAX_HTML_BYTES","ALLOWED_IMAGE_HOSTS","systemCountry","nb-NO")) and not any(text in hellofresh_source for text in ("HELLOFRESH_EMAIL","HELLOFRESH_PASSWORD","playwright","selenium"))
+    record("AC-19",hellofresh_ui and hellofresh_boundary and live_boundary,f"HelloFresh flag={hellofresh_enabled}; route={hellofresh_status}; Norwegian public read-only boundary verified",started)
+
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}
     result_dir=ROOT/"tests/results"; result_dir.mkdir(parents=True,exist_ok=True)

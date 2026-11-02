@@ -83,6 +83,26 @@ final review and payment at oda.com.
 An Oda outage or expired OAuth grant returns an isolated unavailable/reconnect
 state and must not affect `/api/dashboard`, chores, Ukeplan or Kanban.
 
+## HelloFresh experiment boundary
+
+`portal.features.hellofresh` defaults to `false`. The local session response
+exposes only that boolean so the browser can hide the tab and route when the
+experiment is disabled. The API also enforces the flag; a manually entered URL
+does not bypass it.
+
+When enabled, `GET /api/hellofresh/menu` reads only the public Norwegian
+`https://www.hellofresh.no/menus` page. The adapter validates the final host,
+country `NO`, locale `nb-NO`, ISO week, response size, recipe IDs and public
+image hosts. It returns an allowlist of recipe name, headline, image, display
+tags, preparation time, difficulty, calories, sold-out state and disclosed
+extra charge. It does not return the source page, embedded application state,
+bootstrap token, recipe URL, cookies or response headers.
+
+The HelloFresh adapter has no login, account cookie store, username/password,
+browser automation, meal selection, delivery change, subscription operation or
+checkout route. A provider failure returns an isolated unavailable state; a
+recent cached menu may be returned only when explicitly marked stale.
+
 ## Write allowlist
 
 Writes are limited to the dashboard's chores and rewards model:
@@ -103,6 +123,9 @@ Writes are limited to the dashboard's chores and rewards model:
 The separate Oda allowlist permits household cart changes and local OAuth
 connect/disconnect for every valid LAN dashboard session. These operations
 change only the Oda account; they never write FamilyBot SQLite.
+
+HelloFresh is not part of the write allowlist. Its experimental route is
+read-only even for parent sessions.
 
 The bridge creates a consistent SQLite backup before the first mutation in each
 session and appends a local audit record. Resetting a child archives/hides active

@@ -83,6 +83,24 @@ class FakeOdaClient:
         self.connected = False
 
 
+class FakeHelloFreshClient:
+    def __init__(self):
+        self.calls = []
+
+    def menu(self):
+        self.calls.append(("menu",))
+        return {
+            "provider": "HelloFresh Norge",
+            "country": "NO",
+            "locale": "nb-NO",
+            "week": "2026-W46",
+            "read_only": True,
+            "stale": False,
+            "fetched_at": "2026-11-02T12:00:00+01:00",
+            "recipes": [],
+        }
+
+
 class RepositoryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -626,6 +644,66 @@ class RepositoryTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)
+
+    def test_hellofresh_read_only_menu_requires_flag_and_local_session(self):
+        hellofresh = FakeHelloFreshClient()
+        disabled = FamilyApiServer(
+            ("127.0.0.1", 0), self.repo, "123456", {"http://localhost:3000"},
+            hellofresh_client=hellofresh,
+            hellofresh_enabled=False,
+        )
+        disabled_thread = threading.Thread(target=disabled.serve_forever, daemon=True)
+        disabled_thread.start()
+        try:
+            headers = {
+                "Origin": "http://localhost:3000",
+                "X-FamilyBot-Local-Token": disabled.session_token,
+            }
+            connection = http.client.HTTPConnection("127.0.0.1", disabled.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/menu", headers=headers)
+            self.assertEqual(connection.getresponse().status, 404)
+            connection.close()
+            self.assertEqual(hellofresh.calls, [])
+        finally:
+            disabled.shutdown()
+            disabled.server_close()
+            disabled_thread.join(timeout=2)
+
+        enabled = FamilyApiServer(
+            ("127.0.0.1", 0), self.repo, "123456", {"http://localhost:3000"},
+            hellofresh_client=hellofresh,
+            hellofresh_enabled=True,
+        )
+        enabled_thread = threading.Thread(target=enabled.serve_forever, daemon=True)
+        enabled_thread.start()
+        try:
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/menu", headers={"Origin": "http://localhost:3000"})
+            self.assertEqual(connection.getresponse().status, 403)
+            connection.close()
+
+            headers = {
+                "Origin": "http://localhost:3000",
+                "X-FamilyBot-Local-Token": enabled.session_token,
+            }
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/menu", headers=headers)
+            response = connection.getresponse()
+            payload = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertEqual(payload["menu"]["country"], "NO")
+            self.assertIn(("menu",), hellofresh.calls)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", "/api/session", headers={"Origin": "http://localhost:3000"})
+            session = json.loads(connection.getresponse().read())
+            self.assertTrue(session["features"]["hellofresh"])
+            connection.close()
+        finally:
+            enabled.shutdown()
+            enabled.server_close()
+            enabled_thread.join(timeout=2)
 
     def test_dashboard_migration_is_idempotent(self):
         first = migrate(self.db, seed=True)

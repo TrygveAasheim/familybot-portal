@@ -251,15 +251,36 @@ live child navigation.
 Evidence: OAuth/MCP adapter unit tests, local-session API authorization tests,
 rendered UI assertions, credential permissions and production status route.
 
+### AC-19 — Flagged read-only HelloFresh Norway experiment
+
+- The HelloFresh tab and `?hellofresh=1` page are absent unless
+  `portal.features.hellofresh` is explicitly `true`; the API independently
+  rejects the route while disabled.
+- When enabled, every valid local dashboard session can view and filter the
+  public Norwegian weekly menu with recipe images, names, descriptions,
+  preparation time, difficulty, calories, display tags, sold-out state and any
+  disclosed extra charge.
+- The adapter accepts only `https://www.hellofresh.no`, country `NO`, locale
+  `nb-NO`, valid ISO weeks and reviewed public image hosts. Network calls and
+  response sizes are bounded, and a cached fallback is visibly marked stale.
+- No HelloFresh username, password, account cookie, embedded bootstrap token,
+  generic source payload, browser automation or mutation route exists. Oda and
+  every non-grocery Portal surface remain independent.
+
+Evidence: adapter normalization, host rejection, secret-exclusion, stale-cache
+and route authorization unit tests; rendered UI assertions; live flag-off or
+flag-on acceptance probe.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **18/18 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **19/19 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
-These 18 criteria cover the currently deployed family dashboard, its Telegram
-child-chore add-on, week-plan detail view and Oda grocery tab. A new
+These 19 criteria cover the currently deployed family dashboard, its Telegram
+child-chore add-on, week-plan detail view, Oda grocery tab and flagged
+read-only HelloFresh experiment. A new
 user-visible add-on such as Smart Home must
 add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be

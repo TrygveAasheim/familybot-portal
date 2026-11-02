@@ -29,6 +29,8 @@ flowchart LR
   API --> Web["Responsive web app :3000"]
   API --> Oda["Narrow OAuth/MCP adapter"]
   Oda --> OdaMCP["Oda hosted MCP"]
+  API --> HF["Flagged read-only HelloFresh adapter"]
+  HF --> HFNO["Public hellofresh.no menu"]
   API --> Dinner["Tool-free dinner query planner"]
   Dinner --> OpenAI["OpenAI via isolated OpenClaw agent"]
   Web --> iPad["Family iPads"]
@@ -48,6 +50,7 @@ the web service. The API and database remain on the Mac mini.
 | Global layout and responsive design | `app/globals.css` | Verify portrait, landscape, 200% zoom and no hover dependency |
 | Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist, including parent-gated Kanban mutations |
 | Oda groceries | `local_api/oda_mcp.py`, `local_api/oda_dinner.py`, Oda routes in `local_api/familybot_api.py` | OAuth secrecy, bounded model context, strict public recipe host/schema validation, kiosk return navigation, account-data exposure, explicit cart-mutation and provider-failure boundary |
+| HelloFresh experiment | `local_api/hellofresh_norway.py`, HelloFresh route in `local_api/familybot_api.py` | Disabled-by-default public Norwegian menu only; strict host/payload allowlists, no account/session material or writes |
 | Dashboard schema and backup | `local_api/dashboard_migration.py` | Data-critical; idempotent migration and pre-migration backup required, including weekly achievement history |
 | Config reader | `local_api/family_config.py` | Must match the one core-owned configuration contract |
 | Process supervision | `local_service/run_service.py` | Operational; both processes fail/restart as a group |
@@ -90,6 +93,8 @@ negative tests for raw/private material.
 - Grocery ordering stays direct and task-focused. The dinner planner can only
   produce Oda recipe search phrases; explicit cart actions remain separate and
   checkout/payment remain at Oda.
+- The HelloFresh experiment stays visibly read-only until a separately reviewed
+  authentication design and verified Norwegian account contract exist.
 
 ## Core versus add-on changes
 

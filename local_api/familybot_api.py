@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 from family_config import integration, member_profiles, portal_settings
+from hellofresh_norway import HelloFreshNorwayClient, HelloFreshUnavailable
 from oda_dinner import DinnerValidationError, recommend as recommend_dinner
 from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable, OdaValidationError
 
@@ -1792,7 +1793,11 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             self.respond(403, {"error": "Ukjent origin."})
             return
         if parsed.path == "/api/session":
-            self.respond(200, {"token": self.app.session_token, "api": "familybot-local-v2"})
+            self.respond(200, {
+                "token": self.app.session_token,
+                "api": "familybot-local-v2",
+                "features": self.app.features,
+            })
             return
         if not self.authorize_read():
             self.respond(403, {"error": "Lokal lesetilgang ble avvist."})
@@ -1825,6 +1830,19 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 self.respond(401, {"error": str(exc), "reconnect": True})
             except OdaUnavailable as exc:
                 self.log_error("oda read unavailable: %s", type(exc).__name__)
+                self.respond(503, {"error": str(exc)})
+            return
+        if parsed.path.startswith("/api/hellofresh/"):
+            if not self.app.features["hellofresh"]:
+                self.respond(404, {"error": "HelloFresh-testingen er ikke aktivert."})
+                return
+            try:
+                if parsed.path == "/api/hellofresh/menu":
+                    self.respond(200, {"menu": self.app.hellofresh.menu()})
+                else:
+                    self.respond(404, {"error": "Ikke funnet."})
+            except HelloFreshUnavailable as exc:
+                self.log_error("hellofresh read unavailable: %s", type(exc).__name__)
                 self.respond(503, {"error": str(exc)})
             return
         week_plan = re.fullmatch(r"/api/children/(\d+)/week-plans/(\d+)", parsed.path)
@@ -2033,7 +2051,9 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
 class FamilyApiServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], repository: FamilyRepository, parent_pin: str,
                  allowed_origins: set[str] | None = None, oda_client: OdaMcpClient | None = None,
-                 dinner_planner: Any | None = None):
+                 dinner_planner: Any | None = None,
+                 hellofresh_client: HelloFreshNorwayClient | None = None,
+                 hellofresh_enabled: bool | None = None):
         super().__init__(address, FamilyApiHandler)
         self.repository = repository
         self.session_token = secrets.token_urlsafe(32)
@@ -2043,6 +2063,15 @@ class FamilyApiServer(ThreadingHTTPServer):
         self._parent_failures: dict[str, list[float]] = {}
         self._parent_failure_lock = threading.Lock()
         settings = portal_settings(repository.workspace)
+        feature_settings = settings.get("features", {})
+        configured_hellofresh = (
+            feature_settings.get("hellofresh") is True
+            if isinstance(feature_settings, dict)
+            else False
+        )
+        self.features = {
+            "hellofresh": configured_hellofresh if hellofresh_enabled is None else hellofresh_enabled,
+        }
         callback_host = str(settings.get("hostname") or "familie.local")
         callback_port = int(settings.get("api_port") or 8788)
         callback_url = os.environ.get(
@@ -2050,6 +2079,7 @@ class FamilyApiServer(ThreadingHTTPServer):
             f"http://{callback_host}:{callback_port}/api/oda/oauth/callback",
         )
         self.oda = oda_client or OdaMcpClient(callback_url)
+        self.hellofresh = hellofresh_client or HelloFreshNorwayClient()
         self.dinner_planner = dinner_planner or recommend_dinner
         self.dinner_slots = threading.BoundedSemaphore(1)
         with repository.connect() as connection:

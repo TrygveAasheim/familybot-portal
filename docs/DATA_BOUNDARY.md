@@ -118,6 +118,11 @@ persists no provider account payload and returns status booleans only. No email
 address, customer/subscription identifier or raw provider payload is stored or
 exposed.
 
+The allowlist treats OAuth token contents as opaque: values must be 8–8192
+printable ASCII characters with no spaces or control characters, but are not
+incorrectly restricted to JWT/base64url syntax. This accepts provider-defined
+refresh-token punctuation without permitting header or log-line injection.
+
 Renewable credentials are stored outside Git in
 `$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
 `0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup is

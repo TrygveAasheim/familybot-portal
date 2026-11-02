@@ -15,6 +15,11 @@
   integration documents the same TLS/HTTP2 fingerprinting boundary and uses
   `curl_cffi` Chrome impersonation plus same-origin browser headers. The Portal
   now applies that bounded pattern only to the fixed provider login endpoint.
+  The first successful physical login then exposed a second contract bug:
+  HelloFresh returned HTTP success, but the Portal rejected its opaque refresh
+  token as though every OAuth token had to be JWT/base64url-shaped. Token
+  validation now accepts bounded printable OAuth values while still rejecting
+  every whitespace and control character.
   The existing public Norwegian menu remains a safe disconnected fallback; the
   reviewed community MCP is not used.
 - Scope and owner: Portal-only adapters in `local_api/hellofresh_norway.py` and
@@ -25,7 +30,8 @@
   `ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md`.
 - Tests: transient password exclusion from disk and responses, fixed provider
   URL, Chrome TLS request metadata, Cloudflare challenge classification,
-  invalid-credential classification, restart/refresh persistence,
+  invalid-credential classification, opaque refresh-token acceptance,
+  whitespace/control-character token rejection, restart/refresh persistence,
   explicit auth-rejection cleanup, temporary-failure retention, owner-only
   file mode, curated menu/selection normalization, local-session authorization,
   response secret exclusion, rendered popup exclusion, full Portal suite and
@@ -65,6 +71,12 @@ credentials to `https://www.hellofresh.no/gw/login` with country `NO` and locale
 request, and only validated access, refresh and expiry fields are persisted.
 HTML security challenges and other non-JSON provider blocks remain unavailable
 states rather than being labelled invalid credentials.
+
+OAuth tokens are opaque provider values, not assumed JWTs. The persisted
+allowlist accepts only non-empty, length-bounded printable ASCII token values;
+spaces, line breaks and other control characters are rejected before any
+credential file is written. This preserves injection resistance without
+rejecting valid refresh-token punctuation such as `+`, `/` or `=`.
 
 There is deliberately no passwordless fallback. Provider behavior observed in
 the physical test sent a password-reset email, so retaining that button would

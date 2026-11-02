@@ -69,6 +69,37 @@ class HelloFreshAccountTests(unittest.TestCase):
         restarted = HelloFreshAccountClient(self.credentials)
         self.assertTrue(restarted.status()["connected"])
 
+    def test_completed_login_accepts_opaque_oauth_refresh_token(self):
+        opaque_refresh = "renew/opaque+token=with%valid:punctuation~"
+        status = self.client.complete_login(
+            {
+                "access_token": ACCESS,
+                "refresh_token": opaque_refresh,
+                "expires_in": 900,
+            }
+        )
+        self.assertTrue(status["connected"])
+        saved = json.loads(self.credentials.read_text(encoding="utf-8"))
+        self.assertEqual(saved["refresh_token"], opaque_refresh)
+
+    def test_completed_login_rejects_token_whitespace_and_control_characters(self):
+        for unsafe_refresh in (
+            "refresh token with spaces",
+            "refresh-token\nwith-newline",
+            "refresh-token\rwith-return",
+            "refresh-token\twith-tab",
+        ):
+            with self.subTest(unsafe_refresh=repr(unsafe_refresh)):
+                with self.assertRaises(HelloFreshAccountValidation):
+                    self.client.complete_login(
+                        {
+                            "access_token": ACCESS,
+                            "refresh_token": unsafe_refresh,
+                            "expires_in": 900,
+                        }
+                    )
+        self.assertFalse(self.credentials.exists())
+
     def test_completed_login_requires_access_and_refresh_tokens(self):
         with patch.object(self.client, "_save") as save:
             with self.assertRaises(HelloFreshAccountValidation):

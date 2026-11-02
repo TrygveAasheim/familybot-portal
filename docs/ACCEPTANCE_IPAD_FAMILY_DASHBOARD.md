@@ -292,11 +292,13 @@ flag-on acceptance probe.
   showed that the provider's nominal passwordless endpoint sends a password
   reset, so presenting it as login is a release-blocking defect.
 - Access and refresh credentials exist only transiently in provider-response
-  memory. The Portal stores only allowlisted
-  tokens outside Git in an owner-only local file; they survive service restarts
-  and are refreshed before use. Subsequent browser responses and logs contain
-  no credentials. Five failed login attempts per client in five minutes trigger
-  a temporary limit; successful login clears the attempts.
+  memory. The Portal stores only allowlisted opaque OAuth tokens outside Git in
+  an owner-only local file; valid printable punctuation is accepted, while
+  whitespace, control characters and oversized values are rejected. The tokens
+  survive service restarts and are refreshed before use. Subsequent browser
+  responses and logs contain no credentials. Five failed login attempts per
+  client in five minutes trigger a temporary limit; successful login clears the
+  attempts.
 - A Cloudflare HTML challenge or non-JSON provider response is reported as a
   provider security block, not as an incorrect email or password.
 - The login form remains hidden while a renewable credential exists. Temporary
@@ -314,8 +316,9 @@ flag-on acceptance probe.
 
 Evidence: transient-password exclusion from disk/responses, fixed provider URL,
 browser-TLS request metadata, provider challenge classification, refresh
-rejection, temporary-failure retention, restart/refresh persistence, file-mode
-and curated-menu unit tests; local-session API authorization and response
+rejection, opaque-token acceptance, unsafe-token rejection, temporary-failure
+retention, restart/refresh persistence, file-mode and curated-menu unit tests;
+local-session API authorization and response
 secret exclusion; popup/email-flow exclusion and rendered touch UI assertions;
 live disconnected/connected probe.
 

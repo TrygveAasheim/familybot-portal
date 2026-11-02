@@ -48,7 +48,12 @@ LOCALE = "nb-NO"
 BRAND = "BRAND_HELLOFRESH"
 MAX_JSON_BYTES = 4_000_000
 MAX_HTML_BYTES = 8_000_000
-TOKEN = re.compile(r"^[A-Za-z0-9_-]{8,4096}(?:\.[A-Za-z0-9_-]{8,4096}){0,2}$")
+# OAuth token syntax is intentionally opaque.  Access tokens currently happen to
+# be JWTs, but refresh tokens are not contractually base64url/JWT shaped and may
+# contain printable punctuation such as ``+``, ``/`` or ``=``.  Keep the local
+# boundary strict enough to prevent control/whitespace injection while accepting
+# the provider's full opaque-token contract.
+TOKEN = re.compile(r"[\x21-\x7e]{8,8192}")
 ERROR_CODE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}$")
 PASSWORD_MAX_LENGTH = 512

@@ -84,7 +84,8 @@ Evidence: parent API authorization tests and iPad browser interaction.
   reminders and things to bring; these are not presented as reward chores.
 - Missing/stale sources are labelled honestly; raw email, Spond payloads and
   internal errors are not shown to children.
-- A separate Oda entry remains available for household grocery preparation.
+- A grocery entry remains available: Oda by default, or HelloFresh when its
+  physical-test feature flags replace Oda in visible navigation.
 
 Evidence: sanitized API contract tests and browser content assertions.
 
@@ -220,7 +221,9 @@ live child navigation.
 ### AC-18 — Direct Oda grocery integration
 
 - `Oda` is a top-level tab next to Kanban and is available to every valid local
-  dashboard session without a parent PIN.
+  dashboard session without a parent PIN unless the HelloFresh physical-test
+  flags intentionally replace it. Its implementation remains intact for
+  rollback.
 - The browser can connect the household account through Oda OAuth with state
   and PKCE, search products, load `likely_to_buy`, read/edit/clear the cart and
   open Oda's returned cart URL.
@@ -263,24 +266,48 @@ rendered UI assertions, credential permissions and production status route.
 - The adapter accepts only `https://www.hellofresh.no`, country `NO`, locale
   `nb-NO`, valid ISO weeks and reviewed public image hosts. Network calls and
   response sizes are bounded, and a cached fallback is visibly marked stale.
-- No HelloFresh username, password, account cookie, embedded bootstrap token,
-  generic source payload, browser automation or mutation route exists. Oda and
-  every non-grocery Portal surface remain independent.
+- The public-menu adapter contains no HelloFresh username, password, account
+  cookie, embedded bootstrap token, generic source payload, browser automation
+  or mutation route. Account access is isolated in the separately flagged
+  AC-20 adapter.
 
 Evidence: adapter normalization, host rejection, secret-exclusion, stale-cache
 and route authorization unit tests; rendered UI assertions; live flag-off or
 flag-on acceptance probe.
 
+### AC-20 — Popup-free persistent HelloFresh account test
+
+- `portal.features.hellofresh_account` defaults to `false` and requires the
+  parent `hellofresh` flag. When enabled, HelloFresh occupies Oda's former
+  top-level navigation position; the Oda implementation remains available for
+  rollback but is not shown beside it.
+- First use starts HelloFresh passwordless email login inside the Portal. It
+  never opens a popup. A same-window callback and a paste-the-full-link fallback
+  both work, and polling detects completion performed on another device.
+- Access and refresh credentials are server-side only, stored outside Git in an
+  owner-only local file, survive service restarts and are refreshed before use.
+  Callback query values and credentials never appear in logs or browser JSON.
+- The connected test surface exposes only a curated Norwegian weekly menu and
+  selected quantities. It cannot select meals, skip or change deliveries,
+  modify subscriptions, addresses or payments, or place an order.
+- Disconnecting explicitly removes the local credential. Provider or auth
+  failures remain isolated from the family dashboard and show a reconnect or
+  unavailable state.
+
+Evidence: passwordless correlation, redirect allowlist, refresh persistence,
+file-mode and curated-menu unit tests; local-session API authorization; popup
+exclusion and rendered touch UI assertions; live disconnected/connected probe.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **19/19 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **20/20 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
-These 19 criteria cover the currently deployed family dashboard, its Telegram
+These 20 criteria cover the currently deployed family dashboard, its Telegram
 child-chore add-on, week-plan detail view, Oda grocery tab and flagged
-read-only HelloFresh experiment. A new
+read-only and account-backed HelloFresh experiments. A new
 user-visible add-on such as Smart Home must
 add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be

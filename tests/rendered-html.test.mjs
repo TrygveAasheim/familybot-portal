@@ -25,13 +25,14 @@ test("server-renders the iPad family dashboard shell", async () => {
 });
 
 test("source keeps the data boundary and functional surfaces explicit", async () => {
-  const [page, consoleSource, apiSource, odaSource, dinnerSource, helloFreshSource, deploySource, styles] = await Promise.all([
+  const [page, consoleSource, apiSource, odaSource, dinnerSource, helloFreshSource, helloFreshAccountSource, deploySource, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/FamilyConsole.tsx", import.meta.url), "utf8"),
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
     readFile(new URL("../local_api/oda_mcp.py", import.meta.url), "utf8"),
     readFile(new URL("../local_api/oda_dinner.py", import.meta.url), "utf8"),
     readFile(new URL("../local_api/hellofresh_norway.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/hellofresh_account.py", import.meta.url), "utf8"),
     readFile(new URL("../scripts/deploy-local.sh", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
@@ -102,11 +103,18 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /features\.hellofresh/);
   assert.match(consoleSource, />HelloFresh<\/button>/);
   assert.match(consoleSource, /api\/hellofresh\/menu/);
-  assert.match(consoleSource, /Eksperimentell · kun lesing/);
-  assert.match(consoleSource, /Ingen innlogging eller bestilling/);
+  assert.match(consoleSource, /Fysisk test · kun lesing/);
+  assert.match(consoleSource, /features\.hellofresh_account/);
+  assert.match(consoleSource, /Send innloggingslenke/);
+  assert.match(consoleSource, /Godkjenn lenken her/);
+  assert.match(consoleSource, /api\/hellofresh\/auth\/start/);
+  assert.match(consoleSource, /api\/hellofresh\/auth\/complete/);
+  assert.match(consoleSource, /api\/hellofresh\/account\/menu/);
+  assert.doesNotMatch(consoleSource, /window\.open\(/);
   assert.match(consoleSource, /HelloFreshRecipeImage/);
   assert.match(apiSource, /HelloFreshNorwayClient/);
   assert.match(apiSource, /features\["hellofresh"\]/);
+  assert.match(deploySource, /local_api\/hellofresh_account\.py/);
   assert.match(deploySource, /local_api\/hellofresh_norway\.py/);
   assert.match(helloFreshSource, /https:\/\/www\.hellofresh\.no/);
   assert.match(helloFreshSource, /systemCountry.*NO/);
@@ -117,6 +125,11 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
     helloFreshSource,
     /HELLOFRESH_(?:EMAIL|PASSWORD)|(?:import|from)\s+(?:playwright|selenium)|["']Cookie["']\s*:/i,
   );
+  assert.match(helloFreshAccountSource, /\/gw\/v1\/passwordless\/start/);
+  assert.match(helloFreshAccountSource, /\/gw\/refresh/);
+  assert.match(helloFreshAccountSource, /hellofresh-no\.json/);
+  assert.match(helloFreshAccountSource, /0o600/);
+  assert.doesNotMatch(helloFreshAccountSource, /HELLOFRESH_PASSWORD|playwright|selenium|select_meal|change_delivery|checkout/i);
   assert.match(odaSource, /recipe_search/);
   assert.match(odaSource, /get_liked_recipes/);
   assert.match(odaSource, /get_purchased_recipes/);
@@ -170,6 +183,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /api\/oda\/cart/);
   assert.doesNotMatch(apiSource, /api\/chat|chat_slot|chat_answer/);
   assert.match(apiSource, /api\/hellofresh\/menu/);
+  assert.match(apiSource, /api\/hellofresh\/auth\/callback/);
+  assert.match(apiSource, /api\/hellofresh\/account\/menu/);
   assert.match(odaSource, /https:\/\/oda\.com\/mcp/);
   assert.match(odaSource, /\.openclaw\/credentials\/oda-mcp\.json/);
   assert.match(odaSource, /product_search/);

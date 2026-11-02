@@ -2,61 +2,58 @@
 
 ## Change record
 
-- Change type: feature.
-- Problem or intent: evaluate whether HelloFresh can eventually complement or
-  replace the household's Oda workflow without first entrusting credentials to
-  an unproven community MCP server.
-- Evidence: HelloFresh publishes a public Norwegian weekly menu, while the
-  reviewed community MCP implementation was US-specific and did not meet the
-  project's credential-confidence threshold.
-- Scope and owner: Portal-only optional add-on in
-  `local_api/hellofresh_norway.py`, its curated API route and the flagged UI.
-  Core ingestion, SQLite, Oda and scheduled jobs are unchanged.
-- Acceptance criteria: AC-19 in
+- Change type: feature increment behind a feature flag.
+- Problem or intent: replace Oda in the physical iPad test with the household's
+  HelloFresh weekly menu, without popup-dependent login or repeated
+  reauthentication.
+- Evidence: HelloFresh Norway supports passwordless email login and account
+  menus. The existing public Norwegian menu remains a safe disconnected
+  fallback; the reviewed community MCP is not used.
+- Scope and owner: Portal-only adapters in `local_api/hellofresh_norway.py` and
+  `local_api/hellofresh_account.py`, curated API routes and flagged UI. Core
+  ingestion, SQLite, scheduled jobs and the retained Oda implementation are
+  unchanged.
+- Acceptance criteria: AC-19 and AC-20 in
   `ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md`.
-- Tests: recorded public-page-shaped fixtures, Norwegian locale/country
-  validation, host and secret exclusion, stale-cache behaviour, local-session
-  authorization, rendered UI, full Portal suite and live public-menu smoke
-  read.
-- Security/privacy: no HelloFresh login, username, password, cookies or account
-  state. Only an allowlisted subset of a bounded public Norwegian menu page is
-  returned to a valid LAN dashboard session.
-- State and deployment: no migration or durable state. The experiment defaults
-  off and is enabled with `portal.features.hellofresh: true` in the ignored
-  canonical household config, followed by a normal Portal redeploy.
-- Rollback: set the flag to `false` and redeploy, or revert the Portal source
-  commit. No HelloFresh or SQLite state needs restoration.
+- Tests: passwordless correlation, redirect allowlist, restart/refresh
+  persistence, owner-only file mode, curated menu/selection normalization,
+  local-session authorization, callback redaction, rendered popup exclusion,
+  full Portal suite and live disconnected or connected acceptance probe.
+- Security/privacy: no password or browser cookie is collected. Provider tokens
+  stay in `$HOME/.openclaw/credentials/hellofresh-no.json` with mode `0600` and
+  never enter browser JSON, logs, Git or model context. Raw provider account
+  payloads and identifiers are discarded.
+- State and deployment: both flags default off. The physical test sets
+  `portal.features.hellofresh` and `portal.features.hellofresh_account` to
+  `true`, then performs first-use login from the HelloFresh tab.
+- Rollback: set `hellofresh_account` to `false` for the public menu, or set
+  `hellofresh` to `false` to restore Oda in visible navigation. Removing the
+  local credential disconnects the account; no SQLite restore is needed.
 - Documentation: README, development guide, feature map, data boundary,
   acceptance contract and canonical Core configuration are updated together.
 
 ## Current test surface
 
-When enabled, `HelloFresh` appears as a top-level tab without replacing `Oda`.
-It reads the public `https://www.hellofresh.no/menus` page and shows the active
-Norwegian menu in a touch-friendly grid. The browser can filter the already
-loaded menu by recipe name, description or display tag.
+The public flag exposes a curated Norwegian weekly menu. The account flag places
+`HelloFresh` in Oda's former navigation position and enables passwordless first
+use. Oda remains in the code for rollback, but both grocery tabs are not shown
+at the same time.
 
-The adapter extracts only:
+First use sends a HelloFresh email link. No popup is opened. A successful local
+callback returns in the same window; polling also detects completion on another
+device. If kiosk navigation cannot return, the full email link can be pasted
+into the Portal. The one-time code is correlated with the locally initiated
+email and public ID before exchange.
 
-- week, country and locale;
-- recipe identifier, position, name and headline;
-- reviewed public image URL;
-- preparation time, difficulty, calories and display tags;
-- sold-out state and disclosed per-portion extra charge.
-
-The source page's application payload, public bootstrap token, cookies, headers
-and recipe URL are discarded. Fetches have a timeout and size limit. A good
-menu is cached for 15 minutes; if a later provider read fails, it may remain
-available for up to six hours with an explicit stale warning.
+After login the browser receives only the week, country/locale, curated recipe
+details and selected quantities. Refresh credentials are renewed server-side
+and survive service or machine restarts. Status returns only `connected`,
+`pending`, `automatic_return`, `credentials_local` and `read_only` booleans.
 
 ## Deliberately postponed
 
-Do not add account authentication by extending the public-page parser. Account
-work requires a separate security review covering HelloFresh's terms, Norwegian
-login/session behaviour, password avoidance, encrypted owner-only session
-storage, browser sandboxing, confirmation for every consequential action,
-strict identifiers and read-after-write verification.
-
-Until that review is accepted, there are no tools or routes for selecting
-meals, skipping weeks, changing deliveries, modifying a subscription, ordering
-or paying.
+There are no routes for selecting or removing meals, skipping or changing a
+delivery, modifying a subscription, address or payment, ordering, or checkout.
+Those consequential provider writes require a separate review with explicit
+confirmation, strict identifiers, idempotency where supported, read-after-write
+verification and rollback guidance.

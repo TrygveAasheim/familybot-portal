@@ -101,6 +101,58 @@ class FakeHelloFreshClient:
         }
 
 
+class FakeHelloFreshAccountClient:
+    def __init__(self):
+        self.connected = False
+        self.pending = False
+        self.calls = []
+
+    def status(self):
+        return {
+            "connected": self.connected,
+            "pending": self.pending,
+            "automatic_return": True,
+            "credentials_local": True,
+            "read_only": True,
+        }
+
+    def begin_login(self, email, origin):
+        self.calls.append(("begin", email, origin))
+        self.pending = True
+        return {"sent": True, "automatic_return": True, "expires_in": 1800}
+
+    def finish_callback(self, query):
+        self.calls.append(("callback", query))
+        self.connected = True
+        self.pending = False
+        return "http://localhost:3000"
+
+    def finish_magic_link(self, url):
+        self.calls.append(("complete", url))
+        self.connected = True
+        self.pending = False
+        return "http://localhost:3000"
+
+    def menu(self, week):
+        self.calls.append(("menu", week))
+        return {
+            "provider": "HelloFresh Norge",
+            "country": "NO",
+            "locale": "nb-NO",
+            "week": week,
+            "read_only": True,
+            "account": True,
+            "selected_count": 1,
+            "stale": False,
+            "fetched_at": "2026-11-02T12:00:00+01:00",
+            "recipes": [],
+        }
+
+    def disconnect(self):
+        self.calls.append(("disconnect",))
+        self.connected = False
+
+
 class RepositoryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -704,6 +756,85 @@ class RepositoryTests(unittest.TestCase):
             enabled.shutdown()
             enabled.server_close()
             enabled_thread.join(timeout=2)
+
+    def test_hellofresh_passwordless_account_flow_is_local_and_popup_free(self):
+        public_menu = FakeHelloFreshClient()
+        account = FakeHelloFreshAccountClient()
+        server = FamilyApiServer(
+            ("127.0.0.1", 0),
+            self.repo,
+            "123456",
+            {"http://localhost:3000"},
+            hellofresh_client=public_menu,
+            hellofresh_enabled=True,
+            hellofresh_account_client=account,
+            hellofresh_account_enabled=True,
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        headers = {
+            "Origin": "http://localhost:3000",
+            "X-FamilyBot-Local-Token": server.session_token,
+            "Content-Type": "application/json",
+        }
+        try:
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/status", headers=headers)
+            response = connection.getresponse()
+            status = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertFalse(status["connected"])
+            self.assertNotIn("email", status)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/auth/start",
+                json.dumps({"email": "family@example.no"}),
+                headers,
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            response.read()
+            self.assertIn(("begin", "family@example.no", "http://localhost:3000"), account.calls)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "GET",
+                "/api/hellofresh/auth/callback?code=secret-code&email=family%40example.no&public_id=login-id",
+            )
+            response = connection.getresponse()
+            body = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn("HelloFresh er koblet til", body)
+            self.assertIn("/?hellofresh=1&amp;hellofresh_connected=1", body)
+            self.assertIn("window.location.replace", body)
+            self.assertNotIn("window.opener", body)
+            self.assertNotIn("secret-code", body)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/account/menu?week=2026-W46", headers=headers)
+            response = connection.getresponse()
+            menu = json.loads(response.read())["menu"]
+            self.assertEqual(response.status, 200)
+            self.assertTrue(menu["account"])
+            self.assertIn(("menu", "2026-W46"), account.calls)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request("DELETE", "/api/hellofresh/connection", headers=headers)
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            response.read()
+            self.assertIn(("disconnect",), account.calls)
+            connection.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
     def test_dashboard_migration_is_idempotent(self):
         first = migrate(self.db, seed=True)

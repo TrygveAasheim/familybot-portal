@@ -13,8 +13,8 @@ The planner connects the services Norwegian families already use:
 - **MET Norway / Yr** for local weather forecasts and practical advice;
 - **Oda MCP** for recipes, dinner suggestions, product search and the shared
   grocery cart;
-- an optional, experimental **HelloFresh Norway** public weekly-menu view,
-  disabled by default while account integration is evaluated;
+- an optional, experimental **HelloFresh Norway** weekly-menu and account view,
+  with popup-free passwordless first use and provider writes disabled;
 - school email, PDF `ukeplan` documents and Norwegian calendars; and
 - **Telegram** for intentional notifications outside the home network.
 
@@ -23,9 +23,9 @@ always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
 mode manages chores, goals, approvals, weekly achievement surprises and the
-family Kanban board. The adjacent `Oda` tab lets everyone on the trusted home
-dashboard plan dinners, view recipe photos, add ingredients and prepare the
-household cart; review, checkout and payment remain on Oda.
+family Kanban board. The grocery tab normally uses Oda for dinner planning and
+cart preparation; an optional HelloFresh physical-test flag replaces that tab
+with the household's read-only weekly menu.
 
 > **Built for local family life:** the UI and chores model are reusable, while
 > the included adapters can be configured for local school, activity, weather
@@ -185,11 +185,14 @@ responses, model prompts or Git. Checkout and payment are intentionally handed
 off to Oda.
 See [Oda grocery integration](docs/ODA_GROCERIES.md).
 
-The experimental HelloFresh tab is a separate read-only adapter. When
-`portal.features.hellofresh` is `true`, it displays a curated copy of the public
-Norwegian weekly menu from `hellofresh.no`; it does not log in, store cookies or
-passwords, select meals, change deliveries or replace Oda. The flag defaults to
-`false`. See [HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).
+The experimental HelloFresh integration uses two flags. `hellofresh` exposes a
+curated public Norwegian menu; `hellofresh_account` replaces Oda in the visible
+navigation with popup-free passwordless first use, persistent owner-only local
+refresh credentials, the household menu and selected quantities. Passwords,
+provider tokens and raw account payloads never enter the browser or Git. Meal,
+delivery, subscription and payment changes remain disabled. Both flags default
+to `false`; Oda remains in code for rollback. See
+[HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;
 Core respects explicit parent subject metadata over stale PDF headings. Portal

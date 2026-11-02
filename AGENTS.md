@@ -32,9 +32,10 @@ When the sibling core repository is available, also read
   cart is an explicit trusted-LAN exception available to every dashboard user;
   its dinner model is tool-free, recipe/cart actions stay allowlisted and
   explicit, and checkout/payment still happen at Oda.
-- Experimental meal providers remain disabled by default. The HelloFresh slice
-  is public-menu-only: no account login, browser automation or provider writes
-  may be added without a new credential and mutation security review.
+- Experimental meal providers remain disabled by default. HelloFresh account
+  access is passwordless, server-side, owner-only and separately flagged. It is
+  read-only during physical testing; provider writes require a new mutation
+  security review and explicit acceptance criteria.
 - User-visible unavailable/stale states are honest. Do not convert a missing
   source into a healthy or empty-looking result.
 - Smart Home is an add-on behind a narrow provider adapter. The browser must not
@@ -51,7 +52,7 @@ git diff --check
 ```
 
 Run `npm run preflight` before deployment with the real ignored config, PIN and
-database available. All 19 current critical acceptance criteria must pass.
+database available. All 20 current critical acceptance criteria must pass.
 Extend the acceptance contract before shipping a new user-visible capability.
 
 Normal work is committed and deployed from `dev` only. `main` is the stable

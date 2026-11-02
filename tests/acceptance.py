@@ -201,9 +201,28 @@ def main() -> None:
         and isinstance(menu.get("recipes"),list)
         and "access_token" not in hellofresh_raw.decode("utf-8",errors="replace")
     ) if hellofresh_enabled else hellofresh_status==404
-    hellofresh_ui=all(text in source for text in ("features.hellofresh",">HelloFresh</button>","Eksperimentell · kun lesing","Ingen innlogging eller bestilling","/api/hellofresh/menu"))
+    hellofresh_ui=all(text in source for text in ("features.hellofresh",">HelloFresh</button>","Fysisk test · kun lesing","Offentlig meny","/api/hellofresh/menu"))
     hellofresh_boundary=all(text in hellofresh_source for text in ("https://www.hellofresh.no","MAX_HTML_BYTES","ALLOWED_IMAGE_HOSTS","systemCountry","nb-NO")) and not any(text in hellofresh_source for text in ("HELLOFRESH_EMAIL","HELLOFRESH_PASSWORD","playwright","selenium"))
     record("AC-19",hellofresh_ui and hellofresh_boundary and live_boundary,f"HelloFresh flag={hellofresh_enabled}; route={hellofresh_status}; Norwegian public read-only boundary verified",started)
+
+    started=time.monotonic()
+    account_source=(ROOT/"local_api/hellofresh_account.py").read_text()
+    account_enabled=hellofresh_enabled and configured_features.get("hellofresh_account") is True
+    account_status_code,account_status_raw=request(API_PORT,"GET","/api/hellofresh/status",{"X-FamilyBot-Local-Token":local})
+    account_status=json.loads(account_status_raw) if account_status_code==200 else {}
+    account_menu_status,_=request(API_PORT,"GET","/api/hellofresh/account/menu",{"X-FamilyBot-Local-Token":local})
+    account_live=(
+        account_status_code==200
+        and account_status.get("credentials_local") is True
+        and account_status.get("read_only") is True
+        and account_menu_status in {200,401}
+        and not any(secret in account_status_raw.decode("utf-8",errors="replace") for secret in ("access_token","refresh_token","email"))
+    ) if account_enabled else account_status_code==404
+    account_ui=all(text in source for text in ("features.hellofresh_account","første gangs bruk","Send innloggingslenke","Godkjenn lenken her","/api/hellofresh/auth/start","/api/hellofresh/auth/complete","/api/hellofresh/account/menu","Koble fra")) and "window.open(" not in source
+    account_boundary=all(text in account_source for text in ("/gw/v1/passwordless/start","/gw/v1/passwordless/magic-link/finish","/gw/refresh",".openclaw/credentials/hellofresh-no.json","0o600","read_only")) and not any(text in account_source for text in ("HELLOFRESH_PASSWORD","playwright","selenium","select_meal","change_delivery","checkout"))
+    account_credentials=Path.home()/".openclaw/credentials/hellofresh-no.json"
+    account_credentials_safe=not account_credentials.exists() or account_credentials.stat().st_mode & 0o777==0o600
+    record("AC-20",account_ui and account_boundary and account_live and account_credentials_safe,f"HelloFresh account flag={account_enabled}; status={account_status_code}; menu={account_menu_status}; popup-free passwordless read-only account boundary and credential mode={account_credentials_safe}",started)
 
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}

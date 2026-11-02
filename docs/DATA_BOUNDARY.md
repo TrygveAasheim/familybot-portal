@@ -98,10 +98,24 @@ tags, preparation time, difficulty, calories, sold-out state and disclosed
 extra charge. It does not return the source page, embedded application state,
 bootstrap token, recipe URL, cookies or response headers.
 
-The HelloFresh adapter has no login, account cookie store, username/password,
-browser automation, meal selection, delivery change, subscription operation or
-checkout route. A provider failure returns an isolated unavailable state; a
-recent cached menu may be returned only when explicitly marked stale.
+The public adapter has no login, account cookie store or browser automation.
+The separately gated `portal.features.hellofresh_account` adapter implements
+passwordless email login only. The browser receives no password, email address,
+one-time code, access/refresh token, customer/subscription identifier or raw
+account payload. Callback query values are redacted from request logs.
+
+Pending login correlation and renewable credentials are stored outside Git in
+`$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
+`0600`. Only fixed HelloFresh Norway endpoints and an allowlist of HelloFresh
+magic-link hosts are accepted. A local same-window callback is preferred; the
+Portal also supports pasting the full provider link and polls for completion on
+another device. No popup is required.
+
+Authenticated reads expose the same curated recipe contract plus selected
+quantity and total selected count. No email, meal selection, delivery,
+subscription, address, payment or checkout write route exists. Provider/auth
+failure returns an isolated unavailable or reconnect state and cannot break the
+family dashboard; public cache fallback remains explicitly marked stale.
 
 ## Write allowlist
 

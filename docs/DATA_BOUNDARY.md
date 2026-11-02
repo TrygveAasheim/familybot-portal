@@ -110,7 +110,9 @@ in five minutes and a successful login clears the failure window.
 Renewable credentials are stored outside Git in
 `$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
 `0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup or email
-link is required. The Portal itself is plain HTTP on a trusted private LAN, so
+link is required. Temporary provider or network failures preserve the renewable
+credential for retry; only an explicit provider authentication rejection clears
+it and returns the first-use login form. The Portal itself is plain HTTP on a trusted private LAN, so
 first-use credentials must not be entered over guest, public or otherwise
 untrusted networks; deployments requiring an untrusted network need local TLS
 before enabling account login.

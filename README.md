@@ -193,7 +193,9 @@ local refresh credentials, the household menu and selected quantities. The
 password is used once and is never stored or logged; provider tokens and raw
 account payloads never enter browser responses or Git. Because the Portal is a
 trusted-LAN HTTP appliance, first-use credentials should be entered only on the
-private home network. Meal, delivery, subscription and payment changes remain
+private home network. The renewable token survives restarts and temporary
+provider outages; the login form returns only after HelloFresh rejects it.
+Meal, delivery, subscription and payment changes remain
 disabled. Both flags default to `false`; Oda remains in code for rollback. See
 [HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).
 

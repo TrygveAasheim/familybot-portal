@@ -9,6 +9,7 @@ from unittest.mock import patch
 from hellofresh_account import (
     HelloFreshAccountAuthRequired,
     HelloFreshAccountClient,
+    HelloFreshAccountUnavailable,
     HelloFreshAccountValidation,
     _HttpError,
 )
@@ -74,6 +75,25 @@ class HelloFreshAccountTests(unittest.TestCase):
             refreshed = self.client._refresh(self.client._load())
         self.assertEqual(refreshed["refresh_token"], ACCESS)
         self.assertEqual(stat.S_IMODE(self.credentials.stat().st_mode), 0o600)
+
+    def test_refresh_auth_rejection_forgets_tokens_and_requires_login(self):
+        self.client._save({"refresh_token": REFRESH, "expires_at": time.time() - 1})
+        with patch.object(self.client, "_guest_token", return_value=ACCESS), patch.object(
+            self.client, "_request_json", side_effect=_HttpError(401)
+        ):
+            with self.assertRaises(HelloFreshAccountAuthRequired):
+                self.client._refresh(self.client._load())
+        self.assertFalse(self.credentials.exists())
+
+    def test_refresh_temporary_failure_keeps_tokens_for_retry(self):
+        self.client._save({"refresh_token": REFRESH, "expires_at": time.time() - 1})
+        with patch.object(self.client, "_guest_token", return_value=ACCESS), patch.object(
+            self.client, "_request_json", side_effect=_HttpError(503)
+        ):
+            with self.assertRaises(HelloFreshAccountUnavailable):
+                self.client._refresh(self.client._load())
+        self.assertEqual(self.client._load()["refresh_token"], REFRESH)
+        self.assertTrue(self.client.status()["connected"])
 
     def test_account_menu_is_curated_and_includes_selected_quantity(self):
         responses = iter([

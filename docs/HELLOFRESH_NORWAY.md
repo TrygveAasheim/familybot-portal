@@ -17,7 +17,8 @@
 - Acceptance criteria: AC-19 and AC-20 in
   `ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md`.
 - Tests: password non-persistence, invalid credential mapping, restart/refresh
-  persistence, owner-only file mode, curated menu/selection normalization,
+  persistence, explicit auth-rejection cleanup, temporary-failure retention,
+  owner-only file mode, curated menu/selection normalization,
   local-session authorization, response secret exclusion, rendered popup and
   email-link exclusion, full Portal suite and live disconnected or connected
   acceptance probe.
@@ -51,7 +52,9 @@ origin/session protected and rate limited.
 
 After login the browser receives only the week, country/locale, curated recipe
 details and selected quantities. Refresh credentials are renewed server-side
-and survive service or machine restarts. Status returns only `connected`,
+and survive service or machine restarts. Temporary provider failures retain the
+credential for retry; an explicit refresh-token rejection clears it and returns
+the first-use form. Status returns only `connected`,
 `credentials_local` and `read_only` booleans.
 
 ## Deliberately postponed

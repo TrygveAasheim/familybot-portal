@@ -296,6 +296,7 @@ class HelloFreshAccountClient:
     def _refresh(self, credentials: dict[str, Any]) -> dict[str, Any]:
         refresh = _token(credentials.get("refresh_token"))
         if not refresh:
+            self.disconnect()
             raise HelloFreshAccountAuthRequired("Koble HelloFresh-kontoen til på nytt.")
         try:
             tokens = self._request_json(
@@ -306,8 +307,16 @@ class HelloFreshAccountClient:
                 bearer=self._guest_token(),
             )
         except _HttpError as exc:
-            raise HelloFreshAccountAuthRequired("Koble HelloFresh-kontoen til på nytt.") from exc
+            if exc.status in {400, 401, 403, 422}:
+                self.disconnect()
+                raise HelloFreshAccountAuthRequired(
+                    "HelloFresh-tilgangen er utløpt. Logg inn på nytt."
+                ) from exc
+            raise HelloFreshAccountUnavailable(
+                "HelloFresh-kontoen svarer ikke akkurat nå."
+            ) from exc
         if not isinstance(tokens, dict) or not _token(tokens.get("access_token")):
+            self.disconnect()
             raise HelloFreshAccountAuthRequired("Koble HelloFresh-kontoen til på nytt.")
         credentials["access_token"] = tokens["access_token"]
         replacement = _token(tokens.get("refresh_token"))
@@ -341,6 +350,7 @@ class HelloFreshAccountClient:
                 )
             except _HttpError as retry_exc:
                 if retry_exc.status in {401, 403}:
+                    self.disconnect()
                     raise HelloFreshAccountAuthRequired(
                         "Koble HelloFresh-kontoen til på nytt."
                     ) from retry_exc

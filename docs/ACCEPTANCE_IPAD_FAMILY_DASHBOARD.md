@@ -289,6 +289,9 @@ flag-on acceptance probe.
   owner-only local file, survive service restarts and are refreshed before use.
   Credentials never appear in logs or browser JSON. Five failed attempts per
   client in five minutes trigger a temporary limit; success clears the failures.
+- The login form remains hidden while a renewable credential exists. Temporary
+  provider or network failures keep that credential for retry; only an explicit
+  authentication rejection clears it and asks for email/password again.
 - The first-use screen states that the Portal runs over the trusted private LAN.
   Account login must not be enabled on public or untrusted networks without
   adding local TLS.
@@ -299,8 +302,8 @@ flag-on acceptance probe.
   failures remain isolated from the family dashboard and show a reconnect or
   unavailable state.
 
-Evidence: transient-password non-persistence, provider-rejection, refresh
-persistence, file-mode and curated-menu unit tests; local-session API
+Evidence: transient-password non-persistence, login and refresh rejection,
+temporary-failure retention, restart/refresh persistence, file-mode and curated-menu unit tests; local-session API
 authorization and response secret exclusion; popup/email-link exclusion and
 rendered touch UI assertions; live disconnected/connected probe.
 

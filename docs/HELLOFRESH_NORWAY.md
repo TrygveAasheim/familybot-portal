@@ -81,6 +81,8 @@ Recipe detail is loaded only when a card is expanded and cached in that browser
 session. The local API calls one fixed recipe-detail endpoint, validates the
 24-character recipe ID and serving count, and returns a bounded allowlist. Raw
 provider recipe/account objects, identifiers and HTML are never forwarded.
+Protein add-on variants override stale vegetarian base tags, and punctuation-only
+provider description placeholders are omitted.
 
 Meal writes use the provider's full-cart contract, so the adapter re-reads the
 week immediately before each action. It derives the exact course indexes,

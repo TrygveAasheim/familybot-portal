@@ -413,13 +413,19 @@ class HelloFreshAccountTests(unittest.TestCase):
         normalized = self.client._normalize_meal(meal, 0)
         self.assertEqual(normalized["filter_categories"], ["fish", "pasta"])
 
+        meal["recipe"]["name"] = "Vegetargryte med bacon"
+        meal["recipe"]["tags"].append({"name": "Vegetar", "displayLabel": True})
+        normalized = self.client._normalize_meal(meal, 0)
+        self.assertIn("meat", normalized["filter_categories"])
+        self.assertNotIn("vegetarian", normalized["filter_categories"])
+
     def test_recipe_detail_is_portion_aware_curated_and_bounded(self):
         recipe_id = "a" * 24
         provider = {
             "id": recipe_id,
             "name": "Familiepasta",
             "headline": "med tomat",
-            "description": "En enkel middag.",
+            "description": ".",
             "image": "https://img.hellofresh.com/test/detail.jpg",
             "prepTime": "PT20M",
             "totalTime": "PT35M",
@@ -449,6 +455,7 @@ class HelloFreshAccountTests(unittest.TestCase):
             f"/gw/recipes/recipes/{recipe_id}", params={"country": "NO", "locale": "nb-NO"}
         )
         self.assertEqual(detail["servings"], 4)
+        self.assertEqual(detail["description"], "")
         self.assertEqual(detail["ingredients"][0]["amount"], 360)
         self.assertFalse(detail["ingredients"][1]["shipped"])
         self.assertEqual(detail["allergens"], ["Gluten"])

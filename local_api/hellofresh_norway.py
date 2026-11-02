@@ -148,7 +148,12 @@ def _meal_categories(recipe: Any) -> list[str]:
         ),
         "vegetarian": ("vegetar", "veggie", "vegetarian", "vegan"),
     }
-    return [key for key, needles in rules.items() if any(needle in haystack for needle in needles)]
+    categories = [key for key, needles in rules.items() if any(needle in haystack for needle in needles)]
+    # Provider add-on variants can retain the base dish's vegetarian tag even
+    # after bacon, chicken, fish or another protein is added to its name.
+    if "vegetarian" in categories and ("meat" in categories or "fish" in categories):
+        categories.remove("vegetarian")
+    return categories
 
 
 class HelloFreshNorwayClient:

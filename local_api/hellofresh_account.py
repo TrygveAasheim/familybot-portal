@@ -1132,11 +1132,14 @@ class HelloFreshAccountClient:
         name = _bounded_text(value.get("name"), 120)
         if not name:
             raise HelloFreshAccountUnavailable("HelloFresh-oppskriften manglet navn.")
+        description = _bounded_text(value.get("description"), 1_000)
+        if not any(character.isalnum() for character in description):
+            description = ""
         return {
             "id": recipe_id,
             "name": name,
             "headline": _bounded_text(value.get("headline"), 180),
-            "description": _bounded_text(value.get("description"), 1_000),
+            "description": description,
             "image_url": _safe_image_url(value.get("image") or value.get("imageLink")),
             "prep_time": _bounded_text(value.get("prepTime"), 20),
             "total_time": _bounded_text(value.get("totalTime"), 20),

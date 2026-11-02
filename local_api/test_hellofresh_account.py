@@ -12,6 +12,7 @@ from unittest.mock import patch
 from hellofresh_account import (
     HelloFreshAccountAuthRequired,
     HelloFreshAccountClient,
+    HelloFreshAccountConflict,
     HelloFreshAccountUnavailable,
     HelloFreshAccountValidation,
     _HttpError,
@@ -20,6 +21,81 @@ from hellofresh_account import (
 
 ACCESS = "aaaaaaaa.bbbbbbbb.cccccccc"
 REFRESH = "dddddddd.eeeeeeee.ffffffff"
+
+
+def account_subscription():
+    return {
+        "id": "subscription-secret",
+        "isActive": True,
+        "customer": {"id": "customer-secret"},
+        "product": {"sku": "NO-BOX-3-4-0"},
+        "productType": {"specs": {"meals": 3, "size": 4}},
+        "preset": "quick",
+        "nextModifiableDeliveryWeek": "2026-W46",
+        "weekWithLatestMenu": "2026-W49",
+    }
+
+
+def delivery_week(status="RUNNING"):
+    return {
+        "id": "2026-W46",
+        "subscriptionId": "subscription-secret",
+        "deliveryDate": "2099-11-09T12:00:00+01:00",
+        "cutoffDate": "2099-11-03T23:59:59+01:00",
+        "status": status,
+        "state": status,
+        "deliveryBlocked": False,
+        "allowedActions": {"mealSwap": True, "pause": True},
+        "product": {"handle": "NO-BOX-3-4-0", "specs": {"meals": 3, "size": 4}},
+    }
+
+
+def menu_payload(selected=(1, 2, 6), *, include_extra=True):
+    meals = []
+    for order, index in enumerate((1, 2, 3, 4, 5, 52, 29, 45, 6)):
+        meals.append(
+            {
+                "index": index,
+                "selection": {"limit": 10, **({"quantity": 1} if index in selected else {})},
+                "recipe": {
+                    "id": f"{index:024x}",
+                    "name": f"Rett {index}",
+                    "headline": f"Middag nummer {index}",
+                    "image": f"https://img.hellofresh.com/test/{index}.jpg",
+                    "prepTime": "PT30M",
+                    "difficulty": 1,
+                    "tags": [{"name": "Familievennlig", "displayLabel": True}],
+                },
+            }
+        )
+    groups = []
+    if include_extra:
+        groups = [{
+            "groupType": "protein",
+            "sku": "NO-EXTRA",
+            "addOns": [{
+                "index": 1001,
+                "selection": {"oneOffQuantity": 1, "preselectedQuantity": 0, "courses": [{"index": 1}]},
+            }],
+        }]
+    return {
+        "id": "menu-secret",
+        "week": "2026-W46",
+        "meals": meals,
+        "addOns": {"groups": groups},
+    }
+
+
+def menu_bundle(selected=(1, 2, 6), *, status="RUNNING"):
+    return {
+        "week": "2026-W46",
+        "subscription": account_subscription(),
+        "delivery": delivery_week(status),
+        "payload": menu_payload(selected),
+        "product_handle": f"NO-BOX-{len(selected)}-4-0",
+        "product_options": {2: "NO-BOX-2-4-0", 3: "NO-BOX-3-4-0", 4: "NO-BOX-4-4-0", 5: "NO-BOX-5-4-0"},
+        "servings": 4,
+    }
 
 
 class FakeBrowserResponse:
@@ -259,30 +335,201 @@ class HelloFreshAccountTests(unittest.TestCase):
                 self.client._refresh(self.client._load())
         self.assertEqual(self.client._load()["refresh_token"], REFRESH)
 
+    def test_authorized_write_retries_once_with_same_body_after_access_refresh(self):
+        credentials = {
+            "access_token": ACCESS,
+            "refresh_token": REFRESH,
+            "expires_at": time.time() + 600,
+        }
+        replacement = {**credentials, "access_token": "newaccess.token.value"}
+        body = {"meals": [{"index": 1, "quantity": 1}]}
+        with patch.object(self.client, "_load", return_value=credentials), patch.object(
+            self.client, "_refresh", return_value=replacement
+        ) as refresh, patch.object(
+            self.client, "_request_json", side_effect=[_HttpError(401), {"ok": True}]
+        ) as request:
+            result = self.client._authorized_json(
+                "/gw/v1/carts/2026-W46",
+                method="PUT",
+                params={"week": "2026-W46"},
+                json_value=body,
+                extra_headers={"x-requested-by": "shopping-experience-web"},
+            )
+        self.assertEqual(result, {"ok": True})
+        refresh.assert_called_once_with(credentials)
+        self.assertEqual(request.call_count, 2)
+        for call in request.call_args_list:
+            self.assertEqual(call.kwargs["method"], "PUT")
+            self.assertEqual(call.kwargs["json_value"], body)
+            self.assertEqual(call.kwargs["params"], {"week": "2026-W46"})
+            self.assertEqual(
+                call.kwargs["extra_headers"],
+                {"x-requested-by": "shopping-experience-web"},
+            )
+        self.assertEqual(request.call_args_list[0].kwargs["bearer"], ACCESS)
+        self.assertEqual(
+            request.call_args_list[1].kwargs["bearer"], "newaccess.token.value"
+        )
+
+    def test_authorized_forbidden_response_keeps_renewable_credentials(self):
+        credentials = {
+            "access_token": ACCESS,
+            "refresh_token": REFRESH,
+            "expires_at": time.time() + 600,
+        }
+        with patch.object(self.client, "_load", return_value=credentials), patch.object(
+            self.client, "_request_json", side_effect=_HttpError(403)
+        ), patch.object(self.client, "disconnect") as disconnect:
+            with self.assertRaises(HelloFreshAccountUnavailable):
+                self.client._authorized_json("/gw/api/customers/me/deliveries")
+        disconnect.assert_not_called()
+
     def test_account_menu_is_curated_and_includes_selected_quantity(self):
-        responses = iter([
-            {"activeSubscriptionId": "sub-secret", "activeSubscriptionSkus": ["classic-box"]},
-            {"menu": {"week": "2026-W46", "meals": [{
-                "index": 2,
-                "selection": {"quantity": 2},
-                "recipe": {
-                    "id": "0123456789abcdef01234567",
-                    "name": "Laks med poteter",
-                    "headline": "En enkel familiemiddag",
-                    "imageLink": "https://cdn.hellofresh.com/hellofresh_s3/image/test.jpg",
-                    "prepTime": "PT30M",
-                    "difficulty": 1,
-                    "tags": [{"name": "Familievennlig", "displayLabel": True}],
-                },
-            }]}}
-        ])
-        with patch.object(self.client, "_authorized_json", side_effect=lambda *_args, **_kwargs: next(responses)):
+        with patch.object(self.client, "_menu_bundle", return_value=menu_bundle()):
             menu = self.client.menu("2026-W46")
-        self.assertEqual(menu["selected_count"], 2)
-        self.assertEqual(menu["recipes"][0]["selected_quantity"], 2)
+        self.assertEqual(menu["selected_count"], 3)
+        self.assertEqual([item["course_index"] for item in menu["recipes"][:3]], [1, 2, 6])
+        self.assertTrue(all(item["image_url"].startswith("https://img.hellofresh.com/") for item in menu["recipes"]))
+        self.assertEqual(menu["available_meal_counts"], [2, 3, 4, 5])
+        self.assertTrue(menu["editable"])
+        self.assertRegex(menu["selection_snapshot"], r"^[0-9a-f]{64}$")
         serialized = json.dumps(menu)
-        self.assertNotIn("sub-secret", serialized)
-        self.assertNotIn("classic-box", serialized)
+        self.assertNotIn("subscription-secret", serialized)
+        self.assertNotIn("customer-secret", serialized)
+        self.assertNotIn("NO-BOX", serialized)
+
+    def test_upcoming_weeks_start_on_next_modifiable_and_mark_publication(self):
+        subscription = account_subscription()
+        deliveries = [delivery_week(), {**delivery_week(), "id": "2026-W50"}]
+        with patch.object(self.client, "_active_subscription", return_value=subscription), patch.object(
+            self.client, "_delivery_weeks", return_value=deliveries
+        ) as read_weeks:
+            result = self.client.weeks()
+        # HelloFresh treats rangeStart as exclusive, so the client brackets
+        # the provider's next modifiable week with the preceding ISO week.
+        self.assertEqual(read_weeks.call_args.args[0], "2026-W45")
+        self.assertEqual(result["default_week"], "2026-W46")
+        self.assertTrue(result["weeks"][0]["menu_published"])
+        self.assertFalse(result["weeks"][1]["menu_published"])
+        self.assertNotIn("subscription-secret", json.dumps(result))
+
+    def test_paused_next_modifiable_week_remains_the_default(self):
+        paused = delivery_week("PAUSED")
+        later = {**delivery_week(), "id": "2026-W47"}
+        with patch.object(
+            self.client, "_active_subscription", return_value=account_subscription()
+        ), patch.object(self.client, "_delivery_weeks", return_value=[paused, later]):
+            result = self.client.weeks()
+        self.assertEqual(result["default_week"], "2026-W46")
+
+    def test_product_options_require_active_subscribable_matching_size(self):
+        products = [
+            {"handle": "valid", "isActive": True, "isSubscribable": True, "specs": {"meals": 3, "size": 4}},
+            {"handle": "inactive", "isActive": False, "isSubscribable": True, "specs": {"meals": 4, "size": 4}},
+            {"handle": "not-subscribable", "isActive": True, "isSubscribable": False, "specs": {"meals": 5, "size": 4}},
+            {"handle": "wrong-size", "isActive": True, "isSubscribable": True, "specs": {"meals": 2, "size": 2}},
+        ]
+        with patch.object(
+            self.client, "_authorized_json", return_value={"items": [{"products": products}]}
+        ):
+            result = self.client._product_options("subscription-secret", 4)
+        self.assertEqual(result, {3: "valid"})
+
+    def test_single_week_lookup_brackets_exclusive_provider_range(self):
+        delivery = delivery_week()
+        with patch.object(
+            self.client, "_delivery_weeks", return_value=[delivery]
+        ) as read_weeks:
+            result = self.client._delivery_week("2026-W46")
+        self.assertEqual(result["id"], "2026-W46")
+        read_weeks.assert_called_once_with("2026-W45", "2026-W47")
+
+    def test_replace_preserves_unrelated_meals_and_selected_extras(self):
+        before = menu_bundle()
+        after = menu_bundle((1, 3, 6))
+        snapshot = self.client._menu_snapshot(
+            "2026-W46", before["payload"], before["delivery"], before["product_handle"]
+        )
+        with patch.object(self.client, "_menu_bundle", side_effect=[before, after]), patch.object(
+            self.client, "_authorized_json", return_value={"hasSeamlessDowngraded": False}
+        ) as provider:
+            menu = self.client.change_selection(
+                "2026-W46",
+                {"snapshot": snapshot, "from_course_index": 2, "to_course_index": 3},
+                "replace",
+            )
+        self.assertEqual(menu["selected_count"], 3)
+        write = provider.call_args
+        self.assertEqual(write.args[0], "/gw/v1/carts/2026-W46")
+        self.assertEqual(write.kwargs["method"], "PUT")
+        self.assertEqual(
+            write.kwargs["json_value"]["meals"],
+            [{"index": 1, "quantity": 1}, {"index": 3, "quantity": 1}, {"index": 6, "quantity": 1}],
+        )
+        self.assertEqual(write.kwargs["json_value"]["extras"][0]["selection"][0]["index"], 1001)
+        self.assertEqual(write.kwargs["params"]["product-sku"], "NO-BOX-3-4-0")
+        self.assertEqual(write.kwargs["extra_headers"], {"x-requested-by": "shopping-experience-web"})
+
+    def test_add_and_remove_select_matching_one_week_box_sizes(self):
+        for action, payload, before_selected, after_selected, expected_sku in (
+            ("add", {"course_index": 3}, (1, 2, 6), (1, 2, 3, 6), "NO-BOX-4-4-0"),
+            ("remove", {"course_index": 2}, (1, 2, 6), (1, 6), "NO-BOX-2-4-0"),
+        ):
+            with self.subTest(action=action):
+                before = menu_bundle(before_selected)
+                after = menu_bundle(after_selected)
+                after["product_handle"] = expected_sku
+                snapshot = self.client._menu_snapshot(
+                    "2026-W46", before["payload"], before["delivery"], before["product_handle"]
+                )
+                with patch.object(self.client, "_menu_bundle", side_effect=[before, after]), patch.object(
+                    self.client, "_authorized_json", return_value={"hasSeamlessDowngraded": False}
+                ) as provider:
+                    self.client.change_selection(
+                        "2026-W46", {"snapshot": snapshot, **payload}, action
+                    )
+                self.assertEqual(provider.call_args.kwargs["params"]["product-sku"], expected_sku)
+
+    def test_stale_selection_snapshot_blocks_provider_write(self):
+        before = menu_bundle()
+        with patch.object(self.client, "_menu_bundle", return_value=before), patch.object(
+            self.client, "_authorized_json"
+        ) as provider:
+            with self.assertRaises(HelloFreshAccountConflict):
+                self.client.change_selection(
+                    "2026-W46",
+                    {"snapshot": "0" * 64, "from_course_index": 1, "to_course_index": 3},
+                    "replace",
+                )
+        provider.assert_not_called()
+
+    def test_delivery_from_another_subscription_blocks_provider_write(self):
+        before = menu_bundle()
+        before["delivery"] = {**before["delivery"], "subscriptionId": "other-subscription"}
+        with patch.object(self.client, "_active_subscription", return_value=before["subscription"]), patch.object(
+            self.client, "_delivery_week", return_value=before["delivery"]
+        ), patch.object(self.client, "_authorized_json") as provider:
+            with self.assertRaises(HelloFreshAccountUnavailable):
+                self.client._menu_bundle("2026-W46")
+        provider.assert_not_called()
+
+    def test_pause_writes_exact_week_and_verifies_status(self):
+        before = delivery_week()
+        after = delivery_week("PAUSED")
+        snapshot = self.client._week_snapshot(before)
+        with patch.object(self.client, "_active_subscription", return_value=account_subscription()), patch.object(
+            self.client, "_delivery_week", side_effect=[before, after]
+        ), patch.object(self.client, "_authorized_json", return_value={"items": [after]}) as provider:
+            result = self.client.set_week_paused(
+                "2026-W46", {"paused": True, "snapshot": snapshot}
+            )
+        self.assertTrue(result["paused"])
+        self.assertEqual(
+            provider.call_args.args[0],
+            "/gw/api/subscriptions/subscription-secret/delivery_dates/2026-W46",
+        )
+        self.assertEqual(provider.call_args.kwargs["method"], "PATCH")
+        self.assertEqual(provider.call_args.kwargs["json_value"]["delivery"]["status"], "PAUSED")
 
 
 if __name__ == "__main__":

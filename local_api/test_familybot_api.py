@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from dashboard_migration import clear_active_setup, ensure_default_rewards, migrate
 from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, health_summary, transport_summary, trusted_portal_origin, weather_summary
-from hellofresh_account import HelloFreshAccountValidation
+from hellofresh_account import HelloFreshAccountConflict, HelloFreshAccountValidation
 
 
 SCHEMA = """
@@ -107,12 +107,14 @@ class FakeHelloFreshAccountClient:
         self.connected = False
         self.calls = []
         self.login_error = None
+        self.mutation_error = None
 
     def status(self):
         return {
             "connected": self.connected,
             "credentials_local": True,
-            "read_only": True,
+            "read_only": False,
+            "allowed_writes": ["meal_selection", "week_pause"],
         }
 
     def login(self, payload):
@@ -129,13 +131,49 @@ class FakeHelloFreshAccountClient:
             "country": "NO",
             "locale": "nb-NO",
             "week": week,
-            "read_only": True,
+            "read_only": False,
             "account": True,
             "selected_count": 1,
+            "selection_snapshot": "a" * 64,
             "stale": False,
             "fetched_at": "2026-11-02T12:00:00+01:00",
             "recipes": [],
         }
+
+    def weeks(self):
+        self.calls.append(("weeks",))
+        return {
+            "default_week": "2026-W46",
+            "latest_menu_week": "2026-W49",
+            "weeks": [{
+                "week": "2026-W46",
+                "delivery_date": "2026-11-09T12:00:00+01:00",
+                "cutoff_at": "2026-11-03T23:59:59+01:00",
+                "status": "RUNNING",
+                "state": "RUNNING",
+                "paused": False,
+                "blocked": False,
+                "menu_published": True,
+                "meal_count": 3,
+                "servings": 4,
+                "can_edit_meals": True,
+                "can_pause": True,
+                "can_resume": False,
+                "snapshot": "b" * 64,
+            }],
+        }
+
+    def change_selection(self, week, payload, action):
+        self.calls.append(("change_selection", week, action, payload))
+        if self.mutation_error:
+            raise self.mutation_error
+        return self.menu(week)
+
+    def set_week_paused(self, week, payload):
+        self.calls.append(("set_week_paused", week, payload))
+        if self.mutation_error:
+            raise self.mutation_error
+        return {**self.weeks()["weeks"][0], "paused": payload["paused"]}
 
     def disconnect(self):
         self.calls.append(("disconnect",))
@@ -798,6 +836,69 @@ class RepositoryTests(unittest.TestCase):
             self.assertEqual(response.status, 200)
             self.assertTrue(menu["account"])
             self.assertIn(("menu", "2026-W46"), account.calls)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/account/weeks", headers=headers)
+            response = connection.getresponse()
+            weeks = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertEqual(weeks["default_week"], "2026-W46")
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/account/weeks/2026-W46/add",
+                json.dumps({"snapshot": "a" * 64, "course_index": 3}),
+                {"Origin": "http://localhost:3000", "Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 403)
+            response.read()
+            self.assertFalse(any(call[0] == "change_selection" for call in account.calls))
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/account/weeks/2026-W46/replace",
+                json.dumps({"snapshot": "a" * 64, "from_course_index": 1, "to_course_index": 3}),
+                headers,
+            )
+            response = connection.getresponse()
+            changed = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertEqual(changed["menu"]["week"], "2026-W46")
+            self.assertTrue(any(call[:3] == ("change_selection", "2026-W46", "replace") for call in account.calls))
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "PATCH",
+                "/api/hellofresh/account/weeks/2026-W46/status",
+                json.dumps({"snapshot": "b" * 64, "paused": True}),
+                headers,
+            )
+            response = connection.getresponse()
+            paused = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertTrue(paused["week"]["paused"])
+            self.assertIn(("set_week_paused", "2026-W46", {"snapshot": "b" * 64, "paused": True}), account.calls)
+            connection.close()
+
+            account.mutation_error = HelloFreshAccountConflict("Uken er endret.")
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/account/weeks/2026-W46/add",
+                json.dumps({"snapshot": "a" * 64, "course_index": 3}),
+                headers,
+            )
+            response = connection.getresponse()
+            conflict = json.loads(response.read())
+            self.assertEqual(response.status, 409)
+            self.assertTrue(conflict["refresh"])
             connection.close()
 
             connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)

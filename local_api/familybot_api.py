@@ -34,6 +34,7 @@ from family_config import integration, member_profiles, portal_settings
 from hellofresh_account import (
     HelloFreshAccountAuthRequired,
     HelloFreshAccountClient,
+    HelloFreshAccountConflict,
     HelloFreshAccountUnavailable,
     HelloFreshAccountValidation,
 )
@@ -1859,10 +1860,14 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                     self.respond(200, {"menu": self.app.hellofresh.menu()})
                 elif parsed.path == "/api/hellofresh/status" and self.app.features["hellofresh_account"]:
                     self.respond(200, self.app.hellofresh_account.status())
+                elif parsed.path == "/api/hellofresh/account/weeks" and self.app.features["hellofresh_account"]:
+                    self.respond(200, self.app.hellofresh_account.weeks())
                 elif parsed.path == "/api/hellofresh/account/menu" and self.app.features["hellofresh_account"]:
                     query = parse_qs(parsed.query)
                     requested_week = (query.get("week") or [""])[0]
-                    week = requested_week or self.app.hellofresh.menu()["week"]
+                    week = requested_week or self.app.hellofresh_account.weeks()["default_week"]
+                    if not week:
+                        raise HelloFreshAccountUnavailable("Fant ingen publisert HelloFresh-meny.")
                     self.respond(200, {"menu": self.app.hellofresh_account.menu(week)})
                 else:
                     self.respond(404, {"error": "Ikke funnet."})
@@ -1991,6 +1996,25 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 elif method == "DELETE" and path == "/api/hellofresh/connection":
                     self.app.hellofresh_account.disconnect()
                     self.respond(200, {"connected": False})
+                elif method == "POST" and (
+                    selection := re.fullmatch(
+                        r"/api/hellofresh/account/weeks/(\d{4}-W\d{2})/(replace|add|remove)",
+                        path,
+                    )
+                ):
+                    result = self.app.hellofresh_account.change_selection(
+                        selection.group(1), self.read_payload(), selection.group(2)
+                    )
+                    self.respond(200, {"menu": result})
+                elif method == "PATCH" and (
+                    week_status := re.fullmatch(
+                        r"/api/hellofresh/account/weeks/(\d{4}-W\d{2})/status", path
+                    )
+                ):
+                    result = self.app.hellofresh_account.set_week_paused(
+                        week_status.group(1), self.read_payload()
+                    )
+                    self.respond(200, {"week": result})
                 else:
                     self.respond(404, {"error": "Ikke funnet."})
                 return
@@ -2097,6 +2121,8 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             self.respond(400, {"error": str(exc)})
         except HelloFreshAccountAuthRequired as exc:
             self.respond(401, {"error": str(exc), "reconnect": True})
+        except HelloFreshAccountConflict as exc:
+            self.respond(409, {"error": str(exc), "refresh": True})
         except HelloFreshAccountUnavailable as exc:
             self.log_error("hellofresh mutation unavailable: %s", type(exc).__name__)
             self.respond(503, {"error": str(exc)})

@@ -27,11 +27,12 @@ type OdaCart={groups:OdaCartGroup[];productQuantityCount:number;totalGrossAmount
 type OdaStatus={connected:boolean;client_registered:boolean;server_url:string;checkout_url:string;credentials_local:boolean};
 type OdaRecipe={id:number;title:string;url?:string|null;imageUrl?:string|null;providerName?:string|null;difficultyString?:string|null;cookingDurationIso8601?:string|null;likeCount?:number|null;liked?:boolean;purchased_before?:boolean;description?:string|null;recipeYield?:string|null;recipeCategory?:string|null;ingredients?:string[];instructions?:string[]};
 type FeatureFlags={hellofresh:boolean;hellofresh_account:boolean};
-type HelloFreshStatus={connected:boolean;credentials_local:boolean;read_only:boolean};
-type HelloFreshRecipe={id:string;position:number;name:string;headline:string;image_url?:string|null;prep_time?:string|null;difficulty?:number|null;calories?:number|null;tags:string[];sold_out:boolean;extra_charge_ore?:number|null;selected_quantity?:number};
-type HelloFreshMenu={provider:string;country:"NO";locale:"nb-NO";week:string;read_only:true;account?:boolean;selected_count?:number;stale:boolean;warning?:string;fetched_at:string;recipes:HelloFreshRecipe[]};
+type HelloFreshStatus={connected:boolean;credentials_local:boolean;read_only:boolean;allowed_writes?:string[]};
+type HelloFreshWeek={week:string;delivery_date:string;cutoff_at:string;status:string;state:string;paused:boolean;blocked:boolean;menu_published:boolean;meal_count?:number|null;servings?:number|null;can_edit_meals:boolean;can_pause:boolean;can_resume:boolean;snapshot:string};
+type HelloFreshRecipe={id:string;course_index:number;position:number;name:string;headline:string;image_url?:string|null;prep_time?:string|null;difficulty?:number|null;calories?:number|null;tags:string[];sold_out:boolean;extra_charge_ore?:number|null;selected_quantity?:number};
+type HelloFreshMenu={provider:string;country:"NO";locale:"nb-NO";week:string;read_only:boolean;account?:boolean;selected_count?:number;servings?:number|null;available_meal_counts?:number[];editable?:boolean;paused?:boolean;delivery_date?:string;cutoff_at?:string;selection_snapshot?:string;stale:boolean;warning?:string;fetched_at:string;recipes:HelloFreshRecipe[]};
 type DinnerMessage={role:"user"|"assistant";content:string};
-type PortalRequestError=Error&{reconnect?:boolean};
+type PortalRequestError=Error&{reconnect?:boolean;refresh?:boolean};
 type Dashboard={date:string;generated_at:string;annual_chore_summary?:AnnualChoreSummary|null;children:Child[];chores:KanbanCard[];approval_queue:History[];review_queue:History[];events:EventItem[];spond_events:EventItem[];activities:Array<{id:number;name:string;location?:string|null;schedule?:string|null;member_id?:number|null;member?:string|null}>;week_plans:Array<{id:number;member_id:number;member:string;summary:string;week_number?:number;year?:number;fallback?:boolean}>;week_plan_days:Array<{id:number;week_plan_id:number;member_id:number;member:string;day:string;date?:string|null;subject?:string|null;note?:string|null;homework?:string|null;bring?:string|null}>;school_calendar:Array<{id:number;name:string;start_date:string;end_date:string}>;weather:{status:string;updated_at?:string|null;period_date?:string|null;advice?:string;periods?:WeatherPeriod[]};transport:Transport;sources:{email:{latest_processed?:string|null;waiting:number};spond:{checked_at?:string|null;ok?:boolean|null};health:{status:HealthState;ok:boolean;checked_at?:string|null;issues:Array<{service:string;label:string;severity:"warn"|"critical"}>}}};
 type Page="family"|"child"|"week-plan"|"parent"|"kanban"|"oda"|"hellofresh";
 
@@ -56,6 +57,13 @@ function HelloFreshRecipeImage({recipe}:{recipe:HelloFreshRecipe}){
   // Images are restricted server-side to HelloFresh's reviewed public CDN hosts.
   // eslint-disable-next-line @next/next/no-img-element
   return <img className="hellofresh-image" src={recipe.image_url} alt={recipe.name} loading="lazy" referrerPolicy="no-referrer"/>;
+}
+function HelloFreshRecipeCard({recipe,actions}:{recipe:HelloFreshRecipe;actions?:ReactNode}){
+  const difficulty=["","Enkel","Medium","Vanskelig"];
+  return <article className={recipe.sold_out?"hellofresh-card sold-out":"hellofresh-card"}>
+    <div className="hellofresh-image-wrap"><HelloFreshRecipeImage recipe={recipe}/>{Boolean(recipe.selected_quantity)&&<strong className="hellofresh-selected">Valgt × {recipe.selected_quantity}</strong>}</div>
+    <div className="hellofresh-copy"><div className="hellofresh-tags">{recipe.tags.map(tag=><span key={tag}>{tag}</span>)}{recipe.sold_out&&<span>Utsolgt</span>}</div><h3>{recipe.name}</h3><p>{recipe.headline}</p><dl><div><dt>Tid</dt><dd>{recipeDuration(recipe.prep_time)||"Ikke oppgitt"}</dd></div><div><dt>Nivå</dt><dd>{difficulty[recipe.difficulty||0]||"Ikke oppgitt"}</dd></div><div><dt>Energi</dt><dd>{recipe.calories?`${recipe.calories} kcal`:"Ikke oppgitt"}</dd></div></dl>{recipe.extra_charge_ore!==null&&recipe.extra_charge_ore!==undefined&&<small>Tillegg fra {(recipe.extra_charge_ore/100).toLocaleString("nb-NO",{style:"currency",currency:"NOK"})} per porsjon</small>}{actions&&<div className="hellofresh-card-actions">{actions}</div>}</div>
+  </article>;
 }
 function OdaRecipeDetail({recipe,portions,busy,onBack,onAdd}:{recipe:OdaRecipe;portions:number;busy:boolean;onBack:()=>void;onAdd:()=>void}){
   const backButton=useRef<HTMLButtonElement>(null);const onBackRef=useRef(onBack);
@@ -164,32 +172,103 @@ export function FamilyConsole(){
 }
 
 function HelloFreshPage({token,accountEnabled}:{token:string;accountEnabled:boolean}){
-  const [status,setStatus]=useState<HelloFreshStatus|null>(accountEnabled?null:{connected:false,credentials_local:true,read_only:true});const [menu,setMenu]=useState<HelloFreshMenu|null>(null);const [query,setQuery]=useState("");const [menuError,setMenuError]=useState("");const [notice,setNotice]=useState("");const [busy,setBusy]=useState("");const [loading,setLoading]=useState(true);
-  const request=useCallback(async(path:string,options:RequestInit={})=>{const response=await fetch(`${apiBase()}${path}`,{...options,headers:{"Content-Type":"application/json","X-FamilyBot-Local-Token":token,...(options.headers||{})},cache:"no-store"});const result=await response.json();if(!response.ok){const failure=new Error(result.error||"HelloFresh svarer ikke akkurat nå.") as PortalRequestError;failure.reconnect=result.reconnect===true;throw failure}return result},[token]);
+  const [status,setStatus]=useState<HelloFreshStatus|null>(accountEnabled?null:{connected:false,credentials_local:true,read_only:true});
+  const [weeks,setWeeks]=useState<HelloFreshWeek[]>([]);
+  const [activeWeek,setActiveWeek]=useState("");
+  const [menu,setMenu]=useState<HelloFreshMenu|null>(null);
+  const [query,setQuery]=useState("");
+  const [menuError,setMenuError]=useState("");
+  const [notice,setNotice]=useState("");
+  const [busy,setBusy]=useState("");
+  const [loading,setLoading]=useState(true);
+  const [replacingCourse,setReplacingCourse]=useState<number|null>(null);
+
+  const request=useCallback(async(path:string,options:RequestInit={})=>{
+    const response=await fetch(`${apiBase()}${path}`,{...options,headers:{"Content-Type":"application/json","X-FamilyBot-Local-Token":token,...(options.headers||{})},cache:"no-store"});
+    const result=await response.json();
+    if(!response.ok){const failure=new Error(result.error||"HelloFresh svarer ikke akkurat nå.") as PortalRequestError;failure.reconnect=result.reconnect===true;failure.refresh=result.refresh===true;throw failure}
+    return result;
+  },[token]);
+
   const loadStatus=useCallback(async()=>{if(!accountEnabled)return;try{const next=await request("/api/hellofresh/status");setStatus(next);setMenuError("")}catch(cause){setMenuError(cause instanceof Error?cause.message:"Kunne ikke lese HelloFresh-status.")}},[accountEnabled,request]);
-  const loadMenu=useCallback(async()=>{setLoading(true);setMenuError("");try{const path=accountEnabled?"/api/hellofresh/account/menu":"/api/hellofresh/menu";const result=await request(path);setMenu(result.menu)}catch(cause){if(accountEnabled&&(cause as PortalRequestError)?.reconnect)setStatus({connected:false,credentials_local:true,read_only:true});setMenuError(cause instanceof Error?cause.message:"Kunne ikke hente HelloFresh-menyen.")}finally{setLoading(false)}},[accountEnabled,request]);
+  const loadWeeks=useCallback(async()=>{if(!accountEnabled)return;try{const result=await request("/api/hellofresh/account/weeks");const nextWeeks:HelloFreshWeek[]=result.weeks||[];setWeeks(nextWeeks);setActiveWeek(current=>nextWeeks.some(item=>item.week===current&&item.menu_published)?current:(result.default_week||""));setMenuError("")}catch(cause){if((cause as PortalRequestError)?.reconnect)setStatus({connected:false,credentials_local:true,read_only:false});setMenuError(cause instanceof Error?cause.message:"Kunne ikke hente kommende HelloFresh-uker.")}},[accountEnabled,request]);
+  const loadMenu=useCallback(async(week?:string)=>{setLoading(true);setMenuError("");try{const path=accountEnabled?`/api/hellofresh/account/menu${week?`?week=${encodeURIComponent(week)}`:""}`:"/api/hellofresh/menu";const result=await request(path);setMenu(result.menu);setReplacingCourse(null)}catch(cause){if(accountEnabled&&(cause as PortalRequestError)?.reconnect)setStatus({connected:false,credentials_local:true,read_only:false});setMenuError(cause instanceof Error?cause.message:"Kunne ikke hente HelloFresh-menyen.")}finally{setLoading(false)}},[accountEnabled,request]);
+
   useEffect(()=>{const timer=window.setTimeout(()=>void loadStatus(),0);return()=>window.clearTimeout(timer)},[loadStatus]);
-  useEffect(()=>{if(accountEnabled&&!status?.connected)return;const timer=window.setTimeout(()=>void loadMenu(),0);return()=>window.clearTimeout(timer)},[accountEnabled,status?.connected,loadMenu]);
+  useEffect(()=>{if(accountEnabled){if(!status?.connected)return;const timer=window.setTimeout(()=>void loadWeeks(),0);return()=>window.clearTimeout(timer)}const timer=window.setTimeout(()=>void loadMenu(),0);return()=>window.clearTimeout(timer)},[accountEnabled,status?.connected,loadWeeks,loadMenu]);
+  useEffect(()=>{if(!accountEnabled||!status?.connected||!activeWeek)return;const timer=window.setTimeout(()=>void loadMenu(activeWeek),0);return()=>window.clearTimeout(timer)},[accountEnabled,status?.connected,activeWeek,loadMenu]);
+
   async function login(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("login");setMenuError("");setNotice("");const element=event.currentTarget;const form=new FormData(element);let password=String(form.get("password")||"");try{const result=await request("/api/hellofresh/auth/login",{method:"POST",body:JSON.stringify({email:String(form.get("email")||"").trim().toLocaleLowerCase("nb-NO"),password})});element.reset();setStatus(result);setNotice("HelloFresh-kontoen er koblet til. Passordet ble brukt én gang og ikke lagret; den fornybare tilgangen ligger eierbeskyttet på Familieportalens Mac.")}catch(cause){setMenuError(cause instanceof Error?cause.message:"Kunne ikke logge inn hos HelloFresh.")}finally{password="";const passwordInput=element.elements.namedItem("password");if(passwordInput instanceof HTMLInputElement)passwordInput.value="";setBusy("")}}
-  async function disconnect(){if(!window.confirm("Koble HelloFresh-kontoen fra Familieportalen?"))return;setBusy("disconnect");try{await request("/api/hellofresh/connection",{method:"DELETE"});setStatus({connected:false,credentials_local:true,read_only:true});setMenu(null);setNotice("HelloFresh er koblet fra denne enheten.")}catch(cause){setMenuError(cause instanceof Error?cause.message:"Kunne ikke koble fra HelloFresh.")}finally{setBusy("")}}
-  const recipes=useMemo(()=>{const needle=query.trim().toLocaleLowerCase("nb-NO");if(!needle)return menu?.recipes||[];return (menu?.recipes||[]).filter(recipe=>[recipe.name,recipe.headline,...recipe.tags].join(" ").toLocaleLowerCase("nb-NO").includes(needle))},[menu,query]);
-  const difficulty=["","Enkel","Medium","Vanskelig"];
+  async function disconnect(){if(!window.confirm("Koble HelloFresh-kontoen fra Familieportalen?"))return;setBusy("disconnect");try{await request("/api/hellofresh/connection",{method:"DELETE"});setStatus({connected:false,credentials_local:true,read_only:false});setWeeks([]);setActiveWeek("");setMenu(null);setNotice("HelloFresh er koblet fra denne enheten.")}catch(cause){setMenuError(cause instanceof Error?cause.message:"Kunne ikke koble fra HelloFresh.")}finally{setBusy("")}}
+
+  async function changeSelection(action:"replace"|"add"|"remove",payload:Record<string,number>,message:string){
+    if(!menu?.selection_snapshot)return;
+    setBusy(`${action}-${Object.values(payload).join("-")}`);setMenuError("");setNotice("");
+    try{const result=await request(`/api/hellofresh/account/weeks/${menu.week}/${action}`,{method:"POST",body:JSON.stringify({...payload,snapshot:menu.selection_snapshot})});setMenu(result.menu);setReplacingCourse(null);setNotice(message);await loadWeeks()}
+    catch(cause){setMenuError(cause instanceof Error?cause.message:"Kunne ikke oppdatere matkassen.");if((cause as PortalRequestError)?.refresh){await loadWeeks();await loadMenu(menu.week)}}
+    finally{setBusy("")}
+  }
+  async function replaceMeal(recipe:HelloFreshRecipe){
+    const selected=menu?.recipes.find(item=>item.course_index===replacingCourse);if(!selected)return;
+    if(!window.confirm(`Bytte «${selected.name}» med «${recipe.name}» i uke ${menu?.week.slice(-2)}?`))return;
+    await changeSelection("replace",{from_course_index:selected.course_index,to_course_index:recipe.course_index},`${selected.name} er byttet med ${recipe.name}.`);
+  }
+  async function addMeal(recipe:HelloFreshRecipe){
+    if(!window.confirm(`Legge «${recipe.name}» til matkassen i uke ${menu?.week.slice(-2)}? Antall retter økes med én.`))return;
+    await changeSelection("add",{course_index:recipe.course_index},`${recipe.name} er lagt til i matkassen.`);
+  }
+  async function removeMeal(recipe:HelloFreshRecipe){
+    if(!window.confirm(`Fjerne «${recipe.name}» fra matkassen i uke ${menu?.week.slice(-2)}? Antall retter reduseres med én.`))return;
+    await changeSelection("remove",{course_index:recipe.course_index},`${recipe.name} er fjernet fra matkassen.`);
+  }
+  async function setPaused(paused:boolean){
+    const week=weeks.find(item=>item.week===activeWeek);if(!week)return;
+    const question=paused?`Sette hele leveringen i uke ${week.week.slice(-2)} på pause?`:`Aktivere leveringen i uke ${week.week.slice(-2)} igjen?`;
+    if(!window.confirm(question))return;
+    setBusy("week-status");setMenuError("");setNotice("");
+    try{await request(`/api/hellofresh/account/weeks/${week.week}/status`,{method:"PATCH",body:JSON.stringify({paused,snapshot:week.snapshot})});setNotice(paused?`Uke ${week.week.slice(-2)} er satt på pause.`:`Uke ${week.week.slice(-2)} er aktivert igjen.`);await loadWeeks();await loadMenu(week.week)}
+    catch(cause){const message=cause instanceof Error?cause.message:"Kunne ikke endre ukestatus.";await loadWeeks();setMenuError(message)}
+    finally{setBusy("")}
+  }
+
+  const selectedRecipes=useMemo(()=>(menu?.recipes||[]).filter(recipe=>(recipe.selected_quantity||0)>0),[menu]);
+  const optionRecipes=useMemo(()=>{const needle=query.trim().toLocaleLowerCase("nb-NO");return (menu?.recipes||[]).filter(recipe=>(recipe.selected_quantity||0)===0).filter(recipe=>!needle||[recipe.name,recipe.headline,...recipe.tags].join(" ").toLocaleLowerCase("nb-NO").includes(needle))},[menu,query]);
+  const currentWeek=weeks.find(item=>item.week===activeWeek);
+  const canAdd=Boolean(menu?.editable&&menu.available_meal_counts?.includes((menu.selected_count||0)+1));
+  const canRemove=Boolean(menu?.editable&&menu.available_meal_counts?.includes((menu.selected_count||0)-1));
+
   if(accountEnabled&&!status)return <section className="hellofresh-shell"><div className="loading-inline"><div className="spinner"/><p>Kontakter HelloFresh …</p>{menuError&&<><p className="hellofresh-error" role="alert">{menuError}</p><button type="button" onClick={()=>void loadStatus()}>Prøv igjen</button></>}</div></section>;
-  if(accountEnabled&&!status?.connected)return <section className="hellofresh-shell"><header className="hellofresh-heading"><div><p className="eyebrow">Fysisk test · første gangs bruk</p><h1>HelloFresh</h1><p>Koble til familiens HelloFresh-konto én gang. Innloggingen skjer her i portalen og krever ingen popup.</p></div></header>
+  if(accountEnabled&&!status?.connected)return <section className="hellofresh-shell"><header className="hellofresh-heading"><div><p className="eyebrow">Første gangs bruk</p><h1>HelloFresh</h1><p>Koble til familiens HelloFresh-konto én gang. Innloggingen skjer her i portalen og krever ingen popup.</p></div></header>
     <div className="hellofresh-connect"><span aria-hidden="true">🍋</span><div><h2>Koble til HelloFresh</h2><p>Bruk samme e-post og passord som på hellofresh.no. Familieportalens Mac mottar passordet én gang på det private hjemmenettet og sender det videre til HelloFresh gjennom en sikker HTTPS-forbindelse som ser ut som en vanlig nettleser. Passordet lagres ikke.</p><p>Etter godkjenning lagres bare den fornybare tilgangen med eierbeskyttede filrettigheter. Deretter fornyes den automatisk og sendes ikke tilbake til nettleseren, logger, modeller eller Git.</p></div>
       <form className="hellofresh-login-form" onSubmit={login}><label htmlFor="hellofresh-email">E-post hos HelloFresh<input id="hellofresh-email" name="email" type="email" autoComplete="username" inputMode="email" maxLength={320} required placeholder="navn@eksempel.no"/></label><label htmlFor="hellofresh-password">Passord hos HelloFresh<input id="hellofresh-password" name="password" type="password" autoComplete="current-password" maxLength={512} required/></label><button className="primary" disabled={busy==="login"}>{busy==="login"?"Logger inn …":"Logg inn hos HelloFresh"}</button></form>
       {notice&&<p className="hellofresh-notice" role="status">{notice}</p>}{menuError&&<p className="hellofresh-error" role="alert">{menuError}</p>}
     </div></section>;
-  return <section className="hellofresh-shell"><header className="hellofresh-heading"><div><p className="eyebrow">Fysisk test · kun lesing</p><h1>HelloFresh</h1><p>{accountEnabled?"Se familiens foreslåtte ukemeny og hvilke retter som er valgt. Endring av matkassen er deaktivert i denne testfasen.":"Utforsk den offentlige norske ukemenyen."}</p></div>{menu&&<span>Uke {menu.week.slice(-2)}</span>}</header>
-    <div className="hellofresh-boundary"><strong>{accountEnabled?"Konto koblet til lokalt":"Offentlig meny"}</strong><span>{accountEnabled?"Tilkoblingen fornyes automatisk på Familieportalens Mac. Dette testtrinnet kan bare lese meny og valgte retter; det kan ikke endre levering, abonnement, adresse eller betaling.":"Ingen innlogging eller bestilling. Denne visningen leser bare offentlig menyinformasjon fra hellofresh.no."}</span>{accountEnabled&&<button className="hellofresh-disconnect" type="button" disabled={busy==="disconnect"} onClick={()=>void disconnect()}>Koble fra</button>}</div>
+
+  return <section className="hellofresh-shell"><header className="hellofresh-heading"><div><p className="eyebrow">{accountEnabled?"Kommende matkasser":"Offentlig ukemeny"}</p><h1>HelloFresh</h1><p>{accountEnabled?"Velg uke, behold favorittene øverst og bytt, legg til eller fjern retter før fristen.":"Utforsk den offentlige norske ukemenyen."}</p></div>{menu&&<span>Uke {menu.week.slice(-2)}</span>}</header>
+    <div className="hellofresh-boundary"><strong>{accountEnabled?"Konto koblet til lokalt":"Offentlig meny"}</strong><span>{accountEnabled?"Familieportalen kan endre valgte retter og pause eller aktivere én uke etter tydelig bekreftelse. Abonnement, adresse, betaling og utsjekk er fortsatt utilgjengelig.":"Ingen innlogging eller bestilling. Denne visningen leser bare offentlig menyinformasjon fra hellofresh.no."}</span>{accountEnabled&&<button className="hellofresh-disconnect" type="button" disabled={busy==="disconnect"} onClick={()=>void disconnect()}>Koble fra</button>}</div>
+
+    {accountEnabled&&weeks.length>0&&<nav className="hellofresh-weeks" aria-label="Kommende HelloFresh-uker">{weeks.map(week=><button type="button" key={week.week} className={week.week===activeWeek?"active":""} disabled={!week.menu_published||Boolean(busy)} onClick={()=>{setActiveWeek(week.week);setQuery("");setNotice("")}}><strong>Uke {week.week.slice(-2)}</strong><span>{week.delivery_date?dateFormat.format(asDate(week.delivery_date)||new Date(week.delivery_date)):"Dato kommer"}</span><small>{week.paused?"Pauset":week.menu_published?`${week.meal_count||"–"} retter`:"Meny kommer"}</small></button>)}</nav>}
+    {accountEnabled&&currentWeek&&<section className="hellofresh-week-status"><div><p className="eyebrow">Levering {currentWeek.delivery_date?dateFormat.format(asDate(currentWeek.delivery_date)||new Date(currentWeek.delivery_date)):""}</p><h2>{currentWeek.paused?"Denne uken er pauset":`${currentWeek.meal_count||menu?.selected_count||"–"} retter · ${currentWeek.servings||menu?.servings||"–"} personer`}</h2><p>Endringsfrist: {when(currentWeek.cutoff_at)}</p></div>{currentWeek.can_pause&&<button type="button" className="danger-outline" disabled={busy==="week-status"} onClick={()=>void setPaused(true)}>{busy==="week-status"?"Oppdaterer …":"Sett uken på pause"}</button>}{currentWeek.can_resume&&<button type="button" className="primary" disabled={busy==="week-status"} onClick={()=>void setPaused(false)}>{busy==="week-status"?"Oppdaterer …":"Aktiver uken igjen"}</button>}</section>}
+
     {notice&&<p className="hellofresh-notice" role="status">{notice}</p>}
     {menu?.stale&&<p className="hellofresh-warning" role="status">{menu.warning}</p>}
-    {menuError&&<div className="hellofresh-error" role="alert"><span>{menuError}</span><button type="button" onClick={()=>void loadMenu()}>Prøv igjen</button></div>}
+    {menuError&&<div className="hellofresh-error" role="alert"><span>{menuError}</span><button type="button" onClick={()=>{if(accountEnabled)void loadWeeks();void loadMenu(activeWeek||undefined)}}>Prøv igjen</button></div>}
     {loading&&!menu&&<div className="loading-inline"><div className="spinner"/><p>Henter norsk HelloFresh-meny …</p></div>}
-    {menu&&<><div className="hellofresh-filter"><label htmlFor="hellofresh-query">Filtrer ukens retter<input id="hellofresh-query" type="search" maxLength={80} value={query} onChange={event=>setQuery(event.target.value)} placeholder="For eksempel kylling, vegetar eller rask"/></label><div><strong>{recipes.length}</strong><span>av {menu.recipes.length} retter</span></div></div>
-      <div className="hellofresh-grid">{recipes.map(recipe=><article className={recipe.sold_out?"hellofresh-card sold-out":"hellofresh-card"} key={recipe.id}><div className="hellofresh-image-wrap"><HelloFreshRecipeImage recipe={recipe}/>{Boolean(recipe.selected_quantity)&&<strong className="hellofresh-selected">Valgt × {recipe.selected_quantity}</strong>}</div><div className="hellofresh-copy"><div className="hellofresh-tags">{recipe.tags.map(tag=><span key={tag}>{tag}</span>)}{recipe.sold_out&&<span>Utsolgt</span>}</div><h2>{recipe.name}</h2><p>{recipe.headline}</p><dl><div><dt>Tid</dt><dd>{recipeDuration(recipe.prep_time)||"Ikke oppgitt"}</dd></div><div><dt>Nivå</dt><dd>{difficulty[recipe.difficulty||0]||"Ikke oppgitt"}</dd></div><div><dt>Energi</dt><dd>{recipe.calories?`${recipe.calories} kcal`:"Ikke oppgitt"}</dd></div></dl>{recipe.extra_charge_ore!==null&&recipe.extra_charge_ore!==undefined&&<small>Tillegg fra {(recipe.extra_charge_ore/100).toLocaleString("nb-NO",{style:"currency",currency:"NOK"})} per porsjon</small>}</div></article>)}</div>
-      {recipes.length===0&&<div className="hellofresh-empty"><span>🔎</span><h2>Ingen treff i denne ukemenyen</h2><p>Prøv et annet ord eller tøm filteret.</p></div>}
-      <footer className="hellofresh-source"><span>Kilde: {menu.account?"tilkoblet HelloFresh-konto":"offentlig norsk HelloFresh-meny"} · hentet {when(menu.fetched_at)}{menu.selected_count!==undefined?` · ${menu.selected_count} valgte retter`:""}</span><button type="button" disabled={loading} onClick={()=>void loadMenu()}>{loading?"Oppdaterer …":"Oppdater meny"}</button></footer></>}
+
+    {menu&&accountEnabled&&<>
+      <section className="hellofresh-selected-section"><header><div><p className="eyebrow">Deres matkasse</p><h2>{menu.selected_count||0} valgte retter</h2></div>{replacingCourse!==null&&<button type="button" onClick={()=>setReplacingCourse(null)}>Avbryt bytte</button>}</header>
+        {replacingCourse!==null&&<p className="hellofresh-replace-hint">Velg en ny rett nedenfor. Ingenting endres før du bekrefter byttet.</p>}
+        <div className="hellofresh-grid selected">{selectedRecipes.map(recipe=><HelloFreshRecipeCard key={`${recipe.id}-${recipe.course_index}`} recipe={recipe} actions={<><button type="button" className="primary" disabled={!menu.editable||Boolean(busy)} onClick={()=>setReplacingCourse(recipe.course_index)}>{replacingCourse===recipe.course_index?"Velg ny rett nedenfor":"Bytt denne"}</button>{canRemove&&<button type="button" className="secondary" disabled={Boolean(busy)} onClick={()=>void removeMeal(recipe)}>Fjern</button>}</>}/>)}</div>
+      </section>
+      <section className="hellofresh-options-section"><div className="hellofresh-filter"><label htmlFor="hellofresh-query">Finn en annen rett<input id="hellofresh-query" type="search" maxLength={80} value={query} onChange={event=>setQuery(event.target.value)} placeholder="For eksempel kylling, vegetar eller rask"/></label><div><strong>{optionRecipes.length}</strong><span>muligheter</span></div></div>
+        <div className="hellofresh-grid">{optionRecipes.map(recipe=><HelloFreshRecipeCard key={`${recipe.id}-${recipe.course_index}`} recipe={recipe} actions={menu.editable?<button type="button" className={replacingCourse!==null?"primary":"secondary"} disabled={recipe.sold_out||Boolean(busy)||(!canAdd&&replacingCourse===null)} onClick={()=>replacingCourse!==null?void replaceMeal(recipe):void addMeal(recipe)}>{replacingCourse!==null?"Bytt til denne":canAdd?"+ Legg til i matkassen":"Maks antall valgt"}</button>:undefined}/>)}</div>
+        {optionRecipes.length===0&&<div className="hellofresh-empty"><span>🔎</span><h2>Ingen treff i denne ukemenyen</h2><p>Prøv et annet ord eller tøm filteret.</p></div>}
+      </section>
+    </>}
+
+    {menu&&!accountEnabled&&<><div className="hellofresh-filter"><label htmlFor="hellofresh-query">Filtrer ukens retter<input id="hellofresh-query" type="search" maxLength={80} value={query} onChange={event=>setQuery(event.target.value)} placeholder="For eksempel kylling, vegetar eller rask"/></label><div><strong>{optionRecipes.length}</strong><span>av {menu.recipes.length} retter</span></div></div><div className="hellofresh-grid">{optionRecipes.map(recipe=><HelloFreshRecipeCard key={`${recipe.id}-${recipe.course_index}`} recipe={recipe}/>)}</div></>}
+
+    {menu&&<footer className="hellofresh-source"><span>Kilde: {menu.account?"tilkoblet HelloFresh-konto":"offentlig norsk HelloFresh-meny"} · hentet {when(menu.fetched_at)}{menu.selected_count!==undefined?` · ${menu.selected_count} valgte retter`:""}</span><button type="button" disabled={loading||Boolean(busy)} onClick={()=>{if(accountEnabled)void loadWeeks();void loadMenu(activeWeek||undefined)}}>{loading?"Oppdaterer …":"Oppdater meny"}</button></footer>}
   </section>;
 }
 

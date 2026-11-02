@@ -275,7 +275,7 @@ Evidence: adapter normalization, host rejection, secret-exclusion, stale-cache
 and route authorization unit tests; rendered UI assertions; live flag-off or
 flag-on acceptance probe.
 
-### AC-20 — Transient-login persistent HelloFresh account test
+### AC-20 — Guarded HelloFresh upcoming-box management
 
 - `portal.features.hellofresh_account` defaults to `false` and requires the
   parent `hellofresh` flag. When enabled, HelloFresh occupies Oda's former
@@ -307,9 +307,21 @@ flag-on acceptance probe.
 - The first-use screen states that the Portal runs over the trusted private LAN.
   Account login must not be enabled on public or untrusted networks without
   adding local TLS.
-- The connected test surface exposes only a curated Norwegian weekly menu and
-  selected quantities. It cannot select meals, skip or change deliveries,
-  modify subscriptions, addresses or payments, or place an order.
+- The connected surface opens the provider's next modifiable published week by
+  default and lets the household traverse later delivery weeks. Unpublished
+  weeks are visible but disabled. The selected dishes are shown first with
+  reviewed HelloFresh CDN images; all other dishes follow as options.
+- A valid dashboard session can replace one selected dish, add or remove a
+  dish within provider-supported box sizes, and pause or resume one exact week.
+  Every action requires explicit confirmation. Sold-out dishes, expired
+  cutoffs, blocked weeks and actions not allowed by the provider are rejected.
+- The browser supplies only week, requested course indexes and a state
+  snapshot. The server derives account/product identifiers from a fresh read,
+  preserves unrelated selected dishes and add-ons, serializes writes, rejects
+  stale views, and performs exact read-after-write verification before success.
+  A provider seamless downgrade is never silently accepted.
+- It cannot change the base subscription, servings, address or payment, and
+  cannot check out or place an order. No generic HelloFresh proxy exists.
 - Disconnecting explicitly removes the local credential. Provider or auth
   failures remain isolated from the family dashboard and show a reconnect or
   unavailable state.
@@ -317,10 +329,11 @@ flag-on acceptance probe.
 Evidence: transient-password exclusion from disk/responses, fixed provider URL,
 browser-TLS request metadata, provider challenge classification, refresh
 rejection, opaque-token acceptance, unsafe-token rejection, temporary-failure
-retention, restart/refresh persistence, file-mode and curated-menu unit tests;
-local-session API authorization and response
-secret exclusion; popup/email-flow exclusion and rendered touch UI assertions;
-live disconnected/connected probe.
+retention, restart/refresh persistence, file-mode, exact range-boundary,
+selected-first/image, add-on preservation, stale-state, product-size,
+replacement/add/remove and pause/read-after-write unit tests; local-session API
+authorization and response secret exclusion; popup/email-flow exclusion and
+rendered touch UI assertions; read-only live connected probe.
 
 ## Release measurement
 
@@ -331,7 +344,7 @@ with viewport screenshots and explicitly reported rather than silently assumed.
 
 These 20 criteria cover the currently deployed family dashboard, its Telegram
 child-chore add-on, week-plan detail view, Oda grocery tab and flagged
-read-only and account-backed HelloFresh experiments. A new
+public-read-only and bounded account-backed HelloFresh experiments. A new
 user-visible add-on such as Smart Home must
 add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be

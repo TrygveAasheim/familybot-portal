@@ -33,6 +33,7 @@ ISO_WEEK = re.compile(r"^\d{4}-W(?:0[1-9]|[1-4]\d|5[0-3])$")
 ALLOWED_IMAGE_HOSTS = {
     "d3hvwccx09j84u.cloudfront.net",
     "cdn.hellofresh.com",
+    "img.hellofresh.com",
     "media.hellofresh.com",
 }
 
@@ -191,6 +192,7 @@ class HelloFreshNorwayClient:
         extra_charge = course.get("chargeSetting", {}).get("amount") if isinstance(course.get("chargeSetting"), dict) else None
         return {
             "id": recipe_id,
+            "course_index": int(course.get("index")) if isinstance(course.get("index"), int) else 999,
             "position": int(course.get("index")) if isinstance(course.get("index"), int) else 999,
             "name": name,
             "headline": _bounded_text(recipe.get("headline"), 180),

@@ -2,97 +2,89 @@
 
 ## Change record
 
-- Change type: feature increment and login resilience fix behind a feature flag.
-- Problem or intent: replace Oda in the physical iPad test with the household's
-  HelloFresh weekly menu, without popup-dependent login, password-creation
-  emails or repeated reauthentication.
-- Evidence: the current HelloFresh Norway web client submits email/password to
-  `/gw/login` with country `NO` and locale `nb-NO`, then uses renewable account
-  tokens. The direct cross-site Portal request was blocked by Cloudflare before
-  credentials were checked, while first-party phone login worked. The attempted
-  provider passwordless flow then sent a password-reset email rather than a
-  login link, so that fallback was removed. A maintained third-party HelloFresh
-  integration documents the same TLS/HTTP2 fingerprinting boundary and uses
-  `curl_cffi` Chrome impersonation plus same-origin browser headers. The Portal
-  now applies that bounded pattern only to the fixed provider login endpoint.
-  The first successful physical login then exposed a second contract bug:
-  HelloFresh returned HTTP success, but the Portal rejected its opaque refresh
-  token as though every OAuth token had to be JWT/base64url-shaped. Token
-  validation now accepts bounded printable OAuth values while still rejecting
-  every whitespace and control character.
-  The existing public Norwegian menu remains a safe disconnected fallback; the
-  reviewed community MCP is not used.
+- Change type: guarded feature increment behind existing disabled-by-default
+  feature flags.
+- Problem or intent: model the household's real weekly journey: open the next
+  editable box, see the selected meals first with images, inspect later weeks,
+  replace or add/remove dishes, and pause or resume a week without leaving the
+  kiosk browser.
+- Evidence: read-only live probes on 2026-11-02 found provider delivery weeks
+  W46–W01, published menus through W49, 70 dishes with 70 reviewed CDN images
+  in W46, three selected dishes identified by provider course indexes, and
+  valid two-to-five-meal product options for four people. The deliveries API
+  treats `rangeStart` as an exclusive boundary, so reads bracket the requested
+  week and regression tests preserve that behavior. No provider mutation was
+  made while discovering or verifying the contract.
 - Scope and owner: Portal-only adapters in `local_api/hellofresh_norway.py` and
-  `local_api/hellofresh_account.py`, curated API routes and flagged UI. Core
-  ingestion, SQLite, scheduled jobs and the retained Oda implementation are
-  unchanged.
+  `local_api/hellofresh_account.py`, named routes in
+  `local_api/familybot_api.py`, and the flagged HelloFresh page. Core ingestion,
+  SQLite, scheduled jobs and the retained Oda implementation are unchanged.
 - Acceptance criteria: AC-19 and AC-20 in
   `ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md`.
-- Tests: transient password exclusion from disk and responses, fixed provider
-  URL, Chrome TLS request metadata, Cloudflare challenge classification,
-  invalid-credential classification, opaque refresh-token acceptance,
-  whitespace/control-character token rejection, restart/refresh persistence,
-  explicit auth-rejection cleanup, temporary-failure retention, owner-only
-  file mode, curated menu/selection normalization, local-session authorization,
-  response secret exclusion, rendered popup exclusion, full Portal suite and
-  live disconnected or connected acceptance probe.
-- Security/privacy: the password crosses the trusted-LAN HTTP hop to the local
-  API once and is forwarded only to the fixed HelloFresh HTTPS endpoint using a
-  pinned Chrome-fingerprinted transport with certificate verification. It is
-  never stored, logged, returned or placed in model context. Provider tokens
-  exist briefly in response memory, are allowlisted and then stay in
-  `$HOME/.openclaw/credentials/hellofresh-no.json` with mode `0600`.
-  Credentials do not enter later browser responses, logs, Git or model context.
-  Raw provider account payloads and identifiers are discarded. Because the
-  Portal uses HTTP on the trusted LAN, first use must not run on an untrusted
-  network without local TLS.
-- State and deployment: both flags default off. The physical test sets
-  `portal.features.hellofresh` and `portal.features.hellofresh_account` to
-  `true`, then performs first-use login from the HelloFresh tab.
-- Rollback: set `hellofresh_account` to `false` for the public menu, or set
-  `hellofresh` to `false` to restore Oda in visible navigation. Removing the
-  local credential disconnects the account; no SQLite restore is needed.
-- Documentation: README, development guide, feature map, data boundary,
-  acceptance contract and canonical Core configuration are updated together.
+- Tests: transient-password and credential safety; exact week bracketing;
+  selected-first normalization and image allowlisting; product-size mapping;
+  replacement preserving unrelated meals and add-ons; add/remove; stale-view
+  rejection before provider access; exact-week pause; read-after-write
+  verification; route authorization and error mapping; rendered touch UI; full
+  Portal preflight; and read-only live connected probes.
+- Security/privacy: the one-time password and renewable token boundary is
+  unchanged. The only account writes are selected meal composition and one
+  week's running/paused state. Server code derives subscription, customer,
+  product and week identifiers; the browser cannot supply them. Address,
+  payment, subscription-plan, servings, checkout and order placement are not
+  exposed.
+- State and deployment: `portal.features.hellofresh` and
+  `portal.features.hellofresh_account` both default off. The household test
+  enables both on `dev`. There is no Portal database migration.
+- Rollback: set `hellofresh_account` to `false` to retain only the public menu,
+  or set `hellofresh` to `false` to restore Oda in visible navigation. Removing
+  the owner-only local credential disconnects the account.
+- Documentation: README, development guide, feature map, configuration, data
+  boundary and acceptance contract are updated together.
 
-## Current test surface
-
-The public flag exposes a curated Norwegian weekly menu. The account flag places
-`HelloFresh` in Oda's former navigation position and enables transient
-email/password first use. Oda remains in
-the code for rollback, but both grocery tabs are not shown at the same time.
+## Login and credential lifecycle
 
 First use posts the account email and password once to the origin/session
-protected, rate-limited local login route. The API uses `curl_cffi==0.16.3` in
-an isolated Python 3.12 runtime, matching its Chrome version in the TLS/HTTP2
-fingerprint and request headers. It primes the provider auth session and sends
-credentials to `https://www.hellofresh.no/gw/login` with country `NO` and locale
-`nb-NO`. No popup or email is opened. The password field is cleared after the
-request, and only validated access, refresh and expiry fields are persisted.
-HTML security challenges and other non-JSON provider blocks remain unavailable
-states rather than being labelled invalid credentials.
+protected, rate-limited local login route. The API uses a pinned `curl_cffi`
+runtime to prime provider auth and sends credentials only to
+`https://www.hellofresh.no/gw/login` with country `NO`, locale `nb-NO`, browser
+metadata and certificate verification. No popup or email is opened. The form
+clears the password and only allowlisted access, refresh and expiry fields are
+persisted in `$HOME/.openclaw/credentials/hellofresh-no.json` with mode `0600`.
 
-OAuth tokens are opaque provider values, not assumed JWTs. The persisted
-allowlist accepts only non-empty, length-bounded printable ASCII token values;
-spaces, line breaks and other control characters are rejected before any
-credential file is written. This preserves injection resistance without
-rejecting valid refresh-token punctuation such as `+`, `/` or `=`.
+OAuth token values are treated as opaque, length-bounded printable values;
+whitespace and control characters are rejected. Temporary provider failures
+retain the credential for retry. An explicit authentication rejection clears
+it and returns the first-use form. The password, email, tokens and raw account
+payloads never enter browser responses, logs, Git or model context. Because the
+Portal is plain HTTP on a trusted LAN, first use must not run over an untrusted
+network without adding local TLS.
 
-There is deliberately no passwordless fallback. Provider behavior observed in
-the physical test sent a password-reset email, so retaining that button would
-misrepresent a recovery flow as authentication.
+## Customer journey
 
-After login the browser receives only the week, country/locale, curated recipe
-details and selected quantities. Refresh credentials are renewed server-side
-and survive service or machine restarts. Temporary provider failures retain the
-credential for retry; an explicit refresh-token rejection clears it and returns
-the first-use form. Status returns only `connected`,
-`credentials_local` and `read_only` booleans.
+After login the Portal asks the provider for `nextModifiableDeliveryWeek` and
+shows that published week first, followed by later delivery weeks. Unpublished
+weeks remain visible as "Meny kommer" but cannot be opened. A selected box shows:
 
-## Deliberately postponed
+- delivery date, cutoff, paused/running state, servings and meal count;
+- selected dishes first, including images and selected quantities;
+- all remaining dishes as replace/add options, with sold-out options disabled;
+- explicit confirmation before replace, add, remove, pause or resume.
 
-There are no routes for selecting or removing meals, skipping or changing a
-delivery, modifying a subscription, address or payment, ordering, or checkout.
-Those consequential provider writes require a separate review with explicit
-confirmation, strict identifiers, idempotency where supported, read-after-write
-verification and rollback guidance.
+Meal writes use the provider's full-cart contract, so the adapter re-reads the
+week immediately before each action. It derives the exact course indexes,
+preserves every unrelated selected meal and currently selected/preselected
+add-on, selects a reviewed product option for the resulting meal count, and
+writes only the requested week. A SHA-256 state snapshot rejects a stale browser
+view before provider access. A process lock serializes writes, and the adapter
+reads the provider again afterward; success is returned only when the selected
+courses or paused state match exactly. Seamless provider downgrade is rejected
+as an error rather than silently accepted.
+
+## Deliberately excluded
+
+The account adapter has no route for changing the base subscription, delivery
+address, payment method, household identity, number of servings, checkout or
+order placement. It is not a generic HelloFresh proxy. The public-menu adapter
+remains a disconnected read-only fallback, and the reviewed community MCP is
+not used.

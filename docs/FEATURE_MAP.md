@@ -16,8 +16,8 @@
 - optional HelloFresh Norway experiment behind disabled-by-default public and
   account feature flags. It supports transient email/password first use through
   a browser-fingerprinted provider transport, persistent token-only local
-  renewal, the household's suggested weekly menu and selected quantities, with
-  provider writes disabled; see
+  renewal, upcoming-week navigation, images, selected-first menus, guarded meal
+  replacement/add/remove and per-week pause/resume; see
   [the experiment contract](HELLOFRESH_NORWAY.md);
 - Telegram/OpenClaw child-chore interview bridge with preview, explicit confirmation and idempotent creation;
 - child-specific week-plan detail view with structured full plan text, optional validated day/category interpretation, preserved line breaks and bullets, structured days and return navigation;
@@ -39,7 +39,8 @@
 - Smart Home device control. Home Assistant, Xiaomi-first rollout, Nest and
   climate/appliance research are documented in the sibling core repository's
   `specs/SMART_HOME.md`, but are not deployed;
-- HelloFresh meal selection, delivery changes and subscription management;
+- HelloFresh subscription-plan, servings, address, payment, checkout and order
+  management beyond the bounded meal and weekly pause controls;
 - automatic chore generation from school homework;
 - a clean-room core database installer and complete LaunchAgent installer.
 

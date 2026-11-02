@@ -31,5 +31,7 @@ stored, logged, returned or placed in model context. There is no email-link
 fallback: HelloFresh maps that flow to password reset for this market/account.
 Only refresh credentials are written to
 `$HOME/.openclaw/credentials/hellofresh-no.json` with mode `0600`. Account
-access is read-only: meal selection, ordering, delivery and subscription writes
-remain disabled.
+access is limited to viewing future boxes, replacing/adding/removing selected
+meals and pausing or resuming one identified week after explicit confirmation.
+Subscription-plan, servings, address, payment, checkout and ordering controls
+remain unavailable. Both flags default to `false`.

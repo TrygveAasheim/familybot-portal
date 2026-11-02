@@ -136,11 +136,26 @@ one-time password request must not run over guest, public or otherwise
 untrusted networks; deployments requiring an untrusted network need local TLS
 before enabling account login.
 
-Authenticated reads expose the same curated recipe contract plus selected
-quantity and total selected count. No email, meal selection, delivery,
-subscription, address, payment or checkout write route exists. Provider/auth
-failure returns an isolated unavailable or reconnect state and cannot break the
-family dashboard; public cache fallback remains explicitly marked stale.
+Authenticated reads expose upcoming delivery weeks plus the same curated recipe
+contract, selected quantities and total selected count. The provider's next
+modifiable delivery week is the default. Recipe images are returned only from
+reviewed HTTPS HelloFresh CDN hosts; no raw account identifiers are exposed.
+
+The bounded write allowlist contains only meal replacement/add/remove and
+pause/resume for one exact ISO week. The server derives customer, subscription,
+product and provider course identifiers from a fresh provider read. It validates
+the provider cutoff, blocked state and `allowedActions`, rejects sold-out dishes,
+preserves unrelated selected dishes and selected/preselected add-ons, and uses a
+reviewed product option for the resulting meal count. A state snapshot rejects
+stale browser actions before provider access, a process lock serializes writes,
+and an exact read-after-write check is required before success is returned.
+The UI also asks for explicit confirmation for every provider mutation.
+
+No route changes the base subscription plan, servings, address, payment,
+household identity, checkout or order placement. No generic provider proxy is
+exposed. Provider/auth failure returns an isolated unavailable or reconnect
+state and cannot break the family dashboard; the public menu fallback remains
+read-only and explicitly marked stale.
 
 ## Write allowlist
 
@@ -163,8 +178,11 @@ The separate Oda allowlist permits household cart changes and local OAuth
 connect/disconnect for every valid LAN dashboard session. These operations
 change only the Oda account; they never write FamilyBot SQLite.
 
-HelloFresh is not part of the write allowlist. Its experimental route is
-read-only even for parent sessions.
+The separate HelloFresh allowlist permits selected-meal composition and one
+week's paused/running state for every valid LAN dashboard session. These actions
+change only the connected HelloFresh account and never write FamilyBot SQLite.
+Provider subscription-plan, servings, address, payment, checkout and order
+operations remain outside the allowlist.
 
 The bridge creates a consistent SQLite backup before the first mutation in each
 session and appends a local audit record. Resetting a child archives/hides active

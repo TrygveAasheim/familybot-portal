@@ -2,9 +2,10 @@
 
 Familieportalen is an AI-driven, iPad-first family planner built for Norwegian
 households. It brings school plans, activities, chores, rewards, weather,
-public transport and grocery planning into one shared dashboard on the home
-network. AI helps interpret incoming `ukeplan` documents and supports dinner
-planning, while the household remains in control of approvals and purchases.
+public transport, **Oda grocery planning** and optional **HelloFresh weekly-box
+management** into one shared dashboard on the home network. AI helps interpret
+incoming `ukeplan` documents and supports dinner planning, while the household
+remains in control of approvals and purchases.
 
 The planner connects the services Norwegian families already use:
 

@@ -43,9 +43,9 @@ launchctl bootout "gui/$UID_VALUE/ai.familybot.portal-images" 2>/dev/null || tru
 rm -f "$TARGET/local_api/familybot_chat.py"
 rsync -a --delete dist/standalone/ "$TARGET/dist/standalone/"
 rsync -a node_modules/react node_modules/react-dom node_modules/scheduler "$TARGET/dist/standalone/node_modules/"
-rsync -a local_api/familybot_api.py local_api/hellofresh_account.py local_api/hellofresh_images.py local_api/hellofresh_norway.py local_api/oda_mcp.py local_api/oda_dinner.py local_api/dashboard_migration.py local_api/family_config.py "$TARGET/local_api/"
+rsync -a local_api/familybot_api.py local_api/hellofresh_account.py local_api/hellofresh_account_contract.py local_api/hellofresh_account_mutations.py local_api/hellofresh_account_recipe.py local_api/hellofresh_account_transport.py local_api/hellofresh_images.py local_api/hellofresh_norway.py local_api/oda_mcp.py local_api/oda_dinner.py local_api/dashboard_migration.py local_api/family_config.py "$TARGET/local_api/"
 rsync -a local_service/run_service.py "$TARGET/local_service/"
-rsync -a scripts/child_chore.py scripts/prefetch_hellofresh_images.py "$TARGET/scripts/"
+rsync -a scripts/check_hellofresh_contract.py scripts/child_chore.py scripts/prefetch_hellofresh_images.py "$TARGET/scripts/"
 rsync -a requirements.txt "$TARGET/"
 if [[ -f "$ROOT/runtime/parent-pin.txt" ]]; then
   rsync -a "$ROOT/runtime/parent-pin.txt" "$TARGET/runtime/"

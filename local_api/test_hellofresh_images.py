@@ -12,7 +12,6 @@ from hellofresh_images import (
     prefetch_upcoming_images,
 )
 
-
 JPEG = b"\xff\xd8\xff\xe0" + b"familybot-image" * 10
 
 

@@ -306,6 +306,12 @@ flag-on acceptance probe.
 - The login form remains hidden while a renewable credential exists. Temporary
   provider or network failures keep that credential for retry; only an explicit
   authentication rejection clears it and asks for email/password again.
+- Status exposes only the non-sensitive provider contract version in addition
+  to the existing connection/write-capability fields. Every account request is
+  constrained to the fixed HelloFresh Norway origin and reviewed path shapes;
+  an unknown path or path-supplied query is rejected before network I/O. The
+  on-demand contract probe performs reads only and reports counts, never week
+  IDs, recipe names, account identifiers or credentials.
 - The first-use screen states that the Portal runs over the trusted private LAN.
   Account login must not be enabled on public or untrusted networks without
   adding local TLS.
@@ -347,6 +353,7 @@ flag-on acceptance probe.
   unavailable state.
 
 Evidence: transient-password exclusion from disk/responses, fixed provider URL,
+negative provider-path tests, contract-version status and count-only live probe,
 browser-TLS request metadata, provider challenge classification, refresh
 rejection, opaque-token acceptance, unsafe-token rejection, temporary-failure
 retention, restart/refresh persistence, file-mode, exact range-boundary,

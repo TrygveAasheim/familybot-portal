@@ -21,13 +21,13 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-
 MCP_URL = "https://oda.com/mcp"
 REGISTRATION_URL = "https://oda.com/o/register/"
 AUTHORIZATION_URL = "https://oda.com/o/authorize/"
 TOKEN_URL = "https://oda.com/o/token/"
 REVOCATION_URL = "https://oda.com/o/revoke_token/"
 MCP_PROTOCOL_VERSION = "2025-06-18"
+_REQUEST_URLS = frozenset({MCP_URL, REGISTRATION_URL, TOKEN_URL, REVOCATION_URL})
 
 
 class OdaValidationError(ValueError):
@@ -121,6 +121,8 @@ class OdaMcpClient:
         form: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
     ) -> tuple[dict[str, str], bytes]:
+        if url not in _REQUEST_URLS:
+            raise OdaUnavailable("Oda-integrasjonen forsøkte et kall utenfor den godkjente kontrakten.")
         request_headers = {"User-Agent": "FamilyBot-Portal/1.0"}
         request_headers.update(headers or {})
         body = None
@@ -132,7 +134,8 @@ class OdaMcpClient:
             request_headers["Content-Type"] = "application/x-www-form-urlencoded"
         request = urllib.request.Request(url, data=body, headers=request_headers, method=method)
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            # _REQUEST_URLS is an exact compile-time HTTPS endpoint allowlist.
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:  # nosec B310
                 return {key.lower(): value for key, value in response.headers.items()}, response.read()
         except urllib.error.HTTPError as exc:
             # Provider bodies can contain account or protocol details. Never put

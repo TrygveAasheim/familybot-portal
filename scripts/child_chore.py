@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "local_api"))
 
-from familybot_api import FamilyRepository, ValidationError, WEEKDAY_NAMES  # noqa: E402
+from familybot_api import WEEKDAY_NAMES, FamilyRepository, ValidationError  # noqa: E402
 
 
 def repository() -> FamilyRepository:

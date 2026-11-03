@@ -6,13 +6,11 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import os
-import shutil
 import sqlite3
 import tempfile
 from pathlib import Path
 
 from family_config import child_profiles
-
 
 DEFAULT_WORKSPACE = Path(
     os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))

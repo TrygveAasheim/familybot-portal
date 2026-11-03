@@ -10,10 +10,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 from dashboard_migration import clear_active_setup, ensure_default_rewards, migrate
-from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, health_summary, transport_summary, trusted_portal_origin, weather_summary
+from familybot_api import (
+    FamilyApiServer,
+    FamilyRepository,
+    ValidationError,
+    health_summary,
+    transport_summary,
+    trusted_portal_origin,
+    weather_summary,
+)
 from hellofresh_account import HelloFreshAccountConflict, HelloFreshAccountValidation
 from hellofresh_images import HelloFreshImageCache
-
 
 SCHEMA = """
 CREATE TABLE family_members(id INTEGER PRIMARY KEY,name TEXT,role TEXT,grade INTEGER,school TEXT,teacher TEXT,telegram_id TEXT,notes TEXT,created_at TEXT);

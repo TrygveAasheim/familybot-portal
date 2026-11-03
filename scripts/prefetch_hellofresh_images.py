@@ -7,7 +7,6 @@ import json
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "local_api"))
 
@@ -22,7 +21,7 @@ def main() -> int:
         return 0
     try:
         result = prefetch_upcoming_images(account, HelloFreshImageCache())
-    except Exception as exc:  # Provider details and credentials must never enter this log.
+    except Exception as exc:  # noqa: BLE001 - logs only the type, never provider details or credentials.
         print(f"[hellofresh-images] failed: {type(exc).__name__}", file=sys.stderr)
         return 1
     print(f"[hellofresh-images] {json.dumps(result, sort_keys=True)}")

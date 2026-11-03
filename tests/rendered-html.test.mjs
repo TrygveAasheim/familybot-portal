@@ -32,7 +32,15 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
     readFile(new URL("../local_api/oda_mcp.py", import.meta.url), "utf8"),
     readFile(new URL("../local_api/oda_dinner.py", import.meta.url), "utf8"),
     readFile(new URL("../local_api/hellofresh_norway.py", import.meta.url), "utf8"),
-    readFile(new URL("../local_api/hellofresh_account.py", import.meta.url), "utf8"),
+    Promise.all(
+      [
+        "hellofresh_account.py",
+        "hellofresh_account_contract.py",
+        "hellofresh_account_mutations.py",
+        "hellofresh_account_recipe.py",
+        "hellofresh_account_transport.py",
+      ].map((name) => readFile(new URL(`../local_api/${name}`, import.meta.url), "utf8")),
+    ).then((parts) => parts.join("\n")),
     readFile(new URL("../local_api/hellofresh_images.py", import.meta.url), "utf8"),
     readFile(new URL("../scripts/deploy-local.sh", import.meta.url), "utf8"),
     readFile(new URL("../launchd/ai.familybot.portal-images.plist", import.meta.url), "utf8"),
@@ -138,6 +146,7 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /features\["hellofresh"\]/);
   assert.match(apiSource, /account\/recipes\/\(\[0-9a-f\]\{24\}\)/);
   assert.match(deploySource, /local_api\/hellofresh_account\.py/);
+  assert.match(deploySource, /local_api\/hellofresh_account_transport\.py/);
   assert.match(deploySource, /local_api\/hellofresh_images\.py/);
   assert.match(deploySource, /local_api\/hellofresh_norway\.py/);
   assert.match(deploySource, /prefetch_hellofresh_images\.py/);
@@ -169,6 +178,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(helloFreshAccountSource, /_menu_snapshot/);
   assert.match(helloFreshAccountSource, /hasSeamlessDowngraded/);
   assert.match(helloFreshAccountSource, /_mutation_lock/);
+  assert.match(helloFreshAccountSource, /PROVIDER_CONTRACT_VERSION = 1/);
+  assert.match(helloFreshAccountSource, /validate_provider_path/);
   assert.doesNotMatch(helloFreshAccountSource, /passwordless|MAGIC_LINK/);
   assert.doesNotMatch(helloFreshAccountSource, /HELLOFRESH_PASSWORD|playwright|selenium/i);
   assert.match(helloFreshImageSource, /ALLOWED_CONTENT_TYPES/);

@@ -85,6 +85,13 @@ state and must not affect `/api/dashboard`, chores, Ukeplan or Kanban.
 
 ## HelloFresh experiment boundary
 
+The account status adds only the integer `provider_contract_version`; it is a
+local adapter schema marker and contains no account or provider identity. The
+transport accepts only the reviewed fixed HelloFresh Norway origin and an
+explicit allowlist of path shapes. Query strings cannot be supplied as paths,
+and subscription, week and recipe identifiers remain validated/escaped path
+segments derived by the server.
+
 `portal.features.hellofresh` defaults to `false`. The local session response
 exposes only that boolean so the browser can hide the tab and route when the
 experiment is disabled. The API also enforces the flag; a manually entered URL

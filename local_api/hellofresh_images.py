@@ -26,7 +26,6 @@ from typing import Any, Callable, NamedTuple
 
 from hellofresh_norway import _safe_image_url
 
-
 IMAGE_ROUTE_PREFIX = "/api/hellofresh/images/"
 IMAGE_KEY = re.compile(r"^[0-9a-f]{64}$")
 MAX_IMAGE_BYTES = 6_000_000
@@ -302,7 +301,7 @@ class HelloFreshImageCache:
                 try:
                     future.result()
                     available += 1
-                except Exception:
+                except Exception:  # noqa: BLE001 - each provider/cache failure is counted per image.
                     failed += 1
         return {"requested": len(registered), "available": available, "failed": failed}
 
@@ -355,7 +354,7 @@ def prefetch_upcoming_images(account: Any, cache: HelloFreshImageCache) -> dict[
     for week in published:
         try:
             menu = account.menu(week)
-        except Exception:  # Provider errors are summarized without payloads or credentials.
+        except Exception:  # noqa: BLE001 - provider errors are summarized without sensitive payloads.
             menu_failures += 1
             continue
         recipes = menu.get("recipes") if isinstance(menu, dict) else None

@@ -51,7 +51,7 @@ the web service. The API and database remain on the Mac mini.
 | Global layout and responsive design | `app/globals.css` | Verify portrait, landscape, 200% zoom and no hover dependency |
 | Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist, including parent-gated Kanban mutations |
 | Oda groceries | `local_api/oda_mcp.py`, `local_api/oda_dinner.py`, Oda routes in `local_api/familybot_api.py` | OAuth secrecy, bounded model context, strict public recipe host/schema validation, kiosk return navigation, account-data exposure, explicit cart-mutation and provider-failure boundary |
-| HelloFresh experiment | `local_api/hellofresh_norway.py`, `local_api/hellofresh_account.py`, `local_api/hellofresh_images.py`, HelloFresh routes in `local_api/familybot_api.py` | Separate disabled-by-default flags; one trusted-LAN password request, pinned browser-TLS transport, token-only persistence, selected-first account reads, exact-week meal/pause writes, stale-view guards, read-after-write verification and a host/type/size-bounded local public-image cache |
+| HelloFresh experiment | `local_api/hellofresh_norway.py`, the `local_api/hellofresh_account*.py` facade/contract/transport/recipe/mutation modules, `local_api/hellofresh_images.py`, HelloFresh routes in `local_api/familybot_api.py` | Separate disabled-by-default flags; one trusted-LAN password request, fixed-origin and path-allowlisted browser-TLS transport, token-only persistence, selected-first account reads, exact-week meal/pause writes, stale-view guards, read-after-write verification and a host/type/size-bounded local public-image cache |
 | Dashboard schema and backup | `local_api/dashboard_migration.py` | Data-critical; idempotent migration and pre-migration backup required, including weekly achievement history |
 | Config reader | `local_api/family_config.py` | Must match the one core-owned configuration contract |
 | Process supervision | `local_service/run_service.py` | Operational; both processes fail/restart as a group |
@@ -59,6 +59,7 @@ the web service. The API and database remain on the Mac mini.
 | HelloFresh image warm-up | `scripts/prefetch_hellofresh_images.py`, `launchd/ai.familybot.portal-images.plist` | Portal-owned 04:45 job; public images only, bounded disk use, cached stale fallback, count-only logs |
 | API tests | `local_api/test_familybot_api.py` | Authorization, response minimization and state transitions |
 | Release acceptance | `tests/acceptance.py`, `tests/rendered-html.test.mjs` | Current release gate |
+| Static quality and dependency security | `pyproject.toml`, `requirements-dev.txt`, `scripts/python-quality.sh`, `package.json` | Oxlint with React/hooks/a11y rules, Ruff, medium-severity Bandit with narrow inline justifications, npm audit and pip-audit are fail-closed CI/release gates |
 
 `worker/index.ts` and `examples/d1/` are framework/scaffold surfaces, not the
 LAN production data path. Do not move family state into a cloud worker or D1

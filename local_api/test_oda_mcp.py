@@ -84,6 +84,12 @@ class OdaMcpClientTests(unittest.TestCase):
         with self.assertRaises(oda_mcp.OdaValidationError):
             self.client.change_product(-1, 1)
 
+    def test_transport_rejects_urls_outside_exact_oda_contract(self):
+        with patch("urllib.request.urlopen") as request:
+            with self.assertRaisesRegex(oda_mcp.OdaUnavailable, "kontrakten"):
+                self.client._request("https://oda.com/unreviewed")
+            request.assert_not_called()
+
     def test_recipe_operations_use_explicit_tools_and_bounded_portions(self):
         with patch.object(self.client, "call_tool", return_value={"recipes": []}) as tool:
             self.client.search_recipes("rask middag", size=6)

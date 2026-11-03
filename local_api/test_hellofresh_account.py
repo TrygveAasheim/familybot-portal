@@ -1,5 +1,5 @@
-import json
 import io
+import json
 import stat
 import tempfile
 import time
@@ -17,7 +17,6 @@ from hellofresh_account import (
     HelloFreshAccountValidation,
     _HttpError,
 )
-
 
 ACCESS = "aaaaaaaa.bbbbbbbb.cccccccc"
 REFRESH = "dddddddd.eeeeeeee.ffffffff"
@@ -137,10 +136,10 @@ class HelloFreshAccountTests(unittest.TestCase):
             {"access_token": ACCESS, "refresh_token": REFRESH, "expires_in": 900}
         )
         self.assertTrue(status["connected"])
+        self.assertEqual(status["provider_contract_version"], 1)
         self.assertEqual(stat.S_IMODE(self.credentials.stat().st_mode), 0o600)
         saved = json.loads(self.credentials.read_text(encoding="utf-8"))
         self.assertEqual(saved["refresh_token"], REFRESH)
-        serialized = json.dumps(saved)
         self.assertEqual(set(saved), {"access_token", "refresh_token", "expires_at"})
         restarted = HelloFreshAccountClient(self.credentials)
         self.assertTrue(restarted.status()["connected"])
@@ -295,6 +294,18 @@ class HelloFreshAccountTests(unittest.TestCase):
         self.assertEqual(caught.exception.status, 403)
         self.assertTrue(caught.exception.challenge)
         self.assertIsNone(caught.exception.code)
+
+    def test_transport_rejects_paths_outside_fixed_provider_contract(self):
+        for path in (
+            "https://example.com/gw/refresh",
+            "/gw/api/customers/me/payment",
+            "/gw/api/customers/me/subscriptions?expanded=true",
+            "/gw/api/subscriptions/../payment/product_options",
+        ):
+            with self.subTest(path=path), patch("urllib.request.urlopen") as request:
+                with self.assertRaisesRegex(HelloFreshAccountUnavailable, "kontrakten"):
+                    self.client._request_json(path)
+                request.assert_not_called()
 
     def test_refresh_replaces_tokens_in_owner_only_file(self):
         self.client._save({"refresh_token": REFRESH, "expires_at": time.time() - 1})

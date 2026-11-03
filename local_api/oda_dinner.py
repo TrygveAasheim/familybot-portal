@@ -26,7 +26,6 @@ from typing import Any, Callable
 
 from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable
 
-
 OPENCLAW = os.environ.get("FAMILYBOT_OPENCLAW", "/opt/homebrew/bin/openclaw")
 MODEL = os.environ.get("FAMILYBOT_ODA_DINNER_MODEL", "openai/gpt-5.6-sol")
 THINKING = os.environ.get("FAMILYBOT_ODA_DINNER_THINKING", "low")

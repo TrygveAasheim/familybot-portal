@@ -10,9 +10,9 @@ import sys
 import time
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent
 PYTHON = sys.executable
+LAN_HOST = "0.0.0.0"  # nosec B104
 children: list[subprocess.Popen[bytes]] = []
 stopping = False
 
@@ -46,10 +46,10 @@ def main() -> None:
     environment = os.environ.copy()
     environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
     environment["NODE_ENV"] = "production"
-    environment["HOST"] = "0.0.0.0"
+    environment["HOST"] = LAN_HOST
     environment["PORT"] = "3000"
     start([
-        PYTHON, str(ROOT / "local_api/familybot_api.py"), "--host", "0.0.0.0", "--lan",
+        PYTHON, str(ROOT / "local_api/familybot_api.py"), "--host", LAN_HOST, "--lan",
         "--parent-pin-file", str(ROOT / "runtime/parent-pin.txt"),
     ], environment)
     start(["/opt/homebrew/bin/node", str(ROOT / "dist/standalone/server.js")], environment)

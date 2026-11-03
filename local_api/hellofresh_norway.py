@@ -21,7 +21,6 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urlparse
 
-
 BASE_URL = "https://www.hellofresh.no"
 MENU_URL = f"{BASE_URL}/menus"
 MAX_HTML_BYTES = 8_000_000
@@ -178,7 +177,8 @@ class HelloFreshNorwayClient:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            # The HTTPS HelloFresh host is checked before the request and after redirects.
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:  # nosec B310
                 final = urlparse(response.geturl())
                 if final.scheme != "https" or final.hostname not in {"hellofresh.no", "www.hellofresh.no"}:
                     raise HelloFreshUnavailable("HelloFresh sendte forespørselen til et ukjent domene.")

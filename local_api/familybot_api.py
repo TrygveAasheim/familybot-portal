@@ -19,8 +19,8 @@ import re
 import secrets
 import sqlite3
 import subprocess
-import threading
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -40,9 +40,9 @@ from hellofresh_account import (
 )
 from hellofresh_images import HelloFreshImageCache, HelloFreshImageUnavailable
 from hellofresh_norway import HelloFreshNorwayClient, HelloFreshUnavailable
-from oda_dinner import DinnerValidationError, recommend as recommend_dinner
+from oda_dinner import DinnerValidationError
+from oda_dinner import recommend as recommend_dinner
 from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable, OdaValidationError
-
 
 DEFAULT_WORKSPACE = Path(
     os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
@@ -60,7 +60,18 @@ WEEKDAY_NAMES = {
     6: "lørdag",
     7: "søndag",
 }
-CHORE_COLUMNS = "id,title,description,assigned_to,lane,priority,due_date,created_at,updated_at,archived_at"
+CHORE_SELECT_BY_ID = (
+    "SELECT id,title,description,assigned_to,lane,priority,due_date,created_at,updated_at,archived_at "
+    "FROM kanban_cards WHERE id=?"
+)
+CHORE_UPDATE_BY_FIELD = {
+    "title": "UPDATE kanban_cards SET title=?,updated_at=datetime('now') WHERE id=? AND archived_at IS NULL",
+    "description": "UPDATE kanban_cards SET description=?,updated_at=datetime('now') WHERE id=? AND archived_at IS NULL",
+    "assigned_to": "UPDATE kanban_cards SET assigned_to=?,updated_at=datetime('now') WHERE id=? AND archived_at IS NULL",
+    "lane": "UPDATE kanban_cards SET lane=?,updated_at=datetime('now') WHERE id=? AND archived_at IS NULL",
+    "priority": "UPDATE kanban_cards SET priority=?,updated_at=datetime('now') WHERE id=? AND archived_at IS NULL",
+    "due_date": "UPDATE kanban_cards SET due_date=?,updated_at=datetime('now') WHERE id=? AND archived_at IS NULL",
+}
 PORTAL_PORT = 3000
 
 
@@ -243,6 +254,7 @@ WEATHER_CACHE_TTL = dt.timedelta(minutes=10)
 WEATHER_TZ = ZoneInfo("Europe/Oslo")
 
 ENTUR_ENDPOINT = "https://api.entur.io/journey-planner/v3/graphql"
+LAN_HOST = "0.0.0.0"  # nosec B104
 
 
 def weather_summary(workspace: Path) -> dict[str, Any]:
@@ -269,7 +281,8 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
             f"?lat={latitude:.5f}&lon={longitude:.5f}"
         )
         request = urllib.request.Request(endpoint, headers={"User-Agent": user_agent})
-        with urllib.request.urlopen(request, timeout=4) as response:
+        # The URL is built from a fixed MET HTTPS origin and numeric coordinates.
+        with urllib.request.urlopen(request, timeout=4) as response:  # nosec B310
             payload = json.load(response)
         series = payload["properties"]["timeseries"]
         first = series[0]["data"]
@@ -452,7 +465,8 @@ def transport_summary(workspace: Path) -> dict[str, Any]:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=4) as response:
+        # ENTUR_ENDPOINT is a compile-time HTTPS constant.
+        with urllib.request.urlopen(request, timeout=4) as response:  # nosec B310
             payload = json.load(response)
         calls = payload["data"]["stopPlace"]["estimatedCalls"]
         departures = []
@@ -789,16 +803,14 @@ class FamilyRepository:
             plan_days = []
             if plan_ids:
                 placeholders = ",".join("?" for _ in plan_ids)
-                plan_days = self._rows(connection.execute(
-                    f"""SELECT d.id,d.week_plan_id,d.day,d.date,d.subject,d.note,d.homework,d.bring,
-                              m.id AS member_id, m.name AS member
-                       FROM week_plan_days d
-                       JOIN week_plans w ON w.id=d.week_plan_id
-                       JOIN family_members m ON m.id=w.member_id
-                       WHERE w.id IN ({placeholders})
-                       ORDER BY COALESCE(d.date,'9999-12-31'),d.id""",
-                    plan_ids,
-                ))
+                plan_days_query = """SELECT d.id,d.week_plan_id,d.day,d.date,d.subject,d.note,d.homework,d.bring,
+                                             m.id AS member_id, m.name AS member
+                                      FROM week_plan_days d
+                                      JOIN week_plans w ON w.id=d.week_plan_id
+                                      JOIN family_members m ON m.id=w.member_id
+                                      WHERE w.id IN ({})
+                                      ORDER BY COALESCE(d.date,'9999-12-31'),d.id""".format(placeholders)
+                plan_days = self._rows(connection.execute(plan_days_query, plan_ids))
             unlinked_plan_rows = self._rows(connection.execute(
                 """SELECT id, subject, received_at, processed_at, summary
                    FROM email_log
@@ -912,7 +924,6 @@ class FamilyRepository:
             processes.append({"name": name, "label": label, "schedule": schedule, "last_seen": evidence[label], **state})
 
         children = [member for member in members if member["role"] == "child"]
-        child_names = {member["name"] for member in children}
         planned_ids = {int(plan["member_id"]) for plan in plans}
         unlinked_plans = []
         candidate_names: set[str] = set()
@@ -1109,7 +1120,7 @@ class FamilyRepository:
                    VALUES(?,?,?,'todo',?,?)""",
                 (values["title"], values.get("description"), values["assigned_to"], values["priority"], values.get("due_date")),
             )
-            row = dict(connection.execute(f"SELECT {CHORE_COLUMNS} FROM kanban_cards WHERE id=?", (cursor.lastrowid,)).fetchone())
+            row = dict(connection.execute(CHORE_SELECT_BY_ID, (cursor.lastrowid,)).fetchone())
         self.audit("chore.created", {"id": row["id"], "title": row["title"]})
         return row
 
@@ -1118,20 +1129,17 @@ class FamilyRepository:
         if not values:
             raise ValidationError("Ingen gyldige endringer.")
         self.backup_before_write()
-        assignments = ", ".join(f"{key}=?" for key in values)
         with self.connect() as connection:
             assigned = values.get("assigned_to")
             if assigned and assigned != "both" and not connection.execute(
                 "SELECT 1 FROM family_members WHERE lower(name)=?", (assigned,)
             ).fetchone():
                 raise ValidationError("Ukjent person.")
-            cursor = connection.execute(
-                f"UPDATE kanban_cards SET {assignments}, updated_at=datetime('now') WHERE id=? AND archived_at IS NULL",
-                (*values.values(), chore_id),
-            )
-            if cursor.rowcount != 1:
-                raise KeyError(chore_id)
-            row = dict(connection.execute(f"SELECT {CHORE_COLUMNS} FROM kanban_cards WHERE id=?", (chore_id,)).fetchone())
+            for field, value in values.items():
+                cursor = connection.execute(CHORE_UPDATE_BY_FIELD[field], (value, chore_id))
+                if cursor.rowcount != 1:
+                    raise KeyError(chore_id)
+            row = dict(connection.execute(CHORE_SELECT_BY_ID, (chore_id,)).fetchone())
         self.audit("chore.updated", {"id": chore_id, "fields": sorted(values)})
         return row
 
@@ -1144,7 +1152,7 @@ class FamilyRepository:
             )
             if cursor.rowcount != 1:
                 raise KeyError(chore_id)
-            row = dict(connection.execute(f"SELECT {CHORE_COLUMNS} FROM kanban_cards WHERE id=?", (chore_id,)).fetchone())
+            row = dict(connection.execute(CHORE_SELECT_BY_ID, (chore_id,)).fetchone())
         self.audit("chore.archived", {"id": chore_id, "title": row["title"]})
         return row
 
@@ -1157,7 +1165,7 @@ class FamilyRepository:
             )
             if cursor.rowcount != 1:
                 raise KeyError(chore_id)
-            row = dict(connection.execute(f"SELECT {CHORE_COLUMNS} FROM kanban_cards WHERE id=?", (chore_id,)).fetchone())
+            row = dict(connection.execute(CHORE_SELECT_BY_ID, (chore_id,)).fetchone())
         self.audit("chore.restored", {"id": chore_id})
         return row
 
@@ -2290,7 +2298,7 @@ def main() -> None:
     parser.add_argument("--lan", action="store_true")
     parser.add_argument("--parent-pin-file", type=Path, default=Path(__file__).resolve().parent.parent / "runtime/parent-pin.txt")
     args = parser.parse_args()
-    if args.host not in {"127.0.0.1", "localhost"} and not (args.lan and args.host == "0.0.0.0"):
+    if args.host not in {"127.0.0.1", "localhost"} and not (args.lan and args.host == LAN_HOST):
         raise SystemExit("LAN bind requires --lan and --host 0.0.0.0.")
     if not args.db.is_file():
         raise SystemExit(f"FamilyBot database not found: {args.db}")

@@ -59,6 +59,9 @@ A coding agent or session without prior context starts at
 5. [Change protocol](docs/CHANGE_PROTOCOL.md)
 6. [New-session verification](docs/NEW_SESSION_VERIFICATION.md)
 
+The latest repository-wide remediation and its residual-risk statement are in
+[the November 2026 maintenance review](docs/MAINTENANCE_REVIEW_2026-11.md).
+
 The sibling `familybot-core` repository owns the canonical system architecture,
 configuration, reliability invariants and Smart Home specification.
 Its shared change-record standard is the basis for all Core and Portal bug
@@ -165,6 +168,7 @@ Clone `familybot-core` and `familybot-portal` as sibling directories, then:
 npm ci
 uv venv --python 3.12 .venv
 uv pip sync --python .venv/bin/python requirements.txt
+uv pip install --python .venv/bin/python --requirement requirements-dev.txt
 npm run security:audit
 npm run docs:check
 npm run preflight
@@ -172,6 +176,13 @@ npm run dev:family
 npm run lint
 npm test
 ```
+
+The required gates are fail-closed: Oxlint covers TypeScript/React hooks and
+accessibility, Ruff covers Python correctness, Bandit blocks medium-and-higher
+security findings, npm audit and pip-audit block known dependency advisories,
+and CodeQL analyzes both languages in GitHub Actions. The HelloFresh account
+adapter can also be checked without writes or sensitive output using
+`npm run hellofresh:contract:check`.
 
 `preflight` invokes the canonical core validator and checks the ignored PIN.
 The API reads curated columns only: no raw email bodies, sender addresses,

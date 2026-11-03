@@ -20,7 +20,8 @@
   week and regression tests preserve that behavior. No provider mutation was
   made while discovering or verifying the contract.
 - Scope and owner: Portal-only adapters in `local_api/hellofresh_norway.py`,
-  `local_api/hellofresh_account.py` and `local_api/hellofresh_images.py`, named routes in
+  the focused `local_api/hellofresh_account*.py` modules and
+  `local_api/hellofresh_images.py`, named routes in
   `local_api/familybot_api.py`, and the flagged HelloFresh page. Core ingestion,
   SQLite, scheduled jobs and the retained Oda implementation are unchanged;
   image warm-up is owned by a separate Portal LaunchAgent.
@@ -91,6 +92,29 @@ session. The local API calls one fixed recipe-detail endpoint, validates the
 provider recipe/account objects, identifiers and HTML are never forwarded.
 Protein add-on variants override stale vegetarian base tags, and punctuation-only
 provider description placeholders are omitted.
+
+## Provider contract monitoring
+
+HelloFresh does not publish these Norway web-account endpoints as a supported
+third-party API. That compatibility risk cannot be removed in this repository,
+so the adapter treats it as a versioned, fail-closed boundary. Transport/auth,
+menu projection, recipe projection and mutations are separate modules behind
+the stable `HelloFreshAccountClient` facade. Before a request is constructed,
+the transport rejects every path outside the reviewed allowlist; it never
+accepts a browser-supplied URL. Fixture tests cover the expected response shapes
+and every write remains snapshot-guarded and read back.
+
+The daily image warm-up already exercises account weeks and published menus.
+For an explicit count-only live probe, run:
+
+```bash
+npm run hellofresh:contract:check
+```
+
+The probe reports only contract version and counts. It performs no mutation and
+prints no week IDs, recipe names, account identifiers or tokens. A successful
+read probe cannot prove provider writes still work; those are deliberately not
+tested automatically because doing so would alter the household's box.
 
 ## Local image cache
 

@@ -84,7 +84,8 @@ Evidence: parent API authorization tests and iPad browser interaction.
   reminders and things to bring; these are not presented as reward chores.
 - Missing/stale sources are labelled honestly; raw email, Spond payloads and
   internal errors are not shown to children.
-- A separate Oda entry remains available for household grocery preparation.
+- A grocery entry remains available: Oda by default, or HelloFresh when its
+  physical-test feature flags replace Oda in visible navigation.
 
 Evidence: sanitized API contract tests and browser content assertions.
 
@@ -220,14 +221,26 @@ live child navigation.
 ### AC-18 — Direct Oda grocery integration
 
 - `Oda` is a top-level tab next to Kanban and is available to every valid local
-  dashboard session without a parent PIN.
+  dashboard session without a parent PIN unless the HelloFresh physical-test
+  flags intentionally replace it. Its implementation remains intact for
+  rollback.
 - The browser can connect the household account through Oda OAuth with state
   and PKCE, search products, load `likely_to_buy`, read/edit/clear the cart and
   open Oda's returned cart URL.
+- The dinner assistant accepts a bounded Norwegian request and 1–12 portions,
+  can use liked/purchased Oda recipe titles as preference signals, and renders
+  named Oda recipe results with verified public Oda hero images or a local
+  placeholder. Selecting a recipe opens its bounded public ingredients and
+  instructions inside the Portal with a visible return button, so kiosk users
+  never depend on browser chrome or popup permissions. Adding its available
+  ingredients still requires a separate explicit button press.
 - OAuth login uses same-window navigation rather than a popup, works in kiosk
   mode, and returns automatically to the Oda tab with a visible fallback link.
-- The Portal does not use an AI model for this workflow and exposes no generic
-  MCP proxy. Only the named Oda tools selected by the API adapter can run.
+- The optional OpenAI dinner planner runs as a dedicated tool-free agent. It
+  receives only the bounded dinner conversation and selected Oda recipe titles,
+  returns search phrases rather than tool calls, and has a direct-search
+  fallback. The Portal exposes no generic model chat or MCP proxy; only named
+  Oda tools selected by the API adapter can run.
 - OAuth access and refresh tokens are stored outside Git in an owner-only local
   file and are never returned to the browser or written to logs. Callback query
   values are redacted.
@@ -241,15 +254,119 @@ live child navigation.
 Evidence: OAuth/MCP adapter unit tests, local-session API authorization tests,
 rendered UI assertions, credential permissions and production status route.
 
+### AC-19 — Flagged read-only HelloFresh Norway experiment
+
+- The HelloFresh tab and `?hellofresh=1` page are absent unless
+  `portal.features.hellofresh` is explicitly `true`; the API independently
+  rejects the route while disabled.
+- When enabled, every valid local dashboard session can view and filter the
+  public Norwegian weekly menu with recipe images, names, descriptions,
+  preparation time, difficulty, calories, display tags, sold-out state and any
+  disclosed extra charge.
+- The adapter accepts only `https://www.hellofresh.no`, country `NO`, locale
+  `nb-NO`, valid ISO weeks and reviewed public image hosts. Network calls and
+  response sizes are bounded, and a cached fallback is visibly marked stale.
+- Curated image URLs use the content-addressed local image route; the browser is
+  not required to retrieve every card directly from the provider CDN.
+- The public-menu adapter contains no HelloFresh username, password, account
+  cookie, embedded bootstrap token, generic source payload, browser automation
+  or mutation route. Account access is isolated in the separately flagged
+  AC-20 adapter.
+
+Evidence: adapter normalization, host rejection, secret-exclusion, stale-cache
+and route authorization unit tests; rendered UI assertions; live flag-off or
+flag-on acceptance probe.
+
+### AC-20 — Guarded HelloFresh upcoming-box management
+
+- `portal.features.hellofresh_account` defaults to `false` and requires the
+  parent `hellofresh` flag. When enabled, HelloFresh occupies Oda's former
+  top-level navigation position; the Oda implementation remains available for
+  rollback but is not shown beside it.
+- First use accepts the household's HelloFresh email and password inside the
+  Portal. It never opens a popup or sends an email. The password crosses the
+  trusted home LAN to the authenticated local API once, then is sent only to
+  the fixed Norwegian HTTPS login endpoint through a pinned
+  Chrome-fingerprinted TLS/HTTP2 transport with certificate verification and
+  same-origin browser metadata. It is never stored, logged, returned, placed in
+  model context or committed.
+- No email-link fallback is offered. Live evidence for this account/market
+  showed that the provider's nominal passwordless endpoint sends a password
+  reset, so presenting it as login is a release-blocking defect.
+- Access and refresh credentials exist only transiently in provider-response
+  memory. The Portal stores only allowlisted opaque OAuth tokens outside Git in
+  an owner-only local file; valid printable punctuation is accepted, while
+  whitespace, control characters and oversized values are rejected. The tokens
+  survive service restarts and are refreshed before use. Subsequent browser
+  responses and logs contain no credentials. Five failed login attempts per
+  client in five minutes trigger a temporary limit; successful login clears the
+  attempts.
+- A Cloudflare HTML challenge or non-JSON provider response is reported as a
+  provider security block, not as an incorrect email or password.
+- The login form remains hidden while a renewable credential exists. Temporary
+  provider or network failures keep that credential for retry; only an explicit
+  authentication rejection clears it and asks for email/password again.
+- The first-use screen states that the Portal runs over the trusted private LAN.
+  Account login must not be enabled on public or untrusted networks without
+  adding local TLS.
+- The connected surface opens the provider's next modifiable published week by
+  default and lets the household traverse later delivery weeks. Unpublished
+  weeks are visible but disabled. The selected dishes are shown first with
+  reviewed HelloFresh CDN images; all other dishes follow as options. Option
+  dishes can be narrowed with touch-friendly meat, fish, pasta and vegetarian
+  filters derived from existing menu metadata.
+- Public recipe images are registered server-side, cached outside Git and
+  served locally with ETag/browser caching. The image route accepts no target
+  URL, revalidates the reviewed CDN host after redirects, accepts only bounded
+  image MIME/magic types, retains a valid stale image on refresh failure and
+  requests a 960-pixel provider rendition before download. It prunes disk use
+  to 600 images or 256 MB. Selected dish images are requested
+  eagerly; remaining options stay lazy-loaded.
+- A Portal-owned LaunchAgent prefetches every published upcoming menu at 04:45,
+  logs counts rather than URLs/account data and remains independent of Core's
+  briefing and ingestion schedule.
+- Any selected or optional dish expands in place and collapses again without
+  navigation or a popup. Detail is fetched only on first expansion, then cached
+  in the browser. It shows portion-matched ingredients, referenced allergens
+  and nutrition. The API accepts only a validated
+  recipe ID and 1–12 servings and returns a bounded allowlist rather than the
+  provider payload.
+- A valid dashboard session can replace one selected dish, add or remove a
+  dish within provider-supported box sizes, and pause or resume one exact week.
+  Every action requires explicit confirmation. Sold-out dishes, expired
+  cutoffs, blocked weeks and actions not allowed by the provider are rejected.
+- The browser supplies only week, requested course indexes and a state
+  snapshot. The server derives account/product identifiers from a fresh read,
+  preserves unrelated selected dishes and add-ons, serializes writes, rejects
+  stale views, and performs exact read-after-write verification before success.
+  A provider seamless downgrade is never silently accepted.
+- It cannot change the base subscription, servings, address or payment, and
+  cannot check out or place an order. No generic HelloFresh proxy exists.
+- Disconnecting explicitly removes the local credential. Provider or auth
+  failures remain isolated from the family dashboard and show a reconnect or
+  unavailable state.
+
+Evidence: transient-password exclusion from disk/responses, fixed provider URL,
+browser-TLS request metadata, provider challenge classification, refresh
+rejection, opaque-token acceptance, unsafe-token rejection, temporary-failure
+retention, restart/refresh persistence, file-mode, exact range-boundary,
+selected-first/local-image-cache, category classification, curated portion-aware recipe
+detail, inline expand/collapse, add-on preservation, stale-state, product-size,
+replacement/add/remove and pause/read-after-write unit tests; local-session API
+authorization and response secret exclusion; popup/email-flow exclusion and
+rendered touch UI assertions; cache host/redirect/type/size/rendition/stale/prune tests;
+scheduled-prefetch registration; read-only live connected image probe.
+
 ## Release measurement
 
 The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **18/18 critical
+criterion (`pass`, `fail`, evidence, duration). Release requires **20/20 critical
 criteria passed**. Browser findings that cannot be safely automated are captured
 with viewport screenshots and explicitly reported rather than silently assumed.
 
-These 18 criteria cover the currently deployed family dashboard, its Telegram
-child-chore add-on, week-plan detail view and Oda grocery tab. A new
+These 20 criteria cover the currently deployed family dashboard, its Telegram
+child-chore add-on, week-plan detail view, Oda grocery tab and flagged
+public-read-only and bounded account-backed HelloFresh experiments. A new
 user-visible add-on such as Smart Home must
 add provider failure isolation,
 authorization, freshness/locality and touch-control criteria before it can be

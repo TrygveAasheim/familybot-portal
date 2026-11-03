@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PYTHON = "/Library/Developer/CommandLineTools/usr/bin/python3"
+PYTHON = sys.executable
 children: list[subprocess.Popen[bytes]] = []
 stopping = False
 

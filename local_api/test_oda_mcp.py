@@ -84,6 +84,26 @@ class OdaMcpClientTests(unittest.TestCase):
         with self.assertRaises(oda_mcp.OdaValidationError):
             self.client.change_product(-1, 1)
 
+    def test_recipe_operations_use_explicit_tools_and_bounded_portions(self):
+        with patch.object(self.client, "call_tool", return_value={"recipes": []}) as tool:
+            self.client.search_recipes("rask middag", size=6)
+            tool.assert_called_once_with("recipe_search", {
+                "query": "rask middag",
+                "page": 1,
+                "size": 6,
+                "intent": "wants dinner recipes matching the household request",
+            })
+        with patch.object(self.client, "call_tool", return_value={"groups": []}) as tool:
+            self.client.add_recipe(42, 5)
+            tool.assert_called_once_with("manipulate_cart", {
+                "operations": [{"recipeId": 42, "quantity": 1, "fromRecipePortions": 5}],
+                "intent": "wants to add all ingredients for a selected dinner recipe",
+            })
+        with self.assertRaises(oda_mcp.OdaValidationError):
+            self.client.search_recipes("x")
+        with self.assertRaises(oda_mcp.OdaValidationError):
+            self.client.add_recipe(42, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

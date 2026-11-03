@@ -9,8 +9,17 @@
 - optional approval plus parent rejection of awarded or pending work;
 - parent creation/archive, reward goals, review queue and child routine resets;
 - family Kanban board with New, In Progress, Pause and Done lanes, parent-gated creation/movement/archive and newest-first Done history;
-- all-user Oda grocery tab with direct OAuth/MCP product search, personal
-  suggestions, cart editing and explicit checkout handoff to Oda;
+- all-user Oda grocery tab with a bounded Norwegian dinner assistant, Oda
+  recipe preferences, hero images and kiosk-safe in-Portal recipe details with
+  return navigation, explicit add-all-ingredients actions, direct OAuth/MCP
+  product search, personal suggestions, cart editing and checkout handoff;
+- optional HelloFresh Norway experiment behind disabled-by-default public and
+  account feature flags. It supports transient email/password first use through
+  a browser-fingerprinted provider transport, persistent token-only local
+  renewal, upcoming-week navigation, images, selected-first menus, guarded meal
+  replacement/add/remove, per-week pause/resume and a bounded Mac-local image
+  cache prefetched each morning; see
+  [the experiment contract](HELLOFRESH_NORWAY.md);
 - Telegram/OpenClaw child-chore interview bridge with preview, explicit confirmation and idempotent creation;
 - child-specific week-plan detail view with structured full plan text, optional validated day/category interpretation, preserved line breaks and bullets, structured days and return navigation;
 - continuous 30-point block counting from pending and awarded completion points, with configurable surprise levels, parent redemption resets and a January annual summary; see [the achievement specification](WEEKLY_ACHIEVEMENTS.md);
@@ -31,7 +40,8 @@
 - Smart Home device control. Home Assistant, Xiaomi-first rollout, Nest and
   climate/appliance research are documented in the sibling core repository's
   `specs/SMART_HOME.md`, but are not deployed;
-- HelloFresh/menu integration;
+- HelloFresh subscription-plan, servings, address, payment, checkout and order
+  management beyond the bounded meal and weekly pause controls;
 - automatic chore generation from school homework;
 - a clean-room core database installer and complete LaunchAgent installer.
 

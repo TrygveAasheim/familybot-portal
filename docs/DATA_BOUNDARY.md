@@ -46,21 +46,140 @@ are returned to the browser.
 
 The Oda tab calls only `https://oda.com/mcp` through the server-side
 `OdaMcpClient`. There is no browser-visible bearer token, generic MCP endpoint,
-arbitrary tool-name input or AI model in this path. OAuth uses dynamic client
-registration, state and PKCE; tokens are written with mode `0600` beneath the
-owner-only `$HOME/.openclaw/credentials` directory. Callback query values are
-redacted from API request logs.
+or arbitrary tool-name input. OAuth uses dynamic client registration, state and
+PKCE; tokens are written with mode `0600` beneath the owner-only
+`$HOME/.openclaw/credentials` directory. Callback query values are redacted
+from API request logs.
+
+The dinner interface has one narrower model boundary. A dedicated tool-free
+OpenAI agent receives only the bounded dinner request, at most six dinner-chat
+messages, the portion count and at most sixteen liked/purchased Oda recipe
+titles. It receives no family dashboard facts, SQLite rows, OAuth tokens,
+addresses, cart or product history. It returns search phrases only; Oda returns
+the recipe records afterward. Invalid or unavailable model output falls back to
+a direct Oda recipe search.
+
+Because the MCP recipe schema has no image or recipe-detail fields, the server
+can resolve a recipe's public `og:image` and schema.org `Recipe` description,
+yield, category, ingredients and instructions. Fetches accept only HTTPS
+`oda.com` recipe URLs, validate the final redirect target, and cap response
+size, time, field lengths and list counts. Only HTTPS `images.oda.com` current
+`/recipes/` or legacy `/oppskrifter/` image URLs are returned. No OAuth header
+or household identifier is sent with that public page request. Failed or
+malformed extraction becomes a local placeholder or limited detail state, not
+an expanded proxy or user-visible integration failure.
 
 Every valid local dashboard session may read Oda suggestions and the household
-cart and may add/remove products or clear that cart. This is an explicit trusted
+cart, search recipes and read the bounded liked/purchased recipe lists used for
+preference signals. Sessions may add/remove products, add a selected recipe's
+ingredients for 1–12 portions, or clear that cart. This is an explicit trusted
 household policy: the Oda tab is not parent-PIN gated. The API allowlist is
-limited to product search, `likely_to_buy`, cart read/change/clear and OAuth
-connect/disconnect. It does not expose order history, saved addresses or a
-generic MCP proxy. Oda checkout and payment cannot be called through MCP; the
-browser receives only Oda's cart URL for final review and payment at oda.com.
+limited to product/recipe search, selected suggestion/preference reads, cart
+read/change/clear and OAuth connect/disconnect. It does not expose order
+history, saved addresses or a generic MCP proxy. Oda checkout and payment
+cannot be called through MCP; the browser receives only Oda's cart URL for
+final review and payment at oda.com.
 
 An Oda outage or expired OAuth grant returns an isolated unavailable/reconnect
 state and must not affect `/api/dashboard`, chores, Ukeplan or Kanban.
+
+## HelloFresh experiment boundary
+
+`portal.features.hellofresh` defaults to `false`. The local session response
+exposes only that boolean so the browser can hide the tab and route when the
+experiment is disabled. The API also enforces the flag; a manually entered URL
+does not bypass it.
+
+When enabled, `GET /api/hellofresh/menu` reads only the public Norwegian
+`https://www.hellofresh.no/menus` page. The adapter validates the final host,
+country `NO`, locale `nb-NO`, ISO week, response size, recipe IDs and public
+image hosts. It returns an allowlist of recipe name, headline, image, display
+tags, preparation time, difficulty, calories, sold-out state and disclosed
+extra charge. It does not return the source page, embedded application state,
+bootstrap token, recipe URL, cookies or response headers.
+
+The public adapter has no login, account cookie store or browser automation.
+The separately gated `portal.features.hellofresh_account` adapter accepts one
+email/password request from a valid local dashboard session, rate limited to
+five failed attempts per client in five minutes. The password crosses the
+Portal's plain-HTTP private-LAN boundary once and exists only in the first-use
+form and transient API/provider-request memory. The API forwards it only to the
+fixed `https://www.hellofresh.no/gw/login` endpoint using a pinned
+Chrome-fingerprinted TLS/HTTP2 transport, same-origin browser metadata and TLS
+certificate verification. It never stores, logs, returns or places the
+password or email in model context or Git. Successful login clears the local
+failure window. The email-link fallback is intentionally absent because live
+Norwegian account testing showed that provider flow sends password-reset mail,
+not a usable login link.
+
+HelloFresh's access and refresh tokens exist transiently in provider-response
+memory and are immediately allowlisted into the owner-only credential. The API
+persists no provider account payload and returns status booleans only. No email
+address, customer/subscription identifier or raw provider payload is stored or
+exposed.
+
+The allowlist treats OAuth token contents as opaque: values must be 8–8192
+printable ASCII characters with no spaces or control characters, but are not
+incorrectly restricted to JWT/base64url syntax. This accepts provider-defined
+refresh-token punctuation without permitting header or log-line injection.
+
+Renewable credentials are stored outside Git in
+`$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
+`0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup is
+required and no email is requested. A Cloudflare HTML challenge or other
+non-JSON provider block is an
+unavailable state, never an invalid-password result. Temporary provider
+or network failures preserve the renewable credential for retry; only an
+explicit provider authentication rejection clears it and returns the first-use
+login form. The Portal itself is plain HTTP on a trusted private LAN, so the
+one-time password request must not run over guest, public or otherwise
+untrusted networks; deployments requiring an untrusted network need local TLS
+before enabling account login.
+
+Authenticated reads expose upcoming delivery weeks plus the same curated recipe
+contract, selected quantities and total selected count. The provider's next
+modifiable delivery week is the default. Recipe images are returned only from
+reviewed HTTPS HelloFresh CDN hosts and are rewritten to content-addressed local
+routes; no raw account identifiers are exposed.
+Menu filters are derived locally from bounded names, cuisines and tags. Opening
+one meal performs a read-only lookup by a validated 24-character recipe ID and
+returns only bounded description, timing, portion-matched ingredients,
+referenced allergens and nutrition. The browser never
+receives raw recipe/account payloads, HTML or a generic provider URL.
+
+The local image route accepts only a 64-character content-addressed key that the
+server registered while curating a menu. It accepts no source URL, query-based
+target or provider credential. The backing fetch revalidates the final HTTPS
+HelloFresh CDN host, MIME type and image magic bytes, caps each response at 6 MB,
+uses owner-only files outside Git and prunes the cache to at most 600 images or
+256 MB. For the current HelloFresh image service it requests a provider-bounded
+960-pixel rendition before download, rather than caching multi-megabyte camera
+originals. Because the images are public recipe artwork rather than household data,
+the registered-key route can be loaded by an HTML `img` element without the
+custom API token; all menu, account and recipe-detail routes remain protected.
+Browser responses carry an ETag and one-week cache lifetime. A valid prior image
+is retained if refresh fails.
+
+The Portal-owned 04:45 LaunchAgent reads only published upcoming menus, warms
+their allowlisted images with four bounded workers and writes count-only logs.
+It stores no menu/account payload and does not couple Core's ingestion or
+briefing schedules to this optional add-on.
+
+The bounded write allowlist contains only meal replacement/add/remove and
+pause/resume for one exact ISO week. The server derives customer, subscription,
+product and provider course identifiers from a fresh provider read. It validates
+the provider cutoff, blocked state and `allowedActions`, rejects sold-out dishes,
+preserves unrelated selected dishes and selected/preselected add-ons, and uses a
+reviewed product option for the resulting meal count. A state snapshot rejects
+stale browser actions before provider access, a process lock serializes writes,
+and an exact read-after-write check is required before success is returned.
+The UI also asks for explicit confirmation for every provider mutation.
+
+No route changes the base subscription plan, servings, address, payment,
+household identity, checkout or order placement. No generic provider proxy is
+exposed. Provider/auth failure returns an isolated unavailable or reconnect
+state and cannot break the family dashboard; the public menu fallback remains
+read-only and explicitly marked stale.
 
 ## Write allowlist
 
@@ -82,6 +201,12 @@ Writes are limited to the dashboard's chores and rewards model:
 The separate Oda allowlist permits household cart changes and local OAuth
 connect/disconnect for every valid LAN dashboard session. These operations
 change only the Oda account; they never write FamilyBot SQLite.
+
+The separate HelloFresh allowlist permits selected-meal composition and one
+week's paused/running state for every valid LAN dashboard session. These actions
+change only the connected HelloFresh account and never write FamilyBot SQLite.
+Provider subscription-plan, servings, address, payment, checkout and order
+operations remain outside the allowlist.
 
 The bridge creates a consistent SQLite backup before the first mutation in each
 session and appends a local audit record. Resetting a child archives/hides active

@@ -409,6 +409,45 @@ class OdaMcpClient:
             "intent": "wants grocery suggestions for the household",
         })
 
+    @staticmethod
+    def _recipe_page(page: Any, size: Any) -> tuple[int, int]:
+        try:
+            page = int(page)
+            size = int(size)
+        except (TypeError, ValueError) as exc:
+            raise OdaValidationError("Ugyldig oppskriftside.") from exc
+        if not 1 <= page <= 50 or not 1 <= size <= 20:
+            raise OdaValidationError("Ugyldig oppskriftside.")
+        return page, size
+
+    def search_recipes(self, query: str, page: Any = 1, size: Any = 8) -> dict[str, Any]:
+        query = str(query or "").strip()
+        if not 2 <= len(query) <= 120:
+            raise OdaValidationError("Oppskriftssøket må være mellom 2 og 120 tegn.")
+        page, size = self._recipe_page(page, size)
+        return self.call_tool("recipe_search", {
+            "query": query,
+            "page": page,
+            "size": size,
+            "intent": "wants dinner recipes matching the household request",
+        })
+
+    def liked_recipes(self, page: Any = 1, size: Any = 12) -> dict[str, Any]:
+        page, size = self._recipe_page(page, size)
+        return self.call_tool("get_liked_recipes", {
+            "page": page,
+            "size": size,
+            "intent": "wants dinner suggestions based on recipes the household likes",
+        })
+
+    def purchased_recipes(self, page: Any = 1, size: Any = 12) -> dict[str, Any]:
+        page, size = self._recipe_page(page, size)
+        return self.call_tool("get_purchased_recipes", {
+            "page": page,
+            "size": size,
+            "intent": "wants dinner suggestions based on recipes the household bought before",
+        })
+
     def cart(self) -> dict[str, Any]:
         return self.call_tool("get_cart", {"intent": "wants to review the household cart"})
 
@@ -423,6 +462,23 @@ class OdaMcpClient:
         return self.call_tool("manipulate_cart", {
             "operations": [{"productId": product_id, "quantity": quantity}],
             "intent": "wants to update the household grocery cart",
+        })
+
+    def add_recipe(self, recipe_id: Any, portions: Any) -> dict[str, Any]:
+        try:
+            recipe_id = int(recipe_id)
+            portions = int(portions)
+        except (TypeError, ValueError) as exc:
+            raise OdaValidationError("Ugyldig oppskrift eller antall porsjoner.") from exc
+        if recipe_id <= 0 or not 1 <= portions <= 12:
+            raise OdaValidationError("Ugyldig oppskrift eller antall porsjoner.")
+        return self.call_tool("manipulate_cart", {
+            "operations": [{
+                "recipeId": recipe_id,
+                "quantity": 1,
+                "fromRecipePortions": portions,
+            }],
+            "intent": "wants to add all ingredients for a selected dinner recipe",
         })
 
     def clear_cart(self) -> dict[str, Any]:

@@ -25,11 +25,17 @@ test("server-renders the iPad family dashboard shell", async () => {
 });
 
 test("source keeps the data boundary and functional surfaces explicit", async () => {
-  const [page, consoleSource, apiSource, odaSource, styles] = await Promise.all([
+  const [page, consoleSource, apiSource, odaSource, dinnerSource, helloFreshSource, helloFreshAccountSource, helloFreshImageSource, deploySource, imagePlist, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/FamilyConsole.tsx", import.meta.url), "utf8"),
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
     readFile(new URL("../local_api/oda_mcp.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/oda_dinner.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/hellofresh_norway.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/hellofresh_account.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/hellofresh_images.py", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/deploy-local.sh", import.meta.url), "utf8"),
+    readFile(new URL("../launchd/ai.familybot.portal-images.plist", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(page, /codex-preview/);
@@ -80,10 +86,114 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /Se gjennom og betal hos Oda/);
   assert.match(consoleSource, /kan ikke betale eller fullføre bestillingen/);
   assert.match(consoleSource, /api\/oda\/search/);
+  assert.match(consoleSource, /Middagsassistent/);
+  assert.match(consoleSource, /api\/oda\/dinner/);
+  assert.match(consoleSource, /Legg alle ingrediensene i kurven/);
+  assert.match(consoleSource, /api\/oda\/recipes\/\$\{recipe\.id\}\/cart/);
+  assert.match(consoleSource, /oda-recipe-image/);
+  assert.match(consoleSource, /src=\{recipe\.imageUrl\}/);
+  assert.match(consoleSource, /referrerPolicy="no-referrer"/);
+  assert.match(consoleSource, /oda-recipe-dialog/);
+  assert.match(consoleSource, /Tilbake til middagsforslag/);
+  assert.match(consoleSource, /recipe\.ingredients/);
+  assert.match(consoleSource, /recipe\.instructions/);
+  assert.doesNotMatch(consoleSource, /<a href=\{recipe\.url\}>/);
   assert.match(consoleSource, /window\.location\.assign\(result\.authorization_url\)/);
   assert.match(consoleSource, /virker i kioskmodus/);
   assert.doesNotMatch(consoleSource, /window\.open\(|familybot-oda-connect|Tillat sprettoppvindu/);
   assert.doesNotMatch(consoleSource, /Spør FamilyBot|api\/chat|OpenAI/);
+  assert.match(consoleSource, /features\.hellofresh/);
+  assert.match(consoleSource, />HelloFresh<\/button>/);
+  assert.match(consoleSource, /api\/hellofresh\/menu/);
+  assert.match(consoleSource, /Kommende matkasser/);
+  assert.match(consoleSource, /Deres matkasse/);
+  assert.match(consoleSource, /Bytt denne/);
+  assert.match(consoleSource, /Sett uken på pause/);
+  assert.match(consoleSource, /features\.hellofresh_account/);
+  assert.match(consoleSource, /Logg inn hos HelloFresh/);
+  assert.match(consoleSource, /autoComplete="current-password"/);
+  assert.match(consoleSource, /private hjemmenett/);
+  assert.match(consoleSource, /api\/hellofresh\/auth\/login/);
+  assert.match(consoleSource, /api\/hellofresh\/account\/menu/);
+  assert.match(consoleSource, /api\/hellofresh\/account\/weeks/);
+  assert.match(consoleSource, /api\/hellofresh\/account\/recipes/);
+  assert.match(consoleSource, /Se innhold/);
+  assert.match(consoleSource, /Skjul innhold/);
+  assert.match(consoleSource, /Ingredienser/);
+  assert.doesNotMatch(consoleSource, /detail\.steps|Fremgangsmåte/);
+  assert.match(consoleSource, /Filtrer på type rett/);
+  assert.match(consoleSource, /Kjøtt/);
+  assert.match(consoleSource, /Vegetar/);
+  assert.match(consoleSource, /aria-expanded/);
+  assert.match(consoleSource, /selection_snapshot/);
+  assert.doesNotMatch(consoleSource, /Send engangskobling|Kopier hele lenken|auth\/link\/|auth\/bootstrap|auth\/complete/);
+  assert.doesNotMatch(consoleSource, /window\.open\(/);
+  assert.match(consoleSource, /HelloFreshRecipeImage/);
+  assert.match(consoleSource, /apiBase\(\).*recipe\.image_url/);
+  assert.match(consoleSource, /fetchPriority=\{recipe\.selected_quantity\?"high":"auto"\}/);
+  assert.match(apiSource, /HelloFreshNorwayClient/);
+  assert.match(apiSource, /HelloFreshImageCache/);
+  assert.match(apiSource, /respond_image/);
+  assert.match(apiSource, /api\/hellofresh\/images\/\(\[0-9a-f\]\{64\}\)/);
+  assert.match(apiSource, /features\["hellofresh"\]/);
+  assert.match(apiSource, /account\/recipes\/\(\[0-9a-f\]\{24\}\)/);
+  assert.match(deploySource, /local_api\/hellofresh_account\.py/);
+  assert.match(deploySource, /local_api\/hellofresh_images\.py/);
+  assert.match(deploySource, /local_api\/hellofresh_norway\.py/);
+  assert.match(deploySource, /prefetch_hellofresh_images\.py/);
+  assert.match(deploySource, /\.venv\/bin\/python/);
+  assert.match(deploySource, /requirements\.txt/);
+  assert.match(helloFreshSource, /https:\/\/www\.hellofresh\.no/);
+  assert.match(helloFreshSource, /systemCountry.*NO/);
+  assert.match(helloFreshSource, /locale.*nb-NO/);
+  assert.match(helloFreshSource, /MAX_HTML_BYTES/);
+  assert.match(helloFreshSource, /ALLOWED_IMAGE_HOSTS/);
+  assert.doesNotMatch(
+    helloFreshSource,
+    /HELLOFRESH_(?:EMAIL|PASSWORD)|(?:import|from)\s+(?:playwright|selenium)|["']Cookie["']\s*:/i,
+  );
+  assert.match(helloFreshAccountSource, /\/gw\/login/);
+  assert.match(helloFreshAccountSource, /\/gw\/refresh/);
+  assert.match(helloFreshAccountSource, /complete_login/);
+  assert.match(helloFreshAccountSource, /challenge/);
+  assert.match(helloFreshAccountSource, /hellofresh-no\.json/);
+  assert.match(helloFreshAccountSource, /0o600/);
+  assert.match(helloFreshAccountSource, /\/gw\/auth\/token/);
+  assert.match(helloFreshAccountSource, /curl_cffi/);
+  assert.match(helloFreshAccountSource, /impersonate="chrome"/);
+  assert.match(helloFreshAccountSource, /verify=True/);
+  assert.match(helloFreshAccountSource, /Sec-Fetch-Site/);
+  assert.match(helloFreshAccountSource, /\/gw\/v1\/carts\//);
+  assert.match(helloFreshAccountSource, /x-requested-by/);
+  assert.match(helloFreshAccountSource, /_preserved_extras/);
+  assert.match(helloFreshAccountSource, /_menu_snapshot/);
+  assert.match(helloFreshAccountSource, /hasSeamlessDowngraded/);
+  assert.match(helloFreshAccountSource, /_mutation_lock/);
+  assert.doesNotMatch(helloFreshAccountSource, /passwordless|MAGIC_LINK/);
+  assert.doesNotMatch(helloFreshAccountSource, /HELLOFRESH_PASSWORD|playwright|selenium/i);
+  assert.match(helloFreshImageSource, /ALLOWED_CONTENT_TYPES/);
+  assert.match(helloFreshImageSource, /MAX_IMAGE_BYTES = 6_000_000/);
+  assert.match(helloFreshImageSource, /MAX_CACHE_BYTES = 256 \* 1024 \* 1024/);
+  assert.match(helloFreshImageSource, /c_limit,f_auto,q_auto,w_960/);
+  assert.match(helloFreshImageSource, /_safe_image_url/);
+  assert.match(helloFreshImageSource, /stale beats empty/);
+  assert.doesNotMatch(helloFreshImageSource, /parse_qs|query\.get\(["'](?:url|source)/i);
+  assert.match(imagePlist, /ai\.familybot\.portal-images/);
+  assert.match(imagePlist, /<integer>4<\/integer>/);
+  assert.match(imagePlist, /<integer>45<\/integer>/);
+  assert.match(odaSource, /recipe_search/);
+  assert.match(odaSource, /get_liked_recipes/);
+  assert.match(odaSource, /get_purchased_recipes/);
+  assert.match(odaSource, /fromRecipePortions/);
+  assert.match(dinnerSource, /familybot-oda-dinner/);
+  assert.match(dinnerSource, /MAX_HISTORY_MESSAGES = 6/);
+  assert.match(dinnerSource, /fallback to a direct Oda recipe search|_fallback/);
+  assert.match(dinnerSource, /images\.oda\.com/);
+  assert.match(dinnerSource, /MAX_RECIPE_HTML_BYTES/);
+  assert.match(dinnerSource, /_allowed_recipe_url/);
+  assert.match(dinnerSource, /application\/ld\+json/);
+  assert.match(dinnerSource, /recipeIngredient/);
+  assert.match(dinnerSource, /recipeInstructions/);
   assert.match(consoleSource, /function TransportCountdown/);
   assert.match(consoleSource, /dashboardClockFormat/);
   assert.match(consoleSource, /second:"2-digit"/);
@@ -123,6 +233,11 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(apiSource, /api\/oda\/search/);
   assert.match(apiSource, /api\/oda\/cart/);
   assert.doesNotMatch(apiSource, /api\/chat|chat_slot|chat_answer/);
+  assert.match(apiSource, /api\/hellofresh\/menu/);
+  assert.match(apiSource, /api\/hellofresh\/auth\/login/);
+  assert.doesNotMatch(apiSource, /api\/hellofresh\/auth\/(?:bootstrap|complete|link)/);
+  assert.doesNotMatch(apiSource, /api\/hellofresh\/auth\/callback/);
+  assert.match(apiSource, /api\/hellofresh\/account\/menu/);
   assert.match(odaSource, /https:\/\/oda\.com\/mcp/);
   assert.match(odaSource, /\.openclaw\/credentials\/oda-mcp\.json/);
   assert.match(odaSource, /product_search/);

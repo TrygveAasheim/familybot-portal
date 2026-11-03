@@ -29,6 +29,11 @@ flowchart LR
   API --> Web["Responsive web app :3000"]
   API --> Oda["Narrow OAuth/MCP adapter"]
   Oda --> OdaMCP["Oda hosted MCP"]
+  API --> HF["Flagged bounded HelloFresh adapters"]
+  HF --> HFNO["Public menu + guarded account meal/week actions"]
+  HF --> HFCache["Bounded local recipe-image cache"]
+  API --> Dinner["Tool-free dinner query planner"]
+  Dinner --> OpenAI["OpenAI via isolated OpenClaw agent"]
   Web --> iPad["Family iPads"]
   Parent["Parent PIN"] --> API
   HA["Home Assistant - planned"] --> Smart["Narrow Smart Home adapter - planned"]
@@ -45,11 +50,13 @@ the web service. The API and database remain on the Mac mini.
 | Main family/child/parent UI | `app/_components/FamilyConsole.tsx` | User-visible; touch, accessibility and state-transition risk |
 | Global layout and responsive design | `app/globals.css` | Verify portrait, landscape, 200% zoom and no hover dependency |
 | Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist, including parent-gated Kanban mutations |
-| Oda groceries | `local_api/oda_mcp.py`, Oda routes in `local_api/familybot_api.py` | OAuth secrecy, account-data exposure, cart-mutation and provider-failure boundary |
+| Oda groceries | `local_api/oda_mcp.py`, `local_api/oda_dinner.py`, Oda routes in `local_api/familybot_api.py` | OAuth secrecy, bounded model context, strict public recipe host/schema validation, kiosk return navigation, account-data exposure, explicit cart-mutation and provider-failure boundary |
+| HelloFresh experiment | `local_api/hellofresh_norway.py`, `local_api/hellofresh_account.py`, `local_api/hellofresh_images.py`, HelloFresh routes in `local_api/familybot_api.py` | Separate disabled-by-default flags; one trusted-LAN password request, pinned browser-TLS transport, token-only persistence, selected-first account reads, exact-week meal/pause writes, stale-view guards, read-after-write verification and a host/type/size-bounded local public-image cache |
 | Dashboard schema and backup | `local_api/dashboard_migration.py` | Data-critical; idempotent migration and pre-migration backup required, including weekly achievement history |
 | Config reader | `local_api/family_config.py` | Must match the one core-owned configuration contract |
 | Process supervision | `local_service/run_service.py` | Operational; both processes fail/restart as a group |
 | Local deployment | `scripts/deploy-local.sh`, `launchd/` | Production mutation; preflight and rollback required |
+| HelloFresh image warm-up | `scripts/prefetch_hellofresh_images.py`, `launchd/ai.familybot.portal-images.plist` | Portal-owned 04:45 job; public images only, bounded disk use, cached stale fallback, count-only logs |
 | API tests | `local_api/test_familybot_api.py` | Authorization, response minimization and state transitions |
 | Release acceptance | `tests/acceptance.py`, `tests/rendered-html.test.mjs` | Current release gate |
 
@@ -85,7 +92,17 @@ negative tests for raw/private material.
 - Status text is derived from measured state and timestamp, not optimism.
 - Keep DNB Eufemia-inspired visual consistency without coupling business logic
   to a component library.
-- Grocery ordering stays direct and task-focused; checkout/payment remain at Oda.
+- Grocery ordering stays direct and task-focused. The dinner planner can only
+  produce Oda recipe search phrases; explicit cart actions remain separate and
+  checkout/payment remain at Oda.
+- The HelloFresh account experiment exposes only the reviewed meal-selection
+  and exact-week pause contract. Every action is explicit, rejects stale state,
+  preserves unrelated selected meals/add-ons and verifies provider state after
+  the write. Subscription plan, servings, address, payment and checkout remain
+  outside the allowlist.
+- HelloFresh image delivery is a content-addressed cache, not a generic proxy.
+  The browser cannot submit a source URL; only server-registered URLs from the
+  reviewed CDN host allowlist can be downloaded and served.
 
 ## Core versus add-on changes
 

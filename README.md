@@ -1,17 +1,35 @@
 # Familieportalen
 
-Familieportalen is loosely based on OpenClaw's local-first household-agent
-ideas, but a large part of this repository is now custom work for Norwegian
-households: school `ukeplan` views, Spond activities, Norwegian calendars, MET
-weather, Entur transport and a Norwegian-language family dashboard. It is the
-iPad-first touch surface for FamilyBot. It runs on an
+Familieportalen is an AI-driven, iPad-first family planner built for Norwegian
+households. It brings school plans, activities, chores, rewards, weather,
+public transport, **Oda grocery planning** and optional **HelloFresh weekly-box
+management** into one shared dashboard on the home network. AI helps interpret
+incoming `ukeplan` documents and supports dinner planning, while the household
+remains in control of approvals and purchases.
+
+The planner connects the services Norwegian families already use:
+
+- **Spond** for activities and events;
+- **EnTur** for relevant real-time public transport departures and alerts;
+- **MET Norway / Yr** for local weather forecasts and practical advice;
+- **Oda MCP** for recipes, dinner suggestions, product search and the shared
+  grocery cart;
+- an optional, experimental **HelloFresh Norway** planner for upcoming boxes,
+  with one-time transient login, persistent token renewal, dish images and
+  guarded meal replacement/add/remove, per-week pause/resume, quick dish
+  filters, inline ingredients and a bounded Mac-local image cache prefetched
+  each morning;
+- school email, PDF `ukeplan` documents and Norwegian calendars; and
+- **Telegram** for intentional notifications outside the home network.
+
+The portal is the large, touch-friendly surface for FamilyBot. It runs on an
 always-on Mac mini, is advertised with Bonjour and is reachable only on the home
 LAN. The home screen presents school, activities, weather, transport and system
 status; child pages provide large one-tap chores and reward progress; parent
 mode manages chores, goals, approvals, weekly achievement surprises and the
-family Kanban board. The adjacent `Oda` tab lets everyone on the trusted home
-dashboard search for groceries and prepare the household cart through Oda MCP;
-review, checkout and payment remain on Oda.
+family Kanban board. The grocery tab normally uses Oda for dinner planning and
+cart preparation; an optional HelloFresh physical-test flag replaces that tab
+with the household's upcoming boxes and meal choices.
 
 > **Built for local family life:** the UI and chores model are reusable, while
 > the included adapters can be configured for local school, activity, weather
@@ -22,12 +40,12 @@ review, checkout and payment remain on Oda.
 Familieportalen is designed as a LAN-only service for a trusted household
 network. The dashboard, curated API and local data stay on the home network;
 Telegram is the intentional external integration and is handled by
-FamilyBot/OpenClaw. The security controls in this repository therefore provide
-defense in depth for a self-hosted home appliance: origin checks, authentication,
-rate limiting, owner-only local files, curated data boundaries and safe local
-deployment. This is not an internet-facing multi-tenant service, and it should
-not be exposed directly to the public internet without an explicit security
-review and additional perimeter controls.
+the companion Core service. The security controls in this repository therefore
+provide defense in depth for a self-hosted home appliance: origin checks,
+authentication, rate limiting, owner-only local files, curated data boundaries
+and safe local deployment. This is not an internet-facing multi-tenant service,
+and it should not be exposed directly to the public internet without an explicit
+security review and additional perimeter controls.
 
 ## Start here
 
@@ -65,9 +83,11 @@ Runtime dependencies are:
 - one shared owner-only
   `$HOME/.openclaw/workspace/config/family.local.json` and
   `$HOME/.openclaw/workspace/db/family.db`;
-- Node.js/npm for the portal build and Python 3 for the local API/service;
-- macOS `launchd` for the local service; OpenClaw is optional for conversational
-  and Telegram features, but is part of the normal workspace convention.
+- Node.js/npm for the portal build, and `uv` for the isolated Python 3.12
+  API/service runtime (`brew install uv` on macOS);
+- macOS `launchd` for the local service; the local agent runtime is optional for
+  conversational and Telegram features, and existing installations use the
+  `.openclaw` workspace convention;
 - an ordinary Oda account for the optional grocery tab; the hosted
   `https://oda.com/mcp` service uses OAuth and needs no API key.
 
@@ -143,6 +163,8 @@ Clone `familybot-core` and `familybot-portal` as sibling directories, then:
 
 ```bash
 npm ci
+uv venv --python 3.12 .venv
+uv pip sync --python .venv/bin/python requirements.txt
 npm run security:audit
 npm run docs:check
 npm run preflight
@@ -156,12 +178,48 @@ The API reads curated columns only: no raw email bodies, sender addresses,
 Telegram identifiers, raw Spond JSON, credentials or filesystem paths are
 returned to the browser.
 
-The optional Oda tab talks directly to Oda's hosted MCP server; it does not use
-an AI model. Any valid local dashboard session can search, load personal
-suggestions and edit the shared Oda cart. OAuth tokens stay in the owner-only
+The optional Oda tab talks directly to Oda's hosted MCP server. Any valid local
+dashboard session can ask the bounded dinner assistant for recipe suggestions,
+open verified public Oda recipe images, ingredients and instructions in a
+kiosk-safe Portal view with explicit return navigation, search products, load
+personal suggestions and edit the shared Oda cart. A
+tool-free OpenAI planner may turn the dinner request and a small set of Oda
+recipe titles into search phrases; only the named Oda adapter can read recipes
+or change the cart, and every recipe add requires an explicit button press.
+OAuth tokens stay in the owner-only
 `$HOME/.openclaw/credentials/oda-mcp.json` file and never enter browser
-responses or Git. Checkout and payment are intentionally handed off to Oda.
+responses, model prompts or Git. Checkout and payment are intentionally handed
+off to Oda.
 See [Oda grocery integration](docs/ODA_GROCERIES.md).
+
+The experimental HelloFresh integration uses two flags. `hellofresh` exposes a
+curated public Norwegian menu; `hellofresh_account` replaces Oda in the visible
+navigation with an in-Portal email/password form, persistent owner-only local
+refresh credentials and the household's upcoming boxes. Selected meals are
+shown first with images; the next modifiable week opens by default. Meals can be
+filtered by broad family-friendly categories and expanded in place to show the
+portion-matched recipe without opening another page. On first use,
+the password reaches the Portal API once over the trusted home LAN. The Mac
+forwards it to HelloFresh's fixed Norway endpoint through a pinned
+Chrome-fingerprinted, certificate-verified HTTPS transport, then discards it.
+The password is never stored, logged, returned, placed in model context or
+committed. Only allowlisted provider tokens are written to the owner-only
+credential file. The former email-link fallback was removed after live evidence
+showed that HelloFresh sends a password-reset email for this market/account.
+Subsequent Portal responses contain no provider credentials. Because the Portal
+is a trusted-LAN HTTP appliance, first use should run only on the private home
+network. The renewable token survives restarts and temporary provider outages;
+the login form returns only after an explicit authentication rejection.
+The account surface permits only explicit, confirmed replacement/add/remove of
+meals and pause/resume of one identified week. It cannot change the subscription
+plan, servings, address or payment, and cannot check out or place an order.
+Stale views and provider mismatches are rejected and every write is read back
+before success is shown. Reviewed public recipe images are rewritten to a
+content-addressed local API route, cached outside Git and prefetched at 04:45 by
+the Portal's own LaunchAgent. This removes the iPad's dependency on dozens of
+HelloFresh CDN requests while retaining a bounded stale image during provider
+outages. Both flags default to `false`; Oda remains in code for rollback. See
+[HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;
 Core respects explicit parent subject metadata over stale PDF headings. Portal

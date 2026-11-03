@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 from dashboard_migration import clear_active_setup, ensure_default_rewards, migrate
 from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, health_summary, transport_summary, trusted_portal_origin, weather_summary
+from hellofresh_account import HelloFreshAccountConflict, HelloFreshAccountValidation
+from hellofresh_images import HelloFreshImageCache
 
 
 SCHEMA = """
@@ -50,6 +52,18 @@ class FakeOdaClient:
         self.calls.append(("suggestions", kind))
         return {"result": []}
 
+    def liked_recipes(self, page=1, size=12):
+        self.calls.append(("liked_recipes", page, size))
+        return {"recipes": []}
+
+    def purchased_recipes(self, page=1, size=12):
+        self.calls.append(("purchased_recipes", page, size))
+        return {"recipes": []}
+
+    def search_recipes(self, query, page=1, size=8):
+        self.calls.append(("search_recipes", query, page, size))
+        return {"recipes": []}
+
     def cart(self):
         self.calls.append(("cart",))
         return {"groups": [], "productQuantityCount": 0, "totalGrossAmount": "0 kr", "url": "https://oda.com/"}
@@ -58,9 +72,145 @@ class FakeOdaClient:
         self.calls.append(("change", product_id, quantity))
         return self.cart()
 
+    def add_recipe(self, recipe_id, portions):
+        self.calls.append(("add_recipe", int(recipe_id), portions))
+        return self.cart()
+
     def clear_cart(self):
         self.calls.append(("clear",))
         return self.cart()
+
+    def disconnect(self):
+        self.calls.append(("disconnect",))
+        self.connected = False
+
+
+class FakeHelloFreshClient:
+    def __init__(self):
+        self.calls = []
+
+    def menu(self):
+        self.calls.append(("menu",))
+        return {
+            "provider": "HelloFresh Norge",
+            "country": "NO",
+            "locale": "nb-NO",
+            "week": "2026-W46",
+            "read_only": True,
+            "stale": False,
+            "fetched_at": "2026-11-02T12:00:00+01:00",
+            "recipes": [{
+                "id": "a" * 24,
+                "course_index": 1,
+                "name": "Testrett",
+                "image_url": "https://img.hellofresh.com/test/menu.jpg",
+            }],
+        }
+
+
+class FakeImageResponse:
+    def __init__(self):
+        body = b"\xff\xd8\xff\xe0familybot"
+        self.body = io.BytesIO(body)
+        self.headers = {"content-type": "image/jpeg", "content-length": str(len(body))}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def geturl(self):
+        return "https://img.hellofresh.com/test/menu.jpg"
+
+    def read(self, size=-1):
+        return self.body.read(size)
+
+
+class FakeHelloFreshAccountClient:
+    def __init__(self):
+        self.connected = False
+        self.calls = []
+        self.login_error = None
+        self.mutation_error = None
+
+    def status(self):
+        return {
+            "connected": self.connected,
+            "credentials_local": True,
+            "read_only": False,
+            "allowed_writes": ["meal_selection", "week_pause"],
+        }
+
+    def login(self, payload):
+        self.calls.append(("login", set(payload)))
+        if self.login_error:
+            raise self.login_error
+        self.connected = True
+        return self.status()
+
+    def menu(self, week):
+        self.calls.append(("menu", week))
+        return {
+            "provider": "HelloFresh Norge",
+            "country": "NO",
+            "locale": "nb-NO",
+            "week": week,
+            "read_only": False,
+            "account": True,
+            "selected_count": 1,
+            "selection_snapshot": "a" * 64,
+            "stale": False,
+            "fetched_at": "2026-11-02T12:00:00+01:00",
+            "recipes": [],
+        }
+
+    def recipe_detail(self, recipe_id, servings):
+        self.calls.append(("recipe_detail", recipe_id, servings))
+        return {
+            "id": recipe_id,
+            "name": "Testrett",
+            "servings": servings,
+            "ingredients": [],
+            "allergens": [],
+            "may_contain": [],
+            "nutrition": [],
+        }
+
+    def weeks(self):
+        self.calls.append(("weeks",))
+        return {
+            "default_week": "2026-W46",
+            "latest_menu_week": "2026-W49",
+            "weeks": [{
+                "week": "2026-W46",
+                "delivery_date": "2026-11-09T12:00:00+01:00",
+                "cutoff_at": "2026-11-03T23:59:59+01:00",
+                "status": "RUNNING",
+                "state": "RUNNING",
+                "paused": False,
+                "blocked": False,
+                "menu_published": True,
+                "meal_count": 3,
+                "servings": 4,
+                "can_edit_meals": True,
+                "can_pause": True,
+                "can_resume": False,
+                "snapshot": "b" * 64,
+            }],
+        }
+
+    def change_selection(self, week, payload, action):
+        self.calls.append(("change_selection", week, action, payload))
+        if self.mutation_error:
+            raise self.mutation_error
+        return self.menu(week)
+
+    def set_week_paused(self, week, payload):
+        self.calls.append(("set_week_paused", week, payload))
+        if self.mutation_error:
+            raise self.mutation_error
+        return {**self.weeks()["weeks"][0], "paused": payload["paused"]}
 
     def disconnect(self):
         self.calls.append(("disconnect",))
@@ -548,6 +698,41 @@ class RepositoryTests(unittest.TestCase):
             self.assertEqual(json.loads(response.read())["search"]["result"][0]["query"], "melk")
             self.assertIn(("search", "melk", 1), oda.calls)
             connection.close()
+
+            def dinner_planner(_oda, payload):
+                return {
+                    "answer": "Tre forslag",
+                    "recipes": [{"id": 42, "title": "Taco"}],
+                    "portions": payload["portions"],
+                    "personalized": True,
+                    "model_used": True,
+                }
+
+            server.dinner_planner = dinner_planner
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            connection.request(
+                "POST",
+                "/api/oda/dinner",
+                json.dumps({"question": "rask middag", "portions": 5}),
+                headers,
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(json.loads(response.read())["portions"], 5)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            connection.request(
+                "POST",
+                "/api/oda/recipes/42/cart",
+                json.dumps({"portions": 5}),
+                headers,
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            response.read()
+            self.assertIn(("add_recipe", 42, 5), oda.calls)
+            connection.close()
         finally:
             server.shutdown()
             server.server_close()
@@ -571,6 +756,275 @@ class RepositoryTests(unittest.TestCase):
             self.assertNotIn("secret-code", body)
             self.assertIn(("callback", {"code": ["secret-code"], "state": ["random-state"]}), oda.calls)
             connection.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_hellofresh_read_only_menu_requires_flag_and_local_session(self):
+        hellofresh = FakeHelloFreshClient()
+        disabled = FamilyApiServer(
+            ("127.0.0.1", 0), self.repo, "123456", {"http://localhost:3000"},
+            hellofresh_client=hellofresh,
+            hellofresh_enabled=False,
+        )
+        disabled_thread = threading.Thread(target=disabled.serve_forever, daemon=True)
+        disabled_thread.start()
+        try:
+            headers = {
+                "Origin": "http://localhost:3000",
+                "X-FamilyBot-Local-Token": disabled.session_token,
+            }
+            connection = http.client.HTTPConnection("127.0.0.1", disabled.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/menu", headers=headers)
+            self.assertEqual(connection.getresponse().status, 404)
+            connection.close()
+            self.assertEqual(hellofresh.calls, [])
+        finally:
+            disabled.shutdown()
+            disabled.server_close()
+            disabled_thread.join(timeout=2)
+
+        image_cache = HelloFreshImageCache(
+            Path(self.temp.name) / "hellofresh-images",
+            opener=lambda *_args, **_kwargs: FakeImageResponse(),
+        )
+        enabled = FamilyApiServer(
+            ("127.0.0.1", 0), self.repo, "123456", {"http://localhost:3000"},
+            hellofresh_client=hellofresh,
+            hellofresh_enabled=True,
+            hellofresh_image_cache=image_cache,
+        )
+        enabled_thread = threading.Thread(target=enabled.serve_forever, daemon=True)
+        enabled_thread.start()
+        try:
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/menu", headers={"Origin": "http://localhost:3000"})
+            self.assertEqual(connection.getresponse().status, 403)
+            connection.close()
+
+            headers = {
+                "Origin": "http://localhost:3000",
+                "X-FamilyBot-Local-Token": enabled.session_token,
+            }
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/menu", headers=headers)
+            response = connection.getresponse()
+            payload = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertEqual(payload["menu"]["country"], "NO")
+            image_route = payload["menu"]["recipes"][0]["image_url"]
+            self.assertRegex(image_route, r"^/api/hellofresh/images/[0-9a-f]{64}$")
+            self.assertIn(("menu",), hellofresh.calls)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", image_route)
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.getheader("Content-Type"), "image/jpeg")
+            self.assertIn("max-age=604800", response.getheader("Cache-Control"))
+            etag = response.getheader("ETag")
+            self.assertTrue(response.read().startswith(b"\xff\xd8\xff"))
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", image_route, headers={"If-None-Match": etag})
+            response = connection.getresponse()
+            self.assertEqual(response.status, 304)
+            response.read()
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", "/api/session", headers={"Origin": "http://localhost:3000"})
+            session = json.loads(connection.getresponse().read())
+            self.assertTrue(session["features"]["hellofresh"])
+            connection.close()
+        finally:
+            enabled.shutdown()
+            enabled.server_close()
+            enabled_thread.join(timeout=2)
+
+    def test_hellofresh_backend_login_is_transient_and_local(self):
+        public_menu = FakeHelloFreshClient()
+        account = FakeHelloFreshAccountClient()
+        server = FamilyApiServer(
+            ("127.0.0.1", 0),
+            self.repo,
+            "123456",
+            {"http://localhost:3000"},
+            hellofresh_client=public_menu,
+            hellofresh_enabled=True,
+            hellofresh_account_client=account,
+            hellofresh_account_enabled=True,
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        headers = {
+            "Origin": "http://localhost:3000",
+            "X-FamilyBot-Local-Token": server.session_token,
+            "Content-Type": "application/json",
+        }
+        try:
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/status", headers=headers)
+            response = connection.getresponse()
+            status = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertFalse(status["connected"])
+            self.assertNotIn("email", status)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/auth/login",
+                json.dumps({"email": "parent@example.no", "password": "site-only"}),
+                headers,
+            )
+            response = connection.getresponse()
+            login_body = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn(("login", {"email", "password"}), account.calls)
+            self.assertNotIn("parent@example.no", login_body)
+            self.assertNotIn("site-only", login_body)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/account/menu?week=2026-W46", headers=headers)
+            response = connection.getresponse()
+            menu = json.loads(response.read())["menu"]
+            self.assertEqual(response.status, 200)
+            self.assertTrue(menu["account"])
+            self.assertIn(("menu", "2026-W46"), account.calls)
+            connection.close()
+
+            recipe_id = "a" * 24
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "GET",
+                f"/api/hellofresh/account/recipes/{recipe_id}?servings=4",
+                headers=headers,
+            )
+            response = connection.getresponse()
+            recipe = json.loads(response.read())["recipe"]
+            self.assertEqual(response.status, 200)
+            self.assertEqual(recipe["name"], "Testrett")
+            self.assertIn(("recipe_detail", recipe_id, 4), account.calls)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request("GET", "/api/hellofresh/account/weeks", headers=headers)
+            response = connection.getresponse()
+            weeks = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertEqual(weeks["default_week"], "2026-W46")
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/account/weeks/2026-W46/add",
+                json.dumps({"snapshot": "a" * 64, "course_index": 3}),
+                {"Origin": "http://localhost:3000", "Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 403)
+            response.read()
+            self.assertFalse(any(call[0] == "change_selection" for call in account.calls))
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/account/weeks/2026-W46/replace",
+                json.dumps({"snapshot": "a" * 64, "from_course_index": 1, "to_course_index": 3}),
+                headers,
+            )
+            response = connection.getresponse()
+            changed = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertEqual(changed["menu"]["week"], "2026-W46")
+            self.assertTrue(any(call[:3] == ("change_selection", "2026-W46", "replace") for call in account.calls))
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "PATCH",
+                "/api/hellofresh/account/weeks/2026-W46/status",
+                json.dumps({"snapshot": "b" * 64, "paused": True}),
+                headers,
+            )
+            response = connection.getresponse()
+            paused = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertTrue(paused["week"]["paused"])
+            self.assertIn(("set_week_paused", "2026-W46", {"snapshot": "b" * 64, "paused": True}), account.calls)
+            connection.close()
+
+            account.mutation_error = HelloFreshAccountConflict("Uken er endret.")
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request(
+                "POST",
+                "/api/hellofresh/account/weeks/2026-W46/add",
+                json.dumps({"snapshot": "a" * 64, "course_index": 3}),
+                headers,
+            )
+            response = connection.getresponse()
+            conflict = json.loads(response.read())
+            self.assertEqual(response.status, 409)
+            self.assertTrue(conflict["refresh"])
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+            connection.request("DELETE", "/api/hellofresh/connection", headers=headers)
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            response.read()
+            self.assertIn(("disconnect",), account.calls)
+            connection.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_hellofresh_login_limits_consecutive_failures(self):
+        account = FakeHelloFreshAccountClient()
+        account.login_error = HelloFreshAccountValidation("Ikke godkjent.")
+        server = FamilyApiServer(
+            ("127.0.0.1", 0),
+            self.repo,
+            "123456",
+            {"http://localhost:3000"},
+            hellofresh_client=FakeHelloFreshClient(),
+            hellofresh_enabled=True,
+            hellofresh_account_client=account,
+            hellofresh_account_enabled=True,
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        headers = {
+            "Origin": "http://localhost:3000",
+            "X-FamilyBot-Local-Token": server.session_token,
+            "Content-Type": "application/json",
+        }
+        try:
+            statuses = []
+            for _ in range(6):
+                connection = http.client.HTTPConnection(
+                    "127.0.0.1", server.server_address[1], timeout=2
+                )
+                connection.request(
+                    "POST",
+                    "/api/hellofresh/auth/login",
+                    json.dumps({"email": "parent@example.no", "password": "wrong"}),
+                    headers,
+                )
+                response = connection.getresponse()
+                statuses.append(response.status)
+                response.read()
+                connection.close()
+            self.assertEqual(statuses, [400, 400, 400, 400, 400, 429])
         finally:
             server.shutdown()
             server.server_close()

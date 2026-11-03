@@ -30,7 +30,17 @@ When the sibling core repository is available, also read
 - Children need large, tap-first controls and no typing for normal chore use.
   Parent household-administration mutations require a parent session. The Oda
   cart is an explicit trusted-LAN exception available to every dashboard user;
-  checkout and payment still happen at Oda.
+  its dinner model is tool-free, recipe/cart actions stay allowlisted and
+  explicit, and checkout/payment still happen at Oda.
+- Experimental meal providers remain disabled by default. HelloFresh account
+  access uses one rate-limited trusted-LAN API request and a pinned
+  browser-fingerprinted HTTPS transport to the fixed Norway provider endpoint,
+  then persists only owner-protected tokens. The password may exist only in the
+  first-use form and transient request memory; it must never be stored, logged,
+  returned or placed in model context. Provider tokens may exist only
+  transiently before the allowlisted handoff. It is read-only during physical
+  testing; provider writes require a new mutation security review and explicit
+  acceptance criteria.
 - User-visible unavailable/stale states are honest. Do not convert a missing
   source into a healthy or empty-looking result.
 - Smart Home is an add-on behind a narrow provider adapter. The browser must not
@@ -47,7 +57,7 @@ git diff --check
 ```
 
 Run `npm run preflight` before deployment with the real ignored config, PIN and
-database available. All 18 current critical acceptance criteria must pass.
+database available. All 20 current critical acceptance criteria must pass.
 Extend the acceptance contract before shipping a new user-visible capability.
 
 Normal work is committed and deployed from `dev` only. `main` is the stable

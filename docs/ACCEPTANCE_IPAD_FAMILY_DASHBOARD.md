@@ -266,6 +266,8 @@ rendered UI assertions, credential permissions and production status route.
 - The adapter accepts only `https://www.hellofresh.no`, country `NO`, locale
   `nb-NO`, valid ISO weeks and reviewed public image hosts. Network calls and
   response sizes are bounded, and a cached fallback is visibly marked stale.
+- Curated image URLs use the content-addressed local image route; the browser is
+  not required to retrieve every card directly from the provider CDN.
 - The public-menu adapter contains no HelloFresh username, password, account
   cookie, embedded bootstrap token, generic source payload, browser automation
   or mutation route. Account access is isolated in the separately flagged
@@ -313,6 +315,16 @@ flag-on acceptance probe.
   reviewed HelloFresh CDN images; all other dishes follow as options. Option
   dishes can be narrowed with touch-friendly meat, fish, pasta and vegetarian
   filters derived from existing menu metadata.
+- Public recipe images are registered server-side, cached outside Git and
+  served locally with ETag/browser caching. The image route accepts no target
+  URL, revalidates the reviewed CDN host after redirects, accepts only bounded
+  image MIME/magic types, retains a valid stale image on refresh failure and
+  requests a 960-pixel provider rendition before download. It prunes disk use
+  to 600 images or 256 MB. Selected dish images are requested
+  eagerly; remaining options stay lazy-loaded.
+- A Portal-owned LaunchAgent prefetches every published upcoming menu at 04:45,
+  logs counts rather than URLs/account data and remains independent of Core's
+  briefing and ingestion schedule.
 - Any selected or optional dish expands in place and collapses again without
   navigation or a popup. Detail is fetched only on first expansion, then cached
   in the browser. It shows portion-matched ingredients, referenced allergens
@@ -338,11 +350,12 @@ Evidence: transient-password exclusion from disk/responses, fixed provider URL,
 browser-TLS request metadata, provider challenge classification, refresh
 rejection, opaque-token acceptance, unsafe-token rejection, temporary-failure
 retention, restart/refresh persistence, file-mode, exact range-boundary,
-selected-first/image, category classification, curated portion-aware recipe
+selected-first/local-image-cache, category classification, curated portion-aware recipe
 detail, inline expand/collapse, add-on preservation, stale-state, product-size,
 replacement/add/remove and pause/read-after-write unit tests; local-session API
 authorization and response secret exclusion; popup/email-flow exclusion and
-rendered touch UI assertions; read-only live connected probe.
+rendered touch UI assertions; cache host/redirect/type/size/rendition/stale/prune tests;
+scheduled-prefetch registration; read-only live connected image probe.
 
 ## Release measurement
 

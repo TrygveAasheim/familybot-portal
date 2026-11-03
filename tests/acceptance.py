@@ -188,21 +188,24 @@ def main() -> None:
 
     started=time.monotonic()
     hellofresh_source=(ROOT/"local_api/hellofresh_norway.py").read_text()
+    hellofresh_image_source=(ROOT/"local_api/hellofresh_images.py").read_text()
     configured_features=PORTAL.get("features",{}) if isinstance(PORTAL.get("features",{}),dict) else {}
     hellofresh_enabled=configured_features.get("hellofresh") is True
     hellofresh_status,hellofresh_raw=request(API_PORT,"GET","/api/hellofresh/menu",{"X-FamilyBot-Local-Token":local})
     hellofresh_payload=json.loads(hellofresh_raw) if hellofresh_status==200 else {}
     menu=hellofresh_payload.get("menu",{})
+    public_recipe_images=[item.get("image_url") for item in menu.get("recipes",[]) if isinstance(item,dict) and item.get("image_url")]
     live_boundary=(
         hellofresh_status==200
         and menu.get("country")=="NO"
         and menu.get("locale")=="nb-NO"
         and menu.get("read_only") is True
         and isinstance(menu.get("recipes"),list)
+        and all(value.startswith("/api/hellofresh/images/") for value in public_recipe_images)
         and "access_token" not in hellofresh_raw.decode("utf-8",errors="replace")
     ) if hellofresh_enabled else hellofresh_status==404
     hellofresh_ui=all(text in source for text in ("features.hellofresh",">HelloFresh</button>","Kommende matkasser","Offentlig meny","/api/hellofresh/menu"))
-    hellofresh_boundary=all(text in hellofresh_source for text in ("https://www.hellofresh.no","MAX_HTML_BYTES","ALLOWED_IMAGE_HOSTS","systemCountry","nb-NO")) and not any(text in hellofresh_source for text in ("HELLOFRESH_EMAIL","HELLOFRESH_PASSWORD","playwright","selenium"))
+    hellofresh_boundary=all(text in hellofresh_source for text in ("https://www.hellofresh.no","MAX_HTML_BYTES","ALLOWED_IMAGE_HOSTS","systemCountry","nb-NO")) and all(text in hellofresh_image_source for text in ("MAX_IMAGE_BYTES","MAX_CACHE_BYTES","ALLOWED_CONTENT_TYPES","_safe_image_url","stale beats empty")) and not any(text in hellofresh_source for text in ("HELLOFRESH_EMAIL","HELLOFRESH_PASSWORD","playwright","selenium"))
     record("AC-19",hellofresh_ui and hellofresh_boundary and live_boundary,f"HelloFresh flag={hellofresh_enabled}; route={hellofresh_status}; Norwegian public read-only boundary verified",started)
 
     started=time.monotonic()
@@ -214,13 +217,18 @@ def main() -> None:
     account_menu_status,account_menu_raw=request(API_PORT,"GET","/api/hellofresh/account/menu",{"X-FamilyBot-Local-Token":local})
     account_detail_status=None
     account_detail_raw=b""
+    account_image_status=None
+    account_recipe_images=[]
     if account_enabled and account_menu_status==200:
         account_menu_payload=json.loads(account_menu_raw).get("menu",{})
         account_recipes=account_menu_payload.get("recipes",[])
+        account_recipe_images=[item.get("image_url") for item in account_recipes if isinstance(item,dict) and item.get("image_url")]
         if account_recipes:
             account_recipe_id=account_recipes[0].get("id","")
             account_servings=account_menu_payload.get("servings") or 4
             account_detail_status,account_detail_raw=request(API_PORT,"GET",f"/api/hellofresh/account/recipes/{account_recipe_id}?servings={account_servings}",{"X-FamilyBot-Local-Token":local})
+        if account_recipe_images:
+            account_image_status,_=request(API_PORT,"GET",account_recipe_images[0])
     detail_boundary=(
         account_detail_status==200
         and isinstance(json.loads(account_detail_raw).get("recipe",{}).get("ingredients"),list)
@@ -234,6 +242,8 @@ def main() -> None:
         and set(account_status.get("allowed_writes",[]))=={"meal_selection","week_pause"}
         and account_weeks_status in {200,401}
         and account_menu_status in {200,401}
+        and (account_menu_status!=200 or all(value.startswith("/api/hellofresh/images/") for value in account_recipe_images))
+        and (not account_recipe_images or account_image_status==200)
         and detail_boundary
         and not any(secret in b"".join((account_status_raw,account_weeks_raw,account_menu_raw,account_detail_raw)).decode("utf-8",errors="replace") for secret in ("access_token","refresh_token","email","customerId","subscriptionId"))
     ) if account_enabled else account_status_code==404
@@ -241,7 +251,9 @@ def main() -> None:
     account_boundary=all(text in account_source for text in ("/gw/auth/token","/gw/login","/gw/refresh","/gw/recipes/recipes/","recipe_detail","complete_login","curl_cffi","impersonate=\"chrome\"","verify=True","Origin","Sec-Fetch-Site",".openclaw/credentials/hellofresh-no.json","0o600","challenge","/gw/v1/carts/","x-requested-by","_preserved_extras","_menu_snapshot","hasSeamlessDowngraded","_mutation_lock")) and not any(text in account_source for text in ("passwordless","MAGIC_LINK","HELLOFRESH_PASSWORD","playwright","selenium"))
     account_credentials=Path.home()/".openclaw/credentials/hellofresh-no.json"
     account_credentials_safe=not account_credentials.exists() or account_credentials.stat().st_mode & 0o777==0o600
-    record("AC-20",account_ui and account_boundary and account_live and account_credentials_safe,f"HelloFresh account flag={account_enabled}; status={account_status_code}; weeks={account_weeks_status}; menu={account_menu_status}; detail={account_detail_status}; inline recipe detail/filter boundary, transient trusted-LAN password, bounded meal/week actions, stale-state and read-after-write controls, credential mode={account_credentials_safe}",started)
+    image_prefetch_launch=subprocess.run(["launchctl","print",f"gui/{os.getuid()}/ai.familybot.portal-images"],capture_output=True,text=True)
+    image_schedule_ok=image_prefetch_launch.returncode==0 if account_enabled else True
+    record("AC-20",account_ui and account_boundary and account_live and account_credentials_safe and image_schedule_ok,f"HelloFresh account flag={account_enabled}; status={account_status_code}; weeks={account_weeks_status}; menu={account_menu_status}; detail={account_detail_status}; image={account_image_status}; local bounded image cache/prefetch, inline recipe detail/filter boundary, transient trusted-LAN password, bounded meal/week actions, stale-state and read-after-write controls, credential mode={account_credentials_safe}",started)
 
     passed=sum(item["status"]=="pass" for item in results)
     report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}

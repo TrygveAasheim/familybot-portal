@@ -17,7 +17,8 @@
   account feature flags. It supports transient email/password first use through
   a browser-fingerprinted provider transport, persistent token-only local
   renewal, upcoming-week navigation, images, selected-first menus, guarded meal
-  replacement/add/remove and per-week pause/resume; see
+  replacement/add/remove, per-week pause/resume and a bounded Mac-local image
+  cache prefetched each morning; see
   [the experiment contract](HELLOFRESH_NORWAY.md);
 - Telegram/OpenClaw child-chore interview bridge with preview, explicit confirmation and idempotent creation;
 - child-specific week-plan detail view with structured full plan text, optional validated day/category interpretation, preserved line breaks and bullets, structured days and return navigation;

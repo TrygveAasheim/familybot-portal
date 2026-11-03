@@ -12,6 +12,7 @@ from unittest.mock import patch
 from dashboard_migration import clear_active_setup, ensure_default_rewards, migrate
 from familybot_api import FamilyApiServer, FamilyRepository, ValidationError, health_summary, transport_summary, trusted_portal_origin, weather_summary
 from hellofresh_account import HelloFreshAccountConflict, HelloFreshAccountValidation
+from hellofresh_images import HelloFreshImageCache
 
 
 SCHEMA = """
@@ -98,8 +99,32 @@ class FakeHelloFreshClient:
             "read_only": True,
             "stale": False,
             "fetched_at": "2026-11-02T12:00:00+01:00",
-            "recipes": [],
+            "recipes": [{
+                "id": "a" * 24,
+                "course_index": 1,
+                "name": "Testrett",
+                "image_url": "https://img.hellofresh.com/test/menu.jpg",
+            }],
         }
+
+
+class FakeImageResponse:
+    def __init__(self):
+        body = b"\xff\xd8\xff\xe0familybot"
+        self.body = io.BytesIO(body)
+        self.headers = {"content-type": "image/jpeg", "content-length": str(len(body))}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def geturl(self):
+        return "https://img.hellofresh.com/test/menu.jpg"
+
+    def read(self, size=-1):
+        return self.body.read(size)
 
 
 class FakeHelloFreshAccountClient:
@@ -760,10 +785,15 @@ class RepositoryTests(unittest.TestCase):
             disabled.server_close()
             disabled_thread.join(timeout=2)
 
+        image_cache = HelloFreshImageCache(
+            Path(self.temp.name) / "hellofresh-images",
+            opener=lambda *_args, **_kwargs: FakeImageResponse(),
+        )
         enabled = FamilyApiServer(
             ("127.0.0.1", 0), self.repo, "123456", {"http://localhost:3000"},
             hellofresh_client=hellofresh,
             hellofresh_enabled=True,
+            hellofresh_image_cache=image_cache,
         )
         enabled_thread = threading.Thread(target=enabled.serve_forever, daemon=True)
         enabled_thread.start()
@@ -783,7 +813,26 @@ class RepositoryTests(unittest.TestCase):
             payload = json.loads(response.read())
             self.assertEqual(response.status, 200)
             self.assertEqual(payload["menu"]["country"], "NO")
+            image_route = payload["menu"]["recipes"][0]["image_url"]
+            self.assertRegex(image_route, r"^/api/hellofresh/images/[0-9a-f]{64}$")
             self.assertIn(("menu",), hellofresh.calls)
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", image_route)
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.getheader("Content-Type"), "image/jpeg")
+            self.assertIn("max-age=604800", response.getheader("Cache-Control"))
+            etag = response.getheader("ETag")
+            self.assertTrue(response.read().startswith(b"\xff\xd8\xff"))
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)
+            connection.request("GET", image_route, headers={"If-None-Match": etag})
+            response = connection.getresponse()
+            self.assertEqual(response.status, 304)
+            response.read()
             connection.close()
 
             connection = http.client.HTTPConnection("127.0.0.1", enabled.server_address[1], timeout=2)

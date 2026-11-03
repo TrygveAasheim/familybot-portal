@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.familybot.portal-images</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOUR_ACCOUNT/.openclaw/runtime/familybot-portal/.venv/bin/python</string>
+    <string>/Users/YOUR_ACCOUNT/.openclaw/runtime/familybot-portal/scripts/prefetch_hellofresh_images.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/YOUR_ACCOUNT/.openclaw/runtime/familybot-portal</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>45</integer>
+  </dict>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/YOUR_ACCOUNT/Library/Logs/familybot-portal-images.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOUR_ACCOUNT/Library/Logs/familybot-portal-images.error.log</string>
+</dict>
+</plist>

@@ -56,9 +56,10 @@ function OdaRecipeImage({recipe}:{recipe:OdaRecipe}){
 }
 function HelloFreshRecipeImage({recipe}:{recipe:HelloFreshRecipe}){
   if(!recipe.image_url)return <div className="hellofresh-image placeholder" aria-hidden="true">🍋</div>;
-  // Images are restricted server-side to HelloFresh's reviewed public CDN hosts.
+  const source=recipe.image_url.startsWith("/api/hellofresh/images/")?`${apiBase()}${recipe.image_url}`:recipe.image_url;
+  // The API rewrites reviewed HelloFresh CDN URLs to its bounded local disk cache.
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="hellofresh-image" src={recipe.image_url} alt={recipe.name} loading="lazy" referrerPolicy="no-referrer"/>;
+  return <img className="hellofresh-image" src={source} alt={recipe.name} loading={recipe.selected_quantity?"eager":"lazy"} fetchPriority={recipe.selected_quantity?"high":"auto"} referrerPolicy="no-referrer"/>;
 }
 function HelloFreshRecipeCard({recipe,actions,expandable=false,expanded=false,detail,detailLoading=false,detailError="",onToggle}:{recipe:HelloFreshRecipe;actions?:ReactNode;expandable?:boolean;expanded?:boolean;detail?:HelloFreshRecipeDetail;detailLoading?:boolean;detailError?:string;onToggle?:()=>void}){
   const difficulty=["","Enkel","Medium","Vanskelig"];

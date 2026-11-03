@@ -38,6 +38,7 @@ from hellofresh_account import (
     HelloFreshAccountUnavailable,
     HelloFreshAccountValidation,
 )
+from hellofresh_images import HelloFreshImageCache, HelloFreshImageUnavailable
 from hellofresh_norway import HelloFreshNorwayClient, HelloFreshUnavailable
 from oda_dinner import DinnerValidationError, recommend as recommend_dinner
 from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable, OdaValidationError
@@ -1728,6 +1729,25 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def respond_image(self, image: Any) -> None:
+        etag = f'"{image.etag}"'
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("Cache-Control", "public, max-age=604800, stale-while-revalidate=2592000")
+            self.send_header("ETag", etag)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", image.content_type)
+        self.send_header("Content-Length", str(len(image.body)))
+        self.send_header("Cache-Control", "public, max-age=604800, stale-while-revalidate=2592000")
+        self.send_header("ETag", etag)
+        self.send_header("Cross-Origin-Resource-Policy", "same-site")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.wfile.write(image.body)
+
     def respond_html(
         self,
         status: int,
@@ -1799,6 +1819,21 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             except sqlite3.Error:
                 self.respond(503, {"ok": False, "service": "familybot-dashboard-api"})
             return
+        image_match = re.fullmatch(r"/api/hellofresh/images/([0-9a-f]{64})", parsed.path)
+        if image_match:
+            if not self.app.features["hellofresh"]:
+                self.respond(404, {"error": "Ikke funnet."})
+                return
+            key = image_match.group(1)
+            if not self.app.hellofresh_images.is_registered(key):
+                self.respond(404, {"error": "Bildet finnes ikke i den lokale hurtigbufferen."})
+                return
+            try:
+                self.respond_image(self.app.hellofresh_images.get(key))
+            except HelloFreshImageUnavailable:
+                self.log_error("hellofresh image unavailable: %s", key[:12])
+                self.respond(503, {"error": "Bildet er midlertidig utilgjengelig."})
+            return
         if parsed.path == "/api/oda/oauth/callback":
             try:
                 portal_origin = self.app.oda.finish_authorization(parse_qs(parsed.query))
@@ -1857,7 +1892,8 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 return
             try:
                 if parsed.path == "/api/hellofresh/menu":
-                    self.respond(200, {"menu": self.app.hellofresh.menu()})
+                    menu = self.app.hellofresh.menu()
+                    self.respond(200, {"menu": self.app.hellofresh_images.localize_contract(menu)})
                 elif parsed.path == "/api/hellofresh/status" and self.app.features["hellofresh_account"]:
                     self.respond(200, self.app.hellofresh_account.status())
                 elif parsed.path == "/api/hellofresh/account/weeks" and self.app.features["hellofresh_account"]:
@@ -1868,7 +1904,8 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                     week = requested_week or self.app.hellofresh_account.weeks()["default_week"]
                     if not week:
                         raise HelloFreshAccountUnavailable("Fant ingen publisert HelloFresh-meny.")
-                    self.respond(200, {"menu": self.app.hellofresh_account.menu(week)})
+                    menu = self.app.hellofresh_account.menu(week)
+                    self.respond(200, {"menu": self.app.hellofresh_images.localize_contract(menu)})
                 elif self.app.features["hellofresh_account"] and (
                     recipe_match := re.fullmatch(
                         r"/api/hellofresh/account/recipes/([0-9a-f]{24})", parsed.path
@@ -1879,10 +1916,8 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                     if raw_servings and not raw_servings.isdigit():
                         raise HelloFreshAccountValidation("Ugyldig antall porsjoner.")
                     servings = int(raw_servings) if raw_servings.isdigit() else None
-                    self.respond(
-                        200,
-                        {"recipe": self.app.hellofresh_account.recipe_detail(recipe_match.group(1), servings)},
-                    )
+                    recipe = self.app.hellofresh_account.recipe_detail(recipe_match.group(1), servings)
+                    self.respond(200, {"recipe": self.app.hellofresh_images.localize_contract(recipe)})
                 else:
                     self.respond(404, {"error": "Ikke funnet."})
             except HelloFreshAccountValidation as exc:
@@ -2019,7 +2054,7 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                     result = self.app.hellofresh_account.change_selection(
                         selection.group(1), self.read_payload(), selection.group(2)
                     )
-                    self.respond(200, {"menu": result})
+                    self.respond(200, {"menu": self.app.hellofresh_images.localize_contract(result)})
                 elif method == "PATCH" and (
                     week_status := re.fullmatch(
                         r"/api/hellofresh/account/weeks/(\d{4}-W\d{2})/status", path
@@ -2163,7 +2198,8 @@ class FamilyApiServer(ThreadingHTTPServer):
                  hellofresh_client: HelloFreshNorwayClient | None = None,
                  hellofresh_enabled: bool | None = None,
                  hellofresh_account_client: HelloFreshAccountClient | None = None,
-                 hellofresh_account_enabled: bool | None = None):
+                 hellofresh_account_enabled: bool | None = None,
+                 hellofresh_image_cache: HelloFreshImageCache | None = None):
         super().__init__(address, FamilyApiHandler)
         self.repository = repository
         self.session_token = secrets.token_urlsafe(32)
@@ -2203,6 +2239,7 @@ class FamilyApiServer(ThreadingHTTPServer):
         self.oda = oda_client or OdaMcpClient(callback_url)
         self.hellofresh = hellofresh_client or HelloFreshNorwayClient()
         self.hellofresh_account = hellofresh_account_client or HelloFreshAccountClient()
+        self.hellofresh_images = hellofresh_image_cache or HelloFreshImageCache()
         self._hellofresh_login_attempts: dict[str, list[float]] = {}
         self._hellofresh_login_lock = threading.Lock()
         self.dinner_planner = dinner_planner or recommend_dinner

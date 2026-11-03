@@ -9,6 +9,9 @@
   replace or add/remove dishes, and pause or resume a week without leaving the
   kiosk browser. A follow-up adds quick meat, fish, pasta and vegetarian filters
   plus inline recipe expansion for ingredients, allergens and nutrition.
+  A performance follow-up replaces direct iPad-to-CDN card requests with a
+  bounded Mac-local image cache and warms upcoming menus before the household
+  opens the page.
 - Evidence: read-only live probes on 2026-11-02 found provider delivery weeks
   W46–W01, published menus through W49, 70 dishes with 70 reviewed CDN images
   in W46, three selected dishes identified by provider course indexes, and
@@ -16,16 +19,20 @@
   treats `rangeStart` as an exclusive boundary, so reads bracket the requested
   week and regression tests preserve that behavior. No provider mutation was
   made while discovering or verifying the contract.
-- Scope and owner: Portal-only adapters in `local_api/hellofresh_norway.py` and
-  `local_api/hellofresh_account.py`, named routes in
+- Scope and owner: Portal-only adapters in `local_api/hellofresh_norway.py`,
+  `local_api/hellofresh_account.py` and `local_api/hellofresh_images.py`, named routes in
   `local_api/familybot_api.py`, and the flagged HelloFresh page. Core ingestion,
-  SQLite, scheduled jobs and the retained Oda implementation are unchanged.
+  SQLite, scheduled jobs and the retained Oda implementation are unchanged;
+  image warm-up is owned by a separate Portal LaunchAgent.
 - Acceptance criteria: AC-19 and AC-20 in
   `ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md`.
 - Tests: transient-password and credential safety; exact week bracketing;
   selected-first normalization and image allowlisting; product-size mapping;
   deterministic category classification; portion-aware, curated recipe detail;
   inline expansion and accessible filter controls;
+  image source/redirect allowlisting, MIME and magic-byte validation, byte and
+  disk bounds, cache reuse, stale fallback, local HTTP caching and scheduled
+  upcoming-menu prefetch;
   replacement preserving unrelated meals and add-ons; add/remove; stale-view
   rejection before provider access; exact-week pause; read-after-write
   verification; route authorization and error mapping; rendered touch UI; full
@@ -35,7 +42,8 @@
   week's running/paused state. Server code derives subscription, customer,
   product and week identifiers; the browser cannot supply them. Address,
   payment, subscription-plan, servings, checkout and order placement are not
-  exposed.
+  exposed. The public image route accepts only a server-registered hash key and
+  never accepts an arbitrary URL or provider credential.
 - State and deployment: `portal.features.hellofresh` and
   `portal.features.hellofresh_account` both default off. The household test
   enables both on `dev`. There is no Portal database migration.
@@ -83,6 +91,28 @@ session. The local API calls one fixed recipe-detail endpoint, validates the
 provider recipe/account objects, identifiers and HTML are never forwarded.
 Protein add-on variants override stale vegetarian base tags, and punctuation-only
 provider description placeholders are omitted.
+
+## Local image cache
+
+Curated menu and recipe responses replace reviewed provider CDN URLs with
+`/api/hellofresh/images/<sha256>`. The frontend prefixes that route with the
+local API origin, loads the selected box images eagerly and keeps option images
+lazy. The route cannot be used as an open proxy: no URL parameter exists, and a
+key must already map to metadata created from the existing HelloFresh CDN host
+allowlist.
+
+On a cache miss the API validates the final redirect host, response size, MIME
+type and image signature before atomically storing an owner-only file beneath
+`$HOME/.openclaw/cache/familybot-portal/hellofresh-images`. The browser gets an
+ETag and one-week cache lifetime. A failed refresh leaves the prior valid image
+available. The current image host is asked for a 960-pixel bounded rendition,
+so full camera originals are never retained. Pruning keeps at most 600 images
+and 256 MB, ordered by recent use.
+
+`ai.familybot.portal-images` runs at 04:45 and asks only for published upcoming
+menus. It downloads missing reviewed images with four workers, records counts
+only and leaves provider/menu failures isolated from the dashboard. This is a
+Portal add-on schedule rather than a Core briefing dependency.
 
 Meal writes use the provider's full-cart contract, so the adapter re-reads the
 week immediately before each action. It derives the exact course indexes,

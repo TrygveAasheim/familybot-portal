@@ -139,12 +139,31 @@ before enabling account login.
 Authenticated reads expose upcoming delivery weeks plus the same curated recipe
 contract, selected quantities and total selected count. The provider's next
 modifiable delivery week is the default. Recipe images are returned only from
-reviewed HTTPS HelloFresh CDN hosts; no raw account identifiers are exposed.
+reviewed HTTPS HelloFresh CDN hosts and are rewritten to content-addressed local
+routes; no raw account identifiers are exposed.
 Menu filters are derived locally from bounded names, cuisines and tags. Opening
 one meal performs a read-only lookup by a validated 24-character recipe ID and
 returns only bounded description, timing, portion-matched ingredients,
 referenced allergens and nutrition. The browser never
 receives raw recipe/account payloads, HTML or a generic provider URL.
+
+The local image route accepts only a 64-character content-addressed key that the
+server registered while curating a menu. It accepts no source URL, query-based
+target or provider credential. The backing fetch revalidates the final HTTPS
+HelloFresh CDN host, MIME type and image magic bytes, caps each response at 6 MB,
+uses owner-only files outside Git and prunes the cache to at most 600 images or
+256 MB. For the current HelloFresh image service it requests a provider-bounded
+960-pixel rendition before download, rather than caching multi-megabyte camera
+originals. Because the images are public recipe artwork rather than household data,
+the registered-key route can be loaded by an HTML `img` element without the
+custom API token; all menu, account and recipe-detail routes remain protected.
+Browser responses carry an ETag and one-week cache lifetime. A valid prior image
+is retained if refresh fails.
+
+The Portal-owned 04:45 LaunchAgent reads only published upcoming menus, warms
+their allowlisted images with four bounded workers and writes count-only logs.
+It stores no menu/account payload and does not couple Core's ingestion or
+briefing schedules to this optional add-on.
 
 The bounded write allowlist contains only meal replacement/add/remove and
 pause/resume for one exact ISO week. The server derives customer, subscription,

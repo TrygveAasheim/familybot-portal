@@ -16,7 +16,8 @@ The planner connects the services Norwegian families already use:
 - an optional, experimental **HelloFresh Norway** planner for upcoming boxes,
   with one-time transient login, persistent token renewal, dish images and
   guarded meal replacement/add/remove, per-week pause/resume, quick dish
-  filters and inline ingredients;
+  filters, inline ingredients and a bounded Mac-local image cache prefetched
+  each morning;
 - school email, PDF `ukeplan` documents and Norwegian calendars; and
 - **Telegram** for intentional notifications outside the home network.
 
@@ -212,7 +213,11 @@ The account surface permits only explicit, confirmed replacement/add/remove of
 meals and pause/resume of one identified week. It cannot change the subscription
 plan, servings, address or payment, and cannot check out or place an order.
 Stale views and provider mismatches are rejected and every write is read back
-before success is shown. Both flags default to `false`; Oda remains in code for rollback. See
+before success is shown. Reviewed public recipe images are rewritten to a
+content-addressed local API route, cached outside Git and prefetched at 04:45 by
+the Portal's own LaunchAgent. This removes the iPad's dependency on dozens of
+HelloFresh CDN requests while retaining a bounded stale image during provider
+outages. Both flags default to `false`; Oda remains in code for rollback. See
 [HelloFresh Norway experiment](docs/HELLOFRESH_NORWAY.md).
 
 For Ukeplan changes, Core owns ingestion, PDF parsing and interpretation status;

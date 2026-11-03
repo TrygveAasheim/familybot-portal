@@ -25,7 +25,7 @@ test("server-renders the iPad family dashboard shell", async () => {
 });
 
 test("source keeps the data boundary and functional surfaces explicit", async () => {
-  const [page, consoleSource, apiSource, odaSource, dinnerSource, helloFreshSource, helloFreshAccountSource, deploySource, styles] = await Promise.all([
+  const [page, consoleSource, apiSource, odaSource, dinnerSource, helloFreshSource, helloFreshAccountSource, helloFreshImageSource, deploySource, imagePlist, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/FamilyConsole.tsx", import.meta.url), "utf8"),
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
@@ -33,7 +33,9 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
     readFile(new URL("../local_api/oda_dinner.py", import.meta.url), "utf8"),
     readFile(new URL("../local_api/hellofresh_norway.py", import.meta.url), "utf8"),
     readFile(new URL("../local_api/hellofresh_account.py", import.meta.url), "utf8"),
+    readFile(new URL("../local_api/hellofresh_images.py", import.meta.url), "utf8"),
     readFile(new URL("../scripts/deploy-local.sh", import.meta.url), "utf8"),
+    readFile(new URL("../launchd/ai.familybot.portal-images.plist", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(page, /codex-preview/);
@@ -127,11 +129,18 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.doesNotMatch(consoleSource, /Send engangskobling|Kopier hele lenken|auth\/link\/|auth\/bootstrap|auth\/complete/);
   assert.doesNotMatch(consoleSource, /window\.open\(/);
   assert.match(consoleSource, /HelloFreshRecipeImage/);
+  assert.match(consoleSource, /apiBase\(\).*recipe\.image_url/);
+  assert.match(consoleSource, /fetchPriority=\{recipe\.selected_quantity\?"high":"auto"\}/);
   assert.match(apiSource, /HelloFreshNorwayClient/);
+  assert.match(apiSource, /HelloFreshImageCache/);
+  assert.match(apiSource, /respond_image/);
+  assert.match(apiSource, /api\/hellofresh\/images\/\(\[0-9a-f\]\{64\}\)/);
   assert.match(apiSource, /features\["hellofresh"\]/);
   assert.match(apiSource, /account\/recipes\/\(\[0-9a-f\]\{24\}\)/);
   assert.match(deploySource, /local_api\/hellofresh_account\.py/);
+  assert.match(deploySource, /local_api\/hellofresh_images\.py/);
   assert.match(deploySource, /local_api\/hellofresh_norway\.py/);
+  assert.match(deploySource, /prefetch_hellofresh_images\.py/);
   assert.match(deploySource, /\.venv\/bin\/python/);
   assert.match(deploySource, /requirements\.txt/);
   assert.match(helloFreshSource, /https:\/\/www\.hellofresh\.no/);
@@ -162,6 +171,16 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(helloFreshAccountSource, /_mutation_lock/);
   assert.doesNotMatch(helloFreshAccountSource, /passwordless|MAGIC_LINK/);
   assert.doesNotMatch(helloFreshAccountSource, /HELLOFRESH_PASSWORD|playwright|selenium/i);
+  assert.match(helloFreshImageSource, /ALLOWED_CONTENT_TYPES/);
+  assert.match(helloFreshImageSource, /MAX_IMAGE_BYTES = 6_000_000/);
+  assert.match(helloFreshImageSource, /MAX_CACHE_BYTES = 256 \* 1024 \* 1024/);
+  assert.match(helloFreshImageSource, /c_limit,f_auto,q_auto,w_960/);
+  assert.match(helloFreshImageSource, /_safe_image_url/);
+  assert.match(helloFreshImageSource, /stale beats empty/);
+  assert.doesNotMatch(helloFreshImageSource, /parse_qs|query\.get\(["'](?:url|source)/i);
+  assert.match(imagePlist, /ai\.familybot\.portal-images/);
+  assert.match(imagePlist, /<integer>4<\/integer>/);
+  assert.match(imagePlist, /<integer>45<\/integer>/);
   assert.match(odaSource, /recipe_search/);
   assert.match(odaSource, /get_liked_recipes/);
   assert.match(odaSource, /get_purchased_recipes/);

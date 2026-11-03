@@ -62,6 +62,13 @@ A coding agent or session without prior context starts at
 The latest repository-wide remediation and its residual-risk statement are in
 [the November 2026 maintenance review](docs/MAINTENANCE_REVIEW_2026-11.md).
 
+For installation, use Core's canonical
+[step-by-step Mac setup guide](https://github.com/TrygveAasheim/familybot-core/blob/main/GETTING_STARTED.md).
+It starts with a required/optional software matrix, explains the minimal
+OpenClaw footprint, and provides a privacy-safe readiness checker before any
+service is installed. With sibling local checkouts the same file is
+`../familybot-core/GETTING_STARTED.md`.
+
 The sibling `familybot-core` repository owns the canonical system architecture,
 configuration, reliability invariants and Smart Home specification.
 Its shared change-record standard is the basis for all Core and Portal bug
@@ -86,13 +93,19 @@ Runtime dependencies are:
 - one shared owner-only
   `$HOME/.openclaw/workspace/config/family.local.json` and
   `$HOME/.openclaw/workspace/db/family.db`;
-- Node.js/npm for the portal build, and `uv` for the isolated Python 3.12
-  API/service runtime (`brew install uv` on macOS);
+- Node.js 22.22.3–22.x/npm for the portal build, and `uv` for the isolated
+  Python 3.12 API/service runtime (`brew install node@22 uv` on macOS);
 - macOS `launchd` for the local service; the local agent runtime is optional for
   conversational and Telegram features, and existing installations use the
   `.openclaw` workspace convention;
 - an ordinary Oda account for the optional grocery tab; the hosted
   `https://oda.com/mcp` service uses OAuth and needs no API key.
+
+The Portal does not require a local Oda MCP server or a HelloFresh server.
+OpenClaw is optional for the Portal itself: only the AI-assisted Oda query
+planner uses its isolated tool-free agent, and direct Oda recipe search remains
+available if that agent is absent. Core's full Telegram/AI footprint is
+documented once in the shared installation guide.
 
 Set up and deploy Core first, then install and deploy Portal. Keep both
 repositories on compatible `dev` commits and run both repositories' verification
@@ -169,12 +182,21 @@ npm ci
 uv venv --python 3.12 .venv
 uv pip sync --python .venv/bin/python requirements.txt
 uv pip install --python .venv/bin/python --requirement requirements-dev.txt
+source .venv/bin/activate
 npm run security:audit
 npm run docs:check
 npm run preflight
 npm run dev:family
 npm run lint
 npm test
+```
+
+Before adding private data, run Core's source readiness check with its isolated
+Python 3.12 interpreter:
+
+```bash
+cd ../familybot-core
+.venv/bin/python scripts/check_setup.py --mode source
 ```
 
 The required gates are fail-closed: Oxlint covers TypeScript/React hooks and
@@ -249,7 +271,8 @@ python3 tests/acceptance.py
 
 Deployment runs preflight/tests first, backs up and migrates SQLite, builds an
 isolated runtime outside `Documents`, installs the LaunchAgent and registers
-Bonjour. Release requires every criterion in
+Bonjour. It records the exact Node executable selected during setup rather than
+assuming an Apple Silicon Homebrew path. Release requires every criterion in
 [docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md](docs/ACCEPTANCE_IPAD_FAMILY_DASHBOARD.md)
 to pass. Open dashboards detect the new API session generation after a service
 restart and perform a full browser refresh automatically.
@@ -258,3 +281,6 @@ restart and perform a full browser refresh automatically.
 fork baseline; GitHub branch protection is intentionally not enabled because
 forks are the expected customization path. See
 [docs/BRANCHES.md](docs/BRANCHES.md) and [docs/DATA_BOUNDARY.md](docs/DATA_BOUNDARY.md).
+The deploy script defaults to the owner's `dev` policy; a fork may explicitly
+deploy its reviewed stable branch with
+`FAMILYBOT_DEPLOY_BRANCH=main bash scripts/deploy-local.sh`.

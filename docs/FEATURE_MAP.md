@@ -43,7 +43,9 @@
 - HelloFresh subscription-plan, servings, address, payment, checkout and order
   management beyond the bounded meal and weekly pause controls;
 - automatic chore generation from school homework;
-- a clean-room core database installer and complete LaunchAgent installer.
+- a clean-room core database installer. Core now supplies the complete
+  health-owned LaunchAgent set, but still requires a supported starter or
+  restored database.
 
 New features must preserve the data boundary in `DATA_BOUNDARY.md`, add an
 acceptance criterion when user-visible, and avoid putting private household

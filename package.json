@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.22.3 <23"
   },
   "scripts": {
     "docs:check": "python3 scripts/validate_docs.py",

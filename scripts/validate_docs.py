@@ -24,6 +24,7 @@ REQUIRED_README_LINKS = {
     "AGENTS.md",
     "docs/DEVELOPMENT_GUIDE.md",
     "docs/NEW_SESSION_VERIFICATION.md",
+    "familybot-core/blob/main/GETTING_STARTED.md",
 }
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 
@@ -53,6 +54,13 @@ def validate_repository(root: Path) -> list[str]:
         for required_link in sorted(REQUIRED_README_LINKS):
             if required_link not in content:
                 errors.append(f"README does not link to {required_link}")
+        for marker, message in {
+            "22.22.3": "README does not state the tested Node.js baseline",
+            "scripts/check_setup.py --mode source": "README does not point to the readiness check",
+            "local Oda MCP server": "README does not clarify the hosted Oda dependency",
+        }.items():
+            if marker not in content:
+                errors.append(message)
 
     for document in markdown_files(root):
         content = document.read_text(encoding="utf-8")

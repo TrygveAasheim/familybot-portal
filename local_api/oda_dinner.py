@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import urllib.error
@@ -26,7 +27,7 @@ from typing import Any, Callable
 
 from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable
 
-OPENCLAW = os.environ.get("FAMILYBOT_OPENCLAW", "/opt/homebrew/bin/openclaw")
+OPENCLAW = os.environ.get("FAMILYBOT_OPENCLAW") or shutil.which("openclaw") or "openclaw"
 MODEL = os.environ.get("FAMILYBOT_ODA_DINNER_MODEL", "openai/gpt-5.6-sol")
 THINKING = os.environ.get("FAMILYBOT_ODA_DINNER_THINKING", "low")
 AGENT_ID = os.environ.get("FAMILYBOT_ODA_DINNER_AGENT", "familybot-oda-dinner")

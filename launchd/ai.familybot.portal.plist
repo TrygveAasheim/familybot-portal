@@ -25,6 +25,8 @@
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>NODE_ENV</key>
     <string>production</string>
+    <key>FAMILYBOT_NODE</key>
+    <string>__FAMILYBOT_NODE__</string>
   </dict>
   <key>StandardOutPath</key>
   <string>/Users/YOUR_ACCOUNT/Library/Logs/familybot-portal.log</string>

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -48,11 +49,15 @@ def main() -> None:
     environment["NODE_ENV"] = "production"
     environment["HOST"] = LAN_HOST
     environment["PORT"] = "3000"
+    node_binary = environment.get("FAMILYBOT_NODE") or shutil.which("node", path=environment["PATH"])
+    if not node_binary:
+        print("[familybot-portal] Node.js was not found; rerun scripts/deploy-local.sh", file=sys.stderr)
+        raise SystemExit(78)
     start([
         PYTHON, str(ROOT / "local_api/familybot_api.py"), "--host", LAN_HOST, "--lan",
         "--parent-pin-file", str(ROOT / "runtime/parent-pin.txt"),
     ], environment)
-    start(["/opt/homebrew/bin/node", str(ROOT / "dist/standalone/server.js")], environment)
+    start([node_binary, str(ROOT / "dist/standalone/server.js")], environment)
     start([
         "/usr/bin/dns-sd", "-R", "Familieportalen", "_http._tcp", "local", "3000",
         "path=/", "role=family-dashboard",

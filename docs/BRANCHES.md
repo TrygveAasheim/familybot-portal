@@ -22,5 +22,8 @@ The dev verification and deployment workflow is:
 5. promote the verified `dev` state to `main` when a new public fork baseline is
    wanted.
 
-The deployment script refuses to run from any branch other than `dev`.
-Private runtime state is never merged into either branch.
+The deployment script defaults to `dev`. Fork maintainers may set
+`FAMILYBOT_DEPLOY_BRANCH` to their own reviewed local release branch. This
+changes only the branch-name guard; every preflight, test, backup, migration and
+acceptance requirement remains in force. Private runtime state is never merged
+into any branch.

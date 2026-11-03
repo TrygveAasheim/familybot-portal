@@ -25,7 +25,7 @@ test("server-renders the iPad family dashboard shell", async () => {
 });
 
 test("source keeps the data boundary and functional surfaces explicit", async () => {
-  const [page, consoleSource, apiSource, odaSource, dinnerSource, helloFreshSource, helloFreshAccountSource, helloFreshImageSource, deploySource, imagePlist, styles] = await Promise.all([
+  const [page, consoleSource, apiSource, odaSource, dinnerSource, helloFreshSource, helloFreshAccountSource, helloFreshImageSource, deploySource, supervisorSource, portalPlist, imagePlist, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/FamilyConsole.tsx", import.meta.url), "utf8"),
     readFile(new URL("../local_api/familybot_api.py", import.meta.url), "utf8"),
@@ -43,6 +43,8 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
     ).then((parts) => parts.join("\n")),
     readFile(new URL("../local_api/hellofresh_images.py", import.meta.url), "utf8"),
     readFile(new URL("../scripts/deploy-local.sh", import.meta.url), "utf8"),
+    readFile(new URL("../local_service/run_service.py", import.meta.url), "utf8"),
+    readFile(new URL("../launchd/ai.familybot.portal.plist", import.meta.url), "utf8"),
     readFile(new URL("../launchd/ai.familybot.portal-images.plist", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
@@ -152,6 +154,13 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(deploySource, /prefetch_hellofresh_images\.py/);
   assert.match(deploySource, /\.venv\/bin\/python/);
   assert.match(deploySource, /requirements\.txt/);
+  assert.match(deploySource, /FAMILYBOT_NODE/);
+  assert.match(deploySource, /FAMILYBOT_DEPLOY_BRANCH:-dev/);
+  assert.match(deploySource, /command -v node/);
+  assert.match(supervisorSource, /FAMILYBOT_NODE/);
+  assert.match(supervisorSource, /shutil\.which\("node"/);
+  assert.doesNotMatch(supervisorSource, /\/opt\/homebrew\/bin\/node/);
+  assert.match(portalPlist, /__FAMILYBOT_NODE__/);
   assert.match(helloFreshSource, /https:\/\/www\.hellofresh\.no/);
   assert.match(helloFreshSource, /systemCountry.*NO/);
   assert.match(helloFreshSource, /locale.*nb-NO/);

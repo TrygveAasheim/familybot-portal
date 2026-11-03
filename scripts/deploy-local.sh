@@ -2,6 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+  export PATH="$ROOT/.venv/bin:$PATH"
+fi
 TARGET="${FAMILYBOT_PORTAL_RUNTIME:-$HOME/.openclaw/runtime/familybot-portal}"
 PLIST="$HOME/Library/LaunchAgents/ai.familybot.portal.plist"
 IMAGE_PLIST="$HOME/Library/LaunchAgents/ai.familybot.portal-images.plist"
@@ -9,12 +12,15 @@ UID_VALUE="$(id -u)"
 PLIST_TEMP="$(mktemp -t familybot-portal-plist)"
 IMAGE_PLIST_TEMP="$(mktemp -t familybot-portal-images-plist)"
 UV_BIN="${FAMILYBOT_UV:-$(command -v uv || true)}"
+NODE_BIN="${FAMILYBOT_NODE:-$(command -v node || true)}"
 trap 'rm -f "$PLIST_TEMP" "$IMAGE_PLIST_TEMP"' EXIT
 
 cd "$ROOT"
 CURRENT_BRANCH="$(git branch --show-current)"
-if [[ "$CURRENT_BRANCH" != "dev" ]]; then
-  echo "Refusing deployment from '$CURRENT_BRANCH'. Deploy only from dev." >&2
+DEPLOY_BRANCH="${FAMILYBOT_DEPLOY_BRANCH:-dev}"
+if [[ "$CURRENT_BRANCH" != "$DEPLOY_BRANCH" ]]; then
+  echo "Refusing deployment from '$CURRENT_BRANCH'. Expected '$DEPLOY_BRANCH'." >&2
+  echo "Fork maintainers may set FAMILYBOT_DEPLOY_BRANCH to their reviewed release branch." >&2
   exit 1
 fi
 npm run preflight
@@ -24,6 +30,10 @@ npm test
 python3 local_api/dashboard_migration.py --repair-default-rewards
 if [[ -z "$UV_BIN" ]]; then
   echo "uv is required to build the isolated Portal Python runtime (brew install uv)." >&2
+  exit 1
+fi
+if [[ -z "$NODE_BIN" ]]; then
+  echo "Node.js is required to run the Portal service." >&2
   exit 1
 fi
 mkdir -p "$TARGET/local_api" "$TARGET/local_service" "$TARGET/scripts" "$TARGET/runtime"
@@ -51,7 +61,8 @@ if [[ -f "$ROOT/runtime/parent-pin.txt" ]]; then
   rsync -a "$ROOT/runtime/parent-pin.txt" "$TARGET/runtime/"
 fi
 chmod 600 "$TARGET/runtime/parent-pin.txt"
-sed "s|/Users/YOUR_ACCOUNT|$HOME|g" launchd/ai.familybot.portal.plist > "$PLIST_TEMP"
+sed -e "s|/Users/YOUR_ACCOUNT|$HOME|g" -e "s|__FAMILYBOT_NODE__|$NODE_BIN|g" \
+  launchd/ai.familybot.portal.plist > "$PLIST_TEMP"
 sed "s|/Users/YOUR_ACCOUNT|$HOME|g" launchd/ai.familybot.portal-images.plist > "$IMAGE_PLIST_TEMP"
 install -m 600 "$PLIST_TEMP" "$PLIST"
 install -m 600 "$IMAGE_PLIST_TEMP" "$IMAGE_PLIST"

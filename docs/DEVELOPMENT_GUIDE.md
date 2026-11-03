@@ -65,6 +65,13 @@ the web service. The API and database remain on the Mac mini.
 LAN production data path. Do not move family state into a cloud worker or D1
 because those directories exist.
 
+The deploy script resolves and records the selected Node executable in the
+installed LaunchAgent, then builds the API in an isolated Python 3.12 runtime.
+Do not reintroduce `/opt/homebrew/bin` as an executable assumption; Apple
+Silicon is tested, but path discovery keeps Intel/custom Homebrew layouts
+diagnosable. The canonical host software and minimal OpenClaw instructions live
+in Core's `GETTING_STARTED.md`.
+
 ## Data ownership
 
 Core-owned tables are read through explicit queries. Portal-owned chores,

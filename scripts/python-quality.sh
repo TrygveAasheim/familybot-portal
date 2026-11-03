@@ -25,7 +25,7 @@ case "${1:-}" in
   security)
     run_tool "bandit==1.9.4" bandit -q -r local_api scripts local_service \
       -x '*/test_*.py' --severity-level medium --confidence-level medium
-    run_tool "pip-audit==2.10.1" pip-audit -r requirements.txt --no-deps --disable-pip
+    run_tool "pip-audit==2.10.1" pip-audit -r requirements.txt --disable-pip
     ;;
   *)
     echo "Usage: $0 {lint|security}" >&2

@@ -14,10 +14,8 @@ details.
 Security-sensitive changes must be reviewed and approved by `@TrygveAasheim`
 before they are promoted to `main`.
 
-Dependabot monitors the pinned Python runtime dependencies. The `dev` and
-pull-request checks audit production and development npm dependencies at the
-low threshold. Production findings always fail. A development-only finding may
-pass only when its exact GHSA identifier is documented in
-`scripts/audit-dependencies.mjs`; unknown or additional advisories still fail.
-The current `minimatch` exception covers lint tooling that cannot yet consume
-the patched major version and must be removed once that toolchain is compatible.
+Dependabot monitors the pinned Python and npm dependencies. The `dev` and
+pull-request checks run npm audit at the low threshold, pip-audit for Python,
+Ruff, Bandit and CodeQL for both repository languages. Findings are not
+allowlisted in source; a required exception must be time-bounded and documented
+through the normal reviewed change protocol.

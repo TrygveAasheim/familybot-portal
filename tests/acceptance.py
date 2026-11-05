@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKSPACE = Path(
-    os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
+    os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".familybot"))
 ).expanduser()
 DB = WORKSPACE / "db/family.db"
 CONFIG = Path(os.environ.get("FAMILYBOT_FAMILY_CONFIG", WORKSPACE / "config/family.local.json")).expanduser()
@@ -180,9 +180,9 @@ def main() -> None:
     dinner_source=(ROOT/"local_api/oda_dinner.py").read_text()
     oda_ui=all(text in source for text in (">Oda</button>","Middagsassistent","oda-recipe-image","src={recipe.imageUrl}","oda-recipe-dialog","Tilbake til middagsforslag","recipe.ingredients","recipe.instructions","Legg alle ingrediensene i kurven","Hva trenger dere?","Dette kjøper dere ofte","Se gjennom og betal hos Oda","kan ikke betale eller fullføre bestillingen","/api/oda/dinner","/api/oda/search")) and "<a href={recipe.url}>" not in source
     oda_api=all(text in api_source for text in ("/api/oda/oauth/callback","/api/oda/status","/api/oda/dinner","/api/oda/recipes/(\\d+)/cart","/api/oda/search","/api/oda/cart","OdaMcpClient")) and "/api/chat" not in api_source
-    oauth_boundary=all(text in oda_source for text in ("https://oda.com/mcp","code_challenge_method","Mcp-Session-Id",".openclaw/credentials/oda-mcp.json","product_search","likely_to_buy","recipe_search","get_liked_recipes","get_purchased_recipes","fromRecipePortions","manipulate_cart","clear_cart"))
+    oauth_boundary=all(text in oda_source for text in ("https://oda.com/mcp","code_challenge_method","Mcp-Session-Id","FAMILYBOT_WORKSPACE","credentials/oda-mcp.json","product_search","likely_to_buy","recipe_search","get_liked_recipes","get_purchased_recipes","fromRecipePortions","manipulate_cart","clear_cart"))
     dinner_boundary=all(text in dinner_source for text in ("familybot-oda-dinner","MAX_HISTORY_MESSAGES = 6","MAX_PREFERENCE_TITLES = 16","DinnerPlannerUnavailable","_fallback","MAX_RECIPE_HTML_BYTES","images.oda.com","_allowed_recipe_url","application/ld+json","recipeIngredient","recipeInstructions"))
-    credential_path=Path.home()/".openclaw/credentials/oda-mcp.json"
+    credential_path=WORKSPACE/"credentials/oda-mcp.json"
     credentials_safe=not credential_path.exists() or credential_path.stat().st_mode & 0o777==0o600
     record("AC-18",unauthenticated_oda==403 and oda_status_code==200 and oda_ui and oda_api and oauth_boundary and dinner_boundary and credentials_safe,f"Oda unauthenticated={unauthenticated_oda}; status={oda_status_code}, connected={oda_status.get('connected')}; in-portal recipe return path, bounded dinner planner, direct OAuth/MCP allowlist and local credential mode={credentials_safe}",started)
 
@@ -252,8 +252,8 @@ def main() -> None:
         and not any(secret in b"".join((account_status_raw,account_weeks_raw,account_menu_raw,account_detail_raw)).decode("utf-8",errors="replace") for secret in ("access_token","refresh_token","email","customerId","subscriptionId"))
     ) if account_enabled else account_status_code==404
     account_ui=all(text in source for text in ("features.hellofresh_account","Første gangs bruk","Logg inn hos HelloFresh","current-password","private hjemmenett","/api/hellofresh/auth/login","/api/hellofresh/account/menu","/api/hellofresh/account/weeks/","/api/hellofresh/account/recipes/","Deres matkasse","Bytt denne","Sett uken på pause","Se innhold","Skjul innhold","Filtrer på type rett","Koble fra")) and not any(text in source for text in ("window.open(","Send engangskobling","Kopier hele lenken","/api/hellofresh/auth/link/"))
-    account_boundary=all(text in account_source for text in ("/gw/auth/token","/gw/login","/gw/refresh","/gw/recipes/recipes/","recipe_detail","complete_login","curl_cffi","impersonate=\"chrome\"","verify=True","Origin","Sec-Fetch-Site",".openclaw/credentials/hellofresh-no.json","0o600","challenge","/gw/v1/carts/","x-requested-by","_preserved_extras","_menu_snapshot","hasSeamlessDowngraded","_mutation_lock","PROVIDER_CONTRACT_VERSION","validate_provider_path")) and not any(text in account_source for text in ("passwordless","MAGIC_LINK","HELLOFRESH_PASSWORD","playwright","selenium"))
-    account_credentials=Path.home()/".openclaw/credentials/hellofresh-no.json"
+    account_boundary=all(text in account_source for text in ("/gw/auth/token","/gw/login","/gw/refresh","/gw/recipes/recipes/","recipe_detail","complete_login","curl_cffi","impersonate=\"chrome\"","verify=True","Origin","Sec-Fetch-Site","FAMILYBOT_WORKSPACE","credentials/hellofresh-no.json","0o600","challenge","/gw/v1/carts/","x-requested-by","_preserved_extras","_menu_snapshot","hasSeamlessDowngraded","_mutation_lock","PROVIDER_CONTRACT_VERSION","validate_provider_path")) and not any(text in account_source for text in ("passwordless","MAGIC_LINK","HELLOFRESH_PASSWORD","playwright","selenium"))
+    account_credentials=WORKSPACE/"credentials/hellofresh-no.json"
     account_credentials_safe=not account_credentials.exists() or account_credentials.stat().st_mode & 0o777==0o600
     image_prefetch_launch=subprocess.run(["launchctl","print",f"gui/{os.getuid()}/ai.familybot.portal-images"],capture_output=True,text=True)
     image_schedule_ok=image_prefetch_launch.returncode==0 if account_enabled else True

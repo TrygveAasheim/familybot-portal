@@ -3,9 +3,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE="${FAMILYBOT_WORKSPACE:-$HOME/.openclaw/workspace}"
-PIN_FILE="$ROOT/runtime/parent-pin.txt"
+PIN_FILE="${FAMILYBOT_PARENT_PIN_FILE:-$WORKSPACE/config/parent-pin.txt}"
+PYTHON_BIN="${FAMILYBOT_PYTHON:-python3}"
+if [[ ! -f "$PIN_FILE" && -f "$ROOT/runtime/parent-pin.txt" ]]; then
+  PIN_FILE="$ROOT/runtime/parent-pin.txt"
+fi
 
-python3 "$ROOT/scripts/validate_docs.py"
+"$PYTHON_BIN" "$ROOT/scripts/validate_docs.py"
 
 if [[ -n "${FAMILYBOT_CONFIG_VALIDATOR:-}" ]]; then
   VALIDATOR="$FAMILYBOT_CONFIG_VALIDATOR"
@@ -18,7 +22,7 @@ else
   exit 1
 fi
 
-python3 "$VALIDATOR"
+"$PYTHON_BIN" "$VALIDATOR"
 
 if [[ ! -f "$PIN_FILE" ]]; then
   echo "Parent PIN file missing: $PIN_FILE" >&2
@@ -41,6 +45,10 @@ fi
 if [[ ! -f "$WORKSPACE/db/family.db" ]]; then
   echo "Family database missing: $WORKSPACE/db/family.db" >&2
   exit 1
+fi
+if [[ "${FAMILYBOT_ALLOW_PENDING_PORTAL_SCHEMA:-0}" != "1" ]]; then
+  "$PYTHON_BIN" "$ROOT/local_api/dashboard_migration.py" \
+    --db "$WORKSPACE/db/family.db" --status >/dev/null
 fi
 if [[ "$(sqlite3 "$WORKSPACE/db/family.db" 'PRAGMA integrity_check;')" != "ok" ]]; then
   echo "SQLite integrity check failed." >&2

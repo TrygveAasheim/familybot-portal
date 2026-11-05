@@ -108,7 +108,7 @@ set `FAMILYBOT_ODA_CALLBACK_URL`, but that exact URL must be reachable from the
 browser used for Oda consent.
 
 Credentials are stored outside both repositories at
-`$HOME/.openclaw/credentials/oda-mcp.json` with file mode `0600` and directory
+`$HOME/.familybot/credentials/oda-mcp.json` with file mode `0600` and directory
 mode `0700`. They must never be copied into Git, browser responses, support
 logs or screenshots. Disconnecting revokes the grant before removing local
 tokens. Oda also lets the account owner revoke MCP access under Privacy &

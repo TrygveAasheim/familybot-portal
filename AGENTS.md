@@ -38,8 +38,10 @@ When the sibling core repository is available, also read
   then persists only owner-protected tokens. The password may exist only in the
   first-use form and transient request memory; it must never be stored, logged,
   returned or placed in model context. Provider tokens may exist only
-  transiently before the allowlisted handoff. It is read-only during physical
-  testing; provider writes require a new mutation security review and explicit
+  transiently before the allowlisted handoff. Provider writes are restricted to
+  reviewed exact-week meal selection and pause/resume actions, require explicit
+  UI confirmation, reject stale state and verify the resulting provider state.
+  New provider mutation shapes require a separate security review and explicit
   acceptance criteria.
 - User-visible unavailable/stale states are honest. Do not convert a missing
   source into a healthy or empty-looking result.

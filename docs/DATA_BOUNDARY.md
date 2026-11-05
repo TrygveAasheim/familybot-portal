@@ -48,7 +48,8 @@ The Oda tab calls only `https://oda.com/mcp` through the server-side
 `OdaMcpClient`. There is no browser-visible bearer token, generic MCP endpoint,
 or arbitrary tool-name input. OAuth uses dynamic client registration, state and
 PKCE; tokens are written with mode `0600` beneath the owner-only
-`$HOME/.openclaw/credentials` directory. Callback query values are redacted
+the configured private workspace's `credentials` directory (normally
+`$HOME/.familybot/credentials`). Callback query values are redacted
 from API request logs.
 
 The dinner interface has one narrower model boundary. A dedicated tool-free
@@ -131,7 +132,7 @@ incorrectly restricted to JWT/base64url syntax. This accepts provider-defined
 refresh-token punctuation without permitting header or log-line injection.
 
 Renewable credentials are stored outside Git in
-`$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
+`$HOME/.familybot/credentials/hellofresh-no.json`, written atomically with mode
 `0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup is
 required and no email is requested. A Cloudflare HTML challenge or other
 non-JSON provider block is an
@@ -238,6 +239,6 @@ must leave `/api/dashboard`, chores and school information available.
 ## Source and runtime separation
 
 Reviewed, non-private source lives in the `familybot-portal` repository. Deployment
-creates a separate runtime under `$HOME/.openclaw/runtime/familybot-portal` and
+creates a separate runtime under `$HOME/.familybot/runtime/familybot-portal` and
 installs `ai.familybot.portal` as a LaunchAgent. Private configuration, SQLite,
 PIN, logs and backups are never copied into Git.

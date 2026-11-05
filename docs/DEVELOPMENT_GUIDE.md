@@ -11,7 +11,8 @@ screen is a calm family overview. Children can open their own profiles and use
 chores/rewards without adult help. Parents can review and manage chores, reward
 goals, weekly full-week achievements, surprise redemptions and the family Kanban
 board.
-OpenClaw remains available for complex questions and operations.
+OpenClaw is optional and belongs only to the AI/Telegram profile; the dashboard
+must remain useful and deployable without it.
 For child-chore creation from Telegram, OpenClaw uses the two-step interview
 bridge documented in `docs/TELEGRAM_CHILD_CHORES.md`; the portal remains the
 owner of validation and writes.
@@ -72,11 +73,17 @@ Silicon is tested, but path discovery keeps Intel/custom Homebrew layouts
 diagnosable. The canonical host software and minimal OpenClaw instructions live
 in Core's `GETTING_STARTED.md`.
 
+New installations deploy beneath `$HOME/.familybot`; legacy paths remain
+supported only through explicit environment overrides. Do not reintroduce an
+OpenClaw workspace as a dashboard prerequisite.
+
 ## Data ownership
 
 Core-owned tables are read through explicit queries. Portal-owned chores,
-completions, reward goals and weekly achievement tables are created idempotently
-by the portal migration.
+completions, reward goals and weekly achievement tables are created by
+versioned Portal migrations. The shared ledger currently requires Core schema
+1 and Portal schema 2; startup fails closed on an absent, future or
+checksum-incompatible contract.
 The portal may add a separate add-on schema, but it cannot reuse core ledgers or
 raw payload columns as a convenient storage area.
 

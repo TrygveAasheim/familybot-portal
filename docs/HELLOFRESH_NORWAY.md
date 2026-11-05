@@ -62,7 +62,7 @@ runtime to prime provider auth and sends credentials only to
 `https://www.hellofresh.no/gw/login` with country `NO`, locale `nb-NO`, browser
 metadata and certificate verification. No popup or email is opened. The form
 clears the password and only allowlisted access, refresh and expiry fields are
-persisted in `$HOME/.openclaw/credentials/hellofresh-no.json` with mode `0600`.
+persisted in `$HOME/.familybot/credentials/hellofresh-no.json` with mode `0600`.
 
 OAuth token values are treated as opaque, length-bounded printable values;
 whitespace and control characters are rejected. Temporary provider failures
@@ -127,7 +127,7 @@ allowlist.
 
 On a cache miss the API validates the final redirect host, response size, MIME
 type and image signature before atomically storing an owner-only file beneath
-`$HOME/.openclaw/cache/familybot-portal/hellofresh-images`. The browser gets an
+`$HOME/.familybot/cache/hellofresh-images`. The browser gets an
 ETag and one-week cache lifetime. A failed refresh leaves the prior valid image
 available. The current image host is asked for a 960-pixel bounded rendition,
 so full camera originals are never retained. Pruning keeps at most 600 images

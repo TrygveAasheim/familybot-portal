@@ -1,3 +1,3 @@
 # Direct Python runtime dependency. Regenerate requirements.txt with the
 # command recorded at the top of that lock file.
-curl_cffi==0.16.3
+curl_cffi==0.17.0

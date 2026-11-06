@@ -98,6 +98,9 @@ Both are disabled by default and independent of the product profiles.
 Provider changes can break either integration without affecting the family
 dashboard. Details are in [Oda groceries](docs/ODA_GROCERIES.md) and the
 [HelloFresh contract](docs/HELLOFRESH_NORWAY.md).
+Scheduled HelloFresh image prefetch requires both public-menu and account flags.
+Disabling either stops new prefetch invocations before they read retained tokens;
+redeployment also removes the generated image job. Stored tokens are not deleted.
 
 ## Security boundary
 

@@ -26,6 +26,12 @@ household. Public `main` is not yet the installer release.
 
 ## Evidence, not inferred acceptance
 
+Double-review follow-up: AC-17 remains unmeasured (`not_run`) for children even
+after email ingestion is disabled; retained plan display is independent. Image
+prefetch now requires both HelloFresh flags at registration and invocation, before
+credential access. Fictional retained-plan and mocked consent/registration tests
+cover these corrections; there is no new provider or hardware evidence.
+
 Run source tests without private state:
 
 ```bash

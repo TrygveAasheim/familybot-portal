@@ -6,6 +6,7 @@ import os
 import sqlite3
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 from pathlib import Path
@@ -715,6 +716,38 @@ class RepositoryTests(unittest.TestCase):
         child = next(item for item in dashboard["children"] if item["id"] == 3)
         self.assertEqual(child["chores"], [])
         self.assertEqual(child["reward"]["earned"], 0)
+
+    def test_dashboard_survives_slow_configured_adapters_without_cache(self):
+        for name in ("dashboard_weather.json", "dashboard_departures.json"):
+            (self.repo.workspace / "db" / name).unlink()
+        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456", {"http://localhost:3000"})
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+        budgets = []
+
+        def outage(_request, *, timeout):
+            budgets.append(timeout)
+            time.sleep(1.1)
+            raise TimeoutError("fictional provider outage")
+
+        try:
+            with patch("urllib.request.urlopen", side_effect=outage), \
+                    patch.object(self.repo, "_launchd_state", return_value={}):
+                connection.request("GET", "/api/dashboard", headers={
+                    "Origin": "http://localhost:3000", "X-FamilyBot-Local-Token": server.session_token})
+                response = connection.getresponse()
+                self.assertEqual(200, response.status)
+                dashboard = json.loads(response.read())
+            self.assertEqual([4, 4], budgets)
+            self.assertTrue(dashboard["weather"]["stale"])
+            self.assertFalse(dashboard["transport"]["ok"])
+            self.assertTrue(dashboard["children"])
+        finally:
+            connection.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
     def test_lan_origin_boundary(self):
         allowed = {"http://familie.local:3000", "http://localhost:3000"}

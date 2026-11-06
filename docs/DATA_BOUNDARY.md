@@ -170,11 +170,15 @@ custom API token; all menu, account and recipe-detail routes remain protected.
 Browser responses carry an ETag and one-week cache lifetime. A valid prior image
 is retained if refresh fails.
 
-When the HelloFresh feature is enabled and deployed, the Portal-owned 04:45
-LaunchAgent reads only published upcoming menus, warms
+When both HelloFresh public and account features are enabled and deployed, the
+Portal-owned 04:45 LaunchAgent reads published upcoming account menus, warms
 their allowlisted images with four bounded workers and writes count-only logs.
 It stores no menu/account payload and does not couple Core's ingestion or
 briefing schedules to this optional add-on.
+Every invocation reloads those flags before client construction or credential
+access. A disabled/missing flag or unreadable configuration prevents account
+reads, including from a stale installed job. Redeployment removes that job when
+either flag is disabled. Tokens are preserved; in-flight work is not cancelled.
 
 The bounded write allowlist contains only meal replacement/add/remove and
 pause/resume for one exact ISO week. The server derives customer, subscription,

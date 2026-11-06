@@ -139,11 +139,15 @@ available. The current image host is asked for a 960-pixel bounded rendition,
 so full camera originals are never retained. Pruning keeps at most 600 images
 and 256 MB, ordered by recent use.
 
-When the HelloFresh feature is enabled and deployed,
+When both the HelloFresh public and account flags are enabled and deployed,
 `ai.familybot.portal-images` runs at 04:45 and asks only for published upcoming
 menus. It downloads missing reviewed images with four workers, records counts
 only and leaves provider/menu failures isolated from the dashboard. This is a
 Portal add-on schedule rather than a Core briefing dependency.
+The job checks both flags on every invocation before reading retained credentials.
+Missing/invalid config fails closed. Disabling account access preserves tokens
+but prevents subsequent job invocations from using them; redeploy to remove the
+generated job. Work already in flight is not cancelled by editing configuration.
 
 Meal writes use the provider's full-cart contract, so the adapter re-reads the
 week immediately before each action. It derives the exact course indexes,

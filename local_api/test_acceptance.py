@@ -1,6 +1,7 @@
 """Acceptance evidence must be explicit, profile-aware and fresh."""
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import json
 import os
@@ -19,6 +20,37 @@ spec.loader.exec_module(acceptance)
 
 
 class AcceptanceTests(unittest.TestCase):
+    def test_retained_plan_stays_applicable_with_ingestion_omitted_or_disabled(self):
+        import test_familybot_api as api_tests
+
+        fixture = api_tests.RepositoryTests()
+        fixture.setUp()
+        try:
+            config_path = fixture.repo.workspace / "config/family.local.json"
+            config = json.loads(config_path.read_text())
+            today = dt.date.today()
+            target = today + dt.timedelta(days=7 - today.weekday()) if today.weekday() >= 5 else today
+            year, week, _ = target.isocalendar()
+            with fixture.repo.connect() as connection:
+                connection.execute(
+                    "INSERT INTO week_plans(id,member_id,week_number,year,raw_text,summary) VALUES(111,3,?,?,?,?)",
+                    (week, year, "Fictional retained plan", "Fictional retained plan"))
+            for integrations in ({}, {"email": {"enabled": False}}):
+                with self.subTest(integrations=integrations):
+                    config["profile"] = "connected"
+                    config["integrations"] = integrations
+                    config_path.write_text(json.dumps(config))
+                    with patch.dict(os.environ, {}, clear=True), \
+                            patch.object(api_tests.FamilyRepository, "_launchd_state", return_value={}), \
+                            patch("urllib.request.urlopen", side_effect=AssertionError("No network permitted")):
+                        dashboard = fixture.repo.dashboard()
+                        detail = fixture.repo.week_plan_detail(3, 111)
+                    self.assertIn(111, [p["id"] for p in dashboard["week_plans"]])
+                    self.assertEqual("Fictional retained plan", detail["full_text"])
+                    self.assertEqual("not_run", acceptance.applicability(config)["AC-17"]["status"])
+        finally:
+            fixture.tearDown()
+
     def test_api_runner_does_not_inherit_household_overrides(self):
         runner_spec = importlib.util.spec_from_file_location("test_api_runner", ROOT / "scripts/test_api.py")
         assert runner_spec and runner_spec.loader
@@ -81,7 +113,7 @@ class AcceptanceTests(unittest.TestCase):
                 self.assertFalse(report["release_ready"])
                 self.assertEqual("not_run", report["criteria"]["AC-09"]["status"])
                 self.assertEqual("not_applicable", report["criteria"]["AC-18"]["status"])
-                self.assertEqual("not_applicable", report["criteria"]["AC-17"]["status"])
+                self.assertEqual("not_run" if count else "not_applicable", report["criteria"]["AC-17"]["status"])
                 self.assertEqual("not_run" if count else "not_applicable", report["criteria"]["AC-03"]["status"])
 
     def test_integrations_require_consent_before_any_http_request(self):

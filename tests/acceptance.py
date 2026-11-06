@@ -16,11 +16,12 @@ def applicability(config: dict) -> dict[str, dict]:
                for n in range(1, 21)}
     children = any(m.get("role") == "child" for m in config["members"])
     features = config["portal"].get("features", {})
-    email = config.get("integrations", {}).get("email", {})
     enabled = {
         **{f"AC-{n:02}": children for n in (2, 3, 4, 5, 6, 7, 12, 13, 14)},
         "AC-16": children and config.get("profile", "agent") == "agent",
-        "AC-17": children and bool(email) and email.get("enabled") is not False,
+        # Presentation remains available for retained plans after ingestion is
+        # disabled. Only a household without children makes this inapplicable.
+        "AC-17": children,
         "AC-18": features.get("oda") is True,
         "AC-19": features.get("hellofresh") is True,
         "AC-20": features.get("hellofresh") is True and features.get("hellofresh_account") is True,

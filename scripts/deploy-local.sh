@@ -123,6 +123,7 @@ config = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 features = config.get("portal", {}).get("features", {})
 print("oda_ai" if features.get("oda") is True and features.get("oda_ai") is True else "")
 print("hellofresh" if features.get("hellofresh") is True else "")
+print("hellofresh_account" if features.get("hellofresh") is True and features.get("hellofresh_account") is True else "")
 PY
 )"
 if printf '%s\n' "$FEATURES" | grep -Fxq "oda_ai"; then
@@ -164,7 +165,7 @@ chmod 600 "$TARGET/runtime/parent-pin.txt"
 render_plist launchd/ai.familybot.portal.plist "$PLIST_TEMP"
 render_plist launchd/ai.familybot.portal-images.plist "$IMAGE_PLIST_TEMP"
 install -m 600 "$PLIST_TEMP" "$PLIST"
-if printf '%s\n' "$FEATURES" | grep -Fxq "hellofresh"; then
+if printf '%s\n' "$FEATURES" | grep -Fxq "hellofresh_account"; then
   install -m 600 "$IMAGE_PLIST_TEMP" "$IMAGE_PLIST"
 elif [[ -f "$IMAGE_PLIST" ]]; then
   rm "$IMAGE_PLIST"
@@ -181,7 +182,7 @@ for attempt in 1 2 3; do
   sleep 2
 done
 launchctl kickstart -k "gui/$UID_VALUE/$SERVICE_LABEL"
-if printf '%s\n' "$FEATURES" | grep -Fxq "hellofresh"; then
+if printf '%s\n' "$FEATURES" | grep -Fxq "hellofresh_account"; then
   for attempt in 1 2 3; do
     if launchctl bootstrap "gui/$UID_VALUE" "$IMAGE_PLIST"; then
       break

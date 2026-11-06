@@ -193,6 +193,10 @@ live deployed runtime script.
 
 ### AC-17 — Full child week-plan detail
 
+Applicable whenever the household has children: disabling or removing email
+ingestion does not remove retained plans or the detail UI. Runtime probes leave
+this criterion `not_run` until its presentation checks have fresh evidence.
+
 - Monday through Friday select the current ISO week's plan for each child;
   Saturday and Sunday select the coming week's plan. A future plan arriving
   early cannot displace the current school-week plan. The previous-week label
@@ -337,6 +341,11 @@ flag-on acceptance probe.
 - A Portal-owned LaunchAgent prefetches every published upcoming menu at 04:45,
   logs counts rather than URLs/account data and remains independent of Core's
   briefing and ingestion schedule.
+- Prefetch registration requires both HelloFresh flags. Each invocation checks
+  current flags before creating a client or reading credentials; absent/disabled
+  account consent must make zero account reads even when tokens remain on disk.
+  Missing/invalid config fails closed. Disabling access does not delete tokens
+  or cancel provider work that was already in flight.
 - Any selected or optional dish expands in place and collapses again without
   navigation or a popup. Detail is fetched only on first expansion, then cached
   in the browser. It shows portion-matched ingredients, referenced allergens

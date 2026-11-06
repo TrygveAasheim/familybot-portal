@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-06 — Double-review follow-up (candidate, not deployed)
+
+- Keep Ukeplan presentation acceptance applicable for households with children,
+  even when email ingestion is absent/disabled; retained plans remain viewable.
+- Require both HelloFresh public and account flags before registering the image
+  job and before any client/credential access on each invocation. Missing config
+  fails closed; disabling access preserves tokens without using them.
+- Add persisted disabled-email/retained-plan tests and prefetch consent,
+  registration and missing-config regressions using fictional data and mocks.
+
+No schema change or deployment. Revert the source commit for rollback; no
+database restore is needed. Reverting the consent guard reintroduces that risk.
+
 ## 2026-11-06 — Installation review fixes (candidate, not deployed)
 
 - Use `.familybot` consistently while preserving explicit legacy overrides.

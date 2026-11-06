@@ -117,11 +117,20 @@ Evidence: negative authorization/CORS tests, response scan, file-mode check.
 
 - A timestamped SQLite backup is made before applying the dashboard migration.
 - Migrations are idempotent and preserve existing FamilyBot tables and cards.
+- Final validation and pending Portal markers commit together or roll back
+  together. Status/startup reject incomplete schema and changed migration history.
+- Upgrades preserve archived chores and disabled rewards. Core's full backup
+  precedes all upgrade data changes; the operator stops every database user and
+  preserves the installed workspace/runtime. A successful fixture run does not
+  certify a running household upgrade.
 - The supervisor exposes web and API health, terminates the group if one process
   fails, and lets launchd restart it.
 - Existing unit tests, lint and production build pass.
 
-Evidence: migration-twice test, backup check, supervisor health and full suite.
+Evidence: migration-twice and failed-final-validation tests, status/startup
+negative tests, archived-chore/disabled-reward preservation, backup checks,
+supervisor health and full suite. Record hosted managed-upgrade CI separately
+from local fixture tests and actual hardware acceptance.
 
 ### AC-12 — Recurring chores
 

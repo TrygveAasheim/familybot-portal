@@ -8,6 +8,22 @@ household. Public `main` is not yet the installer release.
 
 ## Portal changes and compatibility
 
+Upgrade regression follow-up: final schema validation now happens before the
+single Portal migration transaction commits. Status and API startup reject
+missing required columns/tables, checksum drift and history gaps. Deployment
+does not repair inactive rewards; seeding counts archived matching chores as
+existing. Core's paired installer takes a full pre-upgrade snapshot before any
+data changes and never runs starter seeds on upgrades. Schema versions stay
+Core 1 / Portal 2. Follow Core's `REDEPLOY.md`; an ordinary installer rerun now
+refuses an existing database. All writers must be stopped, with explicit existing
+workspace/runtime and feature choices. No live upgrade has been performed here.
+
+The focused fictional tests cover failed final validation with unchanged schema
+and ledger, missing schema, altered checksums, history gaps and archived chores.
+Core adds cross-repository preservation/recovery tests and disposable hosted
+managed-upgrade CI. Final paired checks and reviewer outcomes belong in the PR
+handoff; they do not replace physical iPad/Bonjour/provider acceptance.
+
 - Workspace defaults consistently use `.familybot`. Explicit
   `FAMILYBOT_WORKSPACE` wins over legacy `OPENCLAW_WORKSPACE`; no discovery or
   copying of legacy state occurs. `FAMILYBOT_PORTAL_RUNTIME` retains an explicit
@@ -91,6 +107,8 @@ Portal PR first, then Core PR against the exact Portal head; record both SHAs
 in both PR descriptions. Re-run pairing checks after any review fix. Final
 independent affirmative/skeptical reviews are advice, not owner approval.
 No merge or deployment is part of this train. Source rollback is a paired
-revert; no database restore is required for these changes. If a test install
-was executed elsewhere, preserve its data and stop only its generated jobs
-before explicitly selecting/redeploying the prior source pair.
+revert; no database restore is required when no installer/data changes ran.
+If an upgrade ran elsewhere, preserve its state, stop every user of that
+household database and follow Core's `REDEPLOY.md`. Undoing data changes may
+require its full pre-upgrade snapshot and matching source/configuration pair;
+do not restore unnecessarily and lose newer work. Do not stop unrelated services.

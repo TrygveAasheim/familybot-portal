@@ -33,8 +33,15 @@
 
 ## Supported flow
 
-Set `portal.features.oda: true` in the canonical config, validate, and rerun the
-installer to enable Oda. Omitted flags default to false, including on upgrade.
+Set `portal.features.oda: true` in the canonical config and validate. For an
+existing household, follow section 11 of Core's canonical `GETTING_STARTED.md`
+and its `REDEPLOY.md` preflight: stop all database users, retain explicit existing
+workspace/runtime paths and use `--upgrade --writers-stopped`. A plain installer
+rerun refuses an existing database. Set all four feature booleans deliberately
+(`oda`, `oda_ai`, `hellofresh`, `hellofresh_account`); set unused features to
+`false`. Oda AI requires separate external-processing consent. Omitted flags
+default to false; a managed upgrade rejects missing choices rather than silently
+changing previously implicit access.
 The enabled top-level `Oda` tab is available to all users who already have a valid
 local dashboard session. It supports:
 

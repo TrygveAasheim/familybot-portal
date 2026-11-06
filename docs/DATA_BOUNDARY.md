@@ -3,6 +3,13 @@
 The deployed portal presents a curated view of the running FamilyBot. It is not
 a general-purpose OpenClaw administration surface.
 
+Upgrade boundary: a source update is not permission to reseed chores, reactivate
+rewards, replace school dates or adopt another workspace. Core owns the explicit
+stopped-writer upgrade and full pre-upgrade backup. Portal validates its owned
+schema before committing migrations and before API startup. Recovery restores
+the matching source/state pair; it must not expose household backup contents in
+public review evidence. See Core's canonical `REDEPLOY.md`.
+
 ## Network boundary
 
 - Development defaults to `127.0.0.1`. The managed service deliberately binds

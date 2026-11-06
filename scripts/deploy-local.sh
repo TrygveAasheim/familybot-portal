@@ -129,7 +129,9 @@ PY
 if printf '%s\n' "$FEATURES" | grep -Fxq "oda_ai"; then
   ./scripts/configure-oda-dinner-agent.sh
 fi
-"$PYTHON_BIN" local_api/dashboard_migration.py --repair-default-rewards
+# Default rewards are first-install data, not an upgrade repair. An intentional
+# parent deactivation must survive deployment; repair remains a separate CLI.
+"$PYTHON_BIN" local_api/dashboard_migration.py
 "$PYTHON_BIN" local_api/dashboard_migration.py --status >/dev/null
 mkdir -p "$TARGET/local_api" "$TARGET/local_service" "$TARGET/scripts" "$TARGET/runtime"
 mkdir -p "$LAUNCH_DIR" "$HOME/Library/Logs"

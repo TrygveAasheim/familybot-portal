@@ -44,6 +44,13 @@ creates Portal schema version 2, builds this app, installs the local service and
 verifies it. The tested Portal baseline is Node.js `22.22.3` through `22.x` and
 Python 3.12.
 
+Existing households must use the canonical guide's explicit upgrade procedure,
+not the fresh-install command above. Preserve the actual workspace/runtime and
+stop all database users first. Upgrades no longer reseed archived chores or
+repair deliberately inactive rewards. Portal validates its owned schema before
+committing migrations and before API startup. Fixture/CI success does not certify
+your live installation; this candidate is not deployed by merging its source.
+
 For a privacy-safe prerequisite report before installation:
 
 ```bash

@@ -26,7 +26,9 @@
 - curated read/write API, SQLite backup, audit and idempotency;
 - launchd supervision, Bonjour advertisement and local acceptance gate.
 - empty-database installation through Core's guided, idempotent installer;
-- explicit Core/Portal schema compatibility and pre-migration backups.
+- explicit Core/Portal schema compatibility, transactional final schema validation,
+  fail-closed startup/status, pre-migration backups and preservation-only upgrades
+  (Core owns the full pre-upgrade snapshot and recovery procedure).
 
 ## Supplied by FamilyBot Core
 

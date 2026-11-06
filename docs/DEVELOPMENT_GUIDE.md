@@ -83,9 +83,20 @@ OpenClaw workspace as a dashboard prerequisite.
 Core-owned tables are read through explicit queries. Portal-owned chores,
 completions, reward goals and weekly achievement tables are created by
 versioned Portal migrations. The shared ledger currently requires Core schema
-1 and Portal schema 2; startup checks component versions and fails closed on an
-absent or incompatible version. Migration/preflight validates checksums; a
-runtime version check alone is not a complete schema-integrity audit.
+1 and Portal schema 2. Before API bind, startup verifies the Core version
+contract, contiguous Portal history/names/checksums, required owned columns,
+foreign keys and SQLite integrity. Status uses the same validation, not merely
+version numbers. All pending Portal DDL/markers and final validation run in one
+transaction; validation failure rolls them back together. This is not a full
+security audit or an atomic transaction spanning Core and Portal.
+
+Starter chores/rewards belong to first installation. Deployment runs migrations
+without starter seeds or default-reward repair; those remain explicit maintenance
+operations. Archived matching chores count as existing even during an explicit
+seed. Upgrade through Core's canonical recovery guide, with all writers stopped
+and the installed workspace/runtime retained. A pre-upgrade backup covers data
+changes that happen before Portal migration; a Portal-only backup is too late
+to recover earlier Core/calendar changes.
 The portal may add a separate add-on schema, but it cannot reuse core ledgers or
 raw payload columns as a convenient storage area.
 

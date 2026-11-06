@@ -31,7 +31,12 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
-from dashboard_migration import PORTAL_SCHEMA_VERSION, SUPPORTED_CORE_SCHEMA_VERSION
+from dashboard_migration import (
+    PORTAL_SCHEMA_VERSION,
+    SUPPORTED_CORE_SCHEMA_VERSION,
+    PortalMigrationError,
+    validate_runtime_schema,
+)
 from family_config import (
     family_settings,
     integration,
@@ -581,6 +586,10 @@ class FamilyRepository:
             ).fetchone()
             if not exists:
                 raise RuntimeError("FamilyBot database has no versioned schema contract")
+            try:
+                validate_runtime_schema(connection)
+            except (PortalMigrationError, sqlite3.Error) as exc:
+                raise RuntimeError("Incompatible FamilyBot schema; run both reviewed migrations") from exc
             versions = {
                 str(row[0]): int(row[1])
                 for row in connection.execute(

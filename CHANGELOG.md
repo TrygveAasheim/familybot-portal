@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-06 — Upgrade preservation fixes (candidate, not deployed)
+
+- Put all pending Portal DDL, markers, data initialization and final validation
+  inside one transaction. A failed final check cannot leave current markers.
+- Validate required owned tables/columns, contiguous Portal history/checksums,
+  Core version, foreign keys and SQLite integrity in both status and API startup.
+- Deployment no longer repairs deliberately deactivated rewards. Explicit
+  starter seeding respects archived matching chores; Core upgrades do not seed.
+- Add rollback/status/startup/history/archived-chore regressions; coordinate
+  with Core's full pre-upgrade snapshot, explicit runtime and recovery procedure.
+
+No new schema version or live deployment. For source-only rollback revert the
+paired change. If household data must be rolled back after an attempted upgrade,
+stop every database user and follow Core's `REDEPLOY.md` with the full pre-upgrade
+snapshot and matching source/configuration; a Portal-only backup can be too late.
+
 ## 2026-11-06 — Double-review follow-up (candidate, not deployed)
 
 - Keep Ukeplan presentation acceptance applicable for households with children,

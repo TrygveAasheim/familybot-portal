@@ -167,6 +167,7 @@ PORTAL_REQUIRED_COLUMNS = {
         "repeat_mode",
         "repeat_weekdays",
         "repeat_target",
+        "created_at", "updated_at",
     },
     "chore_completions": {
         "id",
@@ -176,10 +177,20 @@ PORTAL_REQUIRED_COLUMNS = {
         "points",
         "cycle_id",
         "occurrence_date",
+        "idempotency_key", "completed_at", "approved_by", "decided_at", "source",
     },
-    "chore_cycles": {"id", "card_id", "member_id", "cycle_key", "status"},
-    "reward_goals": {"id", "member_id", "title", "target_value", "active"},
+    "chore_cycles": {"id", "card_id", "member_id", "cycle_key", "status", "required_count",
+                     "completed_count", "points", "created_at", "decided_at"},
+    "reward_goals": {"id", "member_id", "title", "target_value", "active", "emoji",
+                     "goal_type", "unit_label", "created_at", "achieved_at"},
     "weekly_achievement_cycles": {"id", "member_id", "target_points", "started_at", "ended_at"},
+    "child_chore_operations": {"id", "idempotency_key", "result_json", "source", "created_at"},
+    "weekly_surprise_levels": {"id", "member_id", "threshold_weeks", "title", "emoji",
+                               "active", "created_at", "updated_at"},
+    "weekly_achievement_redemptions": {"id", "member_id", "cycle_id", "full_weeks",
+                                      "threshold_weeks", "title", "created_at"},
+    "weekly_achievement_reset_operations": {"id", "member_id", "idempotency_key", "result_json", "created_at"},
+    "dashboard_reset_operations": {"id", "member_id", "scope", "idempotency_key", "result_json", "created_at"},
 }
 
 
@@ -291,20 +302,53 @@ def validate_portal_schema(connection: sqlite3.Connection) -> None:
         raise PortalMigrationError("Portal schema has foreign-key violations")
 
 
+def validate_migration_history(connection: sqlite3.Connection, *, require_current: bool = False) -> set[int]:
+    rows = connection.execute(
+        "SELECT version,name,checksum FROM familybot_schema_migrations WHERE component=? ORDER BY version",
+        (PORTAL_COMPONENT,),
+    ).fetchall()
+    known = {migration.version: migration for migration in PORTAL_MIGRATIONS}
+    existing = {int(row[0]) for row in rows}
+    unknown = sorted(existing - set(known))
+    if unknown:
+        raise PortalMigrationError(f"Database has unsupported future Portal migration(s): {unknown}")
+    if existing != set(range(1, max(existing, default=0) + 1)):
+        raise PortalMigrationError("Portal migration history has a gap")
+    for version, name, checksum in rows:
+        if name != known[version].name or checksum != known[version].checksum:
+            raise PortalMigrationError(f"Portal migration {version} does not match reviewed source")
+    if require_current and existing != set(known):
+        raise PortalMigrationError("Portal schema is not current; run both reviewed migrations")
+    return existing
+
+
+def validate_runtime_schema(connection: sqlite3.Connection) -> None:
+    verify_core_compatibility(connection)
+    validate_migration_history(connection, require_current=True)
+    validate_portal_schema(connection)
+    integrity = connection.execute("PRAGMA quick_check").fetchone()
+    if not integrity or integrity[0] != "ok":
+        raise PortalMigrationError("Portal database integrity check failed")
+
+
 def migration_status(db_path: Path) -> dict[str, int | bool]:
     if not db_path.is_file():
         return {"exists": False, "core": 0, "portal": 0, "current": False}
-    with sqlite3.connect(db_path) as connection:
-        core = _schema_version(connection, CORE_COMPONENT)
-        portal = _schema_version(connection, PORTAL_COMPONENT)
-        integrity = connection.execute("PRAGMA quick_check").fetchone()
+    core = portal = 0
+    current = False
+    try:
+        with sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True) as connection:
+            core = _schema_version(connection, CORE_COMPONENT)
+            portal = _schema_version(connection, PORTAL_COMPONENT)
+            validate_runtime_schema(connection)
+            current = True
+    except (PortalMigrationError, sqlite3.Error):
+        pass
     return {
         "exists": True,
         "core": core,
         "portal": portal,
-        "current": core == SUPPORTED_CORE_SCHEMA_VERSION
-        and portal == PORTAL_SCHEMA_VERSION
-        and bool(integrity and integrity[0] == "ok"),
+        "current": current,
     }
 
 
@@ -342,44 +386,21 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
     created_rewards = 0
     with sqlite3.connect(db_path) as connection:
         connection.execute("PRAGMA foreign_keys=ON")
+        # One transaction includes ALL pending DDL, markers, seeding and final
+        # validation. A failed final check must never persist a current marker.
+        connection.execute("BEGIN IMMEDIATE")
         verify_core_compatibility(connection)
-        existing_rows = connection.execute(
-            """SELECT version,name,checksum FROM familybot_schema_migrations
-               WHERE component=? ORDER BY version""",
-            (PORTAL_COMPONENT,),
-        ).fetchall()
-        existing = {int(row[0]): row for row in existing_rows}
-        known = {migration.version: migration for migration in PORTAL_MIGRATIONS}
-        unknown = sorted(set(existing) - set(known))
-        if unknown:
-            raise PortalMigrationError(f"Database has unsupported future Portal migration(s): {unknown}")
-        for version, row in existing.items():
-            migration = known[version]
-            if row[1] != migration.name or row[2] != migration.checksum:
-                raise PortalMigrationError(
-                    f"Portal migration {version} does not match reviewed source"
-                )
+        existing = validate_migration_history(connection)
         for migration in PORTAL_MIGRATIONS:
             if migration.version in existing:
                 continue
-            connection.execute("BEGIN IMMEDIATE")
-            try:
-                migration.apply(connection)
-                connection.execute(
-                    """INSERT INTO familybot_schema_migrations
-                       (component,version,name,checksum,applied_at) VALUES(?,?,?,?,?)""",
-                    (
-                        PORTAL_COMPONENT,
-                        migration.version,
-                        migration.name,
-                        migration.checksum,
-                        dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-                    ),
-                )
-                connection.commit()
-            except BaseException:
-                connection.rollback()
-                raise
+            migration.apply(connection)
+            connection.execute(
+                """INSERT INTO familybot_schema_migrations
+                   (component,version,name,checksum,applied_at) VALUES(?,?,?,?,?)""",
+                (PORTAL_COMPONENT, migration.version, migration.name, migration.checksum,
+                 dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")),
+            )
         validate_portal_schema(connection)
         if seed:
             workspace = db_path.parent.parent
@@ -396,8 +417,7 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
                 for title, icon, points, approval in DEFAULT_CHORES:
                     exists = connection.execute(
                         """SELECT 1 FROM kanban_cards k JOIN family_chore_meta m ON m.card_id=k.id
-                           WHERE lower(k.assigned_to)=lower(?) AND lower(k.title)=lower(?)
-                             AND k.archived_at IS NULL""",
+                           WHERE lower(k.assigned_to)=lower(?) AND lower(k.title)=lower(?)""",
                         (child_name, title),
                     ).fetchone()
                     if exists:
@@ -438,7 +458,7 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
                    )""",
                 (member_id, now, member_id),
             )
-        validate_portal_schema(connection)
+        validate_runtime_schema(connection)
     return {"chores": created_chores, "rewards": created_rewards}
 
 

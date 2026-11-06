@@ -354,6 +354,58 @@ class RepositoryTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
 
+    def test_failed_final_schema_validation_rolls_back_all_pending_markers(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("DELETE FROM familybot_schema_migrations WHERE component='portal'")
+            connection.execute("DROP TABLE reward_goals")
+            connection.execute("CREATE TABLE reward_goals(id INTEGER PRIMARY KEY,member_id INTEGER,active INTEGER)")
+            before = list(connection.execute("SELECT type,name,sql FROM sqlite_master ORDER BY name"))
+        with self.assertRaises(PortalMigrationError):
+            migrate(self.db)
+        with sqlite3.connect(self.db) as connection:
+            self.assertEqual(before, list(connection.execute("SELECT type,name,sql FROM sqlite_master ORDER BY name")))
+            self.assertEqual(0, connection.execute(
+                "SELECT COUNT(*) FROM familybot_schema_migrations WHERE component='portal'"
+            ).fetchone()[0])
+        self.assertFalse(migration_status(self.db)["current"])
+
+    def test_current_markers_cannot_hide_missing_table_or_column(self):
+        snapshot = self.db.read_bytes()
+        for statement in (
+            "ALTER TABLE reward_goals DROP COLUMN title",
+            "DROP TABLE weekly_achievement_reset_operations",
+        ):
+            with self.subTest(statement=statement):
+                self.db.write_bytes(snapshot)
+                with sqlite3.connect(self.db) as connection:
+                    connection.execute(statement)
+                self.assertFalse(migration_status(self.db)["current"])
+                with self.assertRaises(RuntimeError):
+                    FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+
+    def test_status_and_startup_reject_changed_checksum(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("UPDATE familybot_schema_migrations SET checksum='tampered' WHERE component='portal'")
+        self.assertFalse(migration_status(self.db)["current"])
+        with self.assertRaises(RuntimeError):
+            FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+
+    def test_migration_history_gap_is_not_silently_repaired(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("DELETE FROM familybot_schema_migrations WHERE component='portal' AND version=1")
+        with self.assertRaisesRegex(PortalMigrationError, "gap"):
+            migrate(self.db)
+        self.assertFalse(migration_status(self.db)["current"])
+
+    def test_explicit_seed_does_not_resurrect_archived_starter_chores(self):
+        migrate(self.db, seed=True)
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("UPDATE kanban_cards SET archived_at='2026-11-01' WHERE title='Rydde rommet'")
+            count = connection.execute("SELECT COUNT(*) FROM kanban_cards").fetchone()[0]
+        migrate(self.db, seed=True)
+        with sqlite3.connect(self.db) as connection:
+            self.assertEqual(count, connection.execute("SELECT COUNT(*) FROM kanban_cards").fetchone()[0])
+
     def test_portal_migration_refuses_database_without_core_contract(self):
         empty = Path(self.temp.name) / "empty.db"
         with sqlite3.connect(empty):

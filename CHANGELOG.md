@@ -7,6 +7,8 @@
   temporary review-branch and unexplained fresh-install SHA requirements.
 - Distinguish historical PR-only plans from the subsequent source promotion,
   and automated lifecycle evidence from outstanding physical/provider checks.
+- Correct Main deployment policy, backup cadence, provisional points, numeric
+  block counts, HelloFresh flags/token storage and planned Smart Home wording.
 
 No runtime deployment, schema change or household data access is part of this
 publication. Existing installations do not update themselves on a GitHub merge.

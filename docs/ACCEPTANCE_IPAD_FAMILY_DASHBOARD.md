@@ -151,8 +151,10 @@ child-card assertions.
 - Resetting chores removes the active routine without deleting historical rows.
 - Resetting points starts a fresh reward cycle at zero while retaining the old
   goal and completion history.
-- Reset actions require the parent session, create a backup, and are safe to
-  repeat with the same idempotency key.
+- Reset actions require the parent session and are safe to repeat with the same
+  idempotency key. Automatic backup is once before the first mutation per
+  repository/API-service lifetime, not per reset or parent login. Take an explicit
+  fresh Core database backup if immediate pre-reset recovery is required.
 
 Evidence: authorization, backup, history-retention and reset idempotency tests.
 
@@ -181,8 +183,9 @@ child progress rendering.
   board and remain available only on the assigned child's chore page.
 - The board exposes New, In Progress, Pause and Done lanes, and a parent can
   create, move or archive a task.
-- Mutations require the parent session, create a backup and keep archived tasks
-  out of the active board.
+- Mutations require the parent session and keep archived tasks out of the active
+  board. Automatic backup is once before the first mutation per repository/API
+  service lifetime; later Kanban changes do not create a new snapshot.
 - Done retains completed tasks and orders the newest status changes first.
 
 Evidence: curated API route checks, lane validation, parent authorization tests,
@@ -299,9 +302,10 @@ flag-on acceptance probe.
 ### AC-20 — Guarded HelloFresh upcoming-box management
 
 - `portal.features.hellofresh_account` defaults to `false` and requires the
-  parent `hellofresh` flag. When enabled, HelloFresh occupies Oda's former
-  top-level navigation position; the Oda implementation remains available for
-  rollback but is not shown beside it.
+  prerequisite `hellofresh` public-menu flag. The public-menu flag alone places
+  HelloFresh in Oda's former top-level navigation position; the account flag adds
+  login and bounded account operations. Oda remains implemented for rollback
+  but is not shown beside HelloFresh.
 - First use accepts the household's HelloFresh email and password inside the
   Portal. It never opens a popup or sends an email. The password crosses the
   trusted home LAN to the authenticated local API once, then is sent only to

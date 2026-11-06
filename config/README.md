@@ -23,14 +23,15 @@ enabled in stages (account access requires the public-menu flag) with:
 }
 ```
 
-The first flag exposes public menu data. The second replaces the visible Oda
-tab with in-Portal HelloFresh email/password login. On first use the password
+The first flag exposes public menu data and replaces the visible Oda tab with
+HelloFresh, even without account access. The second adds in-Portal HelloFresh
+email/password login and bounded account operations. On first use the password
 travels once over the trusted home LAN to the local API, which forwards it to
 the fixed HelloFresh Norway endpoint using a Chrome-fingerprinted, verified
 HTTPS transport. The password remains transient request data and is never
 stored, logged, returned or placed in model context. There is no email-link
 fallback: HelloFresh maps that flow to password reset for this market/account.
-Only refresh credentials are written beneath the configured private workspace,
+Access/refresh tokens and their expiry are written beneath the configured private workspace,
 normally `$HOME/.familybot/credentials/hellofresh-no.json`, with mode `0600`. Account
 access is limited to viewing future boxes, replacing/adding/removing selected
 meals and pausing or resuming one identified week after explicit confirmation.

@@ -230,8 +230,11 @@ change only the connected HelloFresh account and never write FamilyBot SQLite.
 Provider subscription-plan, servings, address, payment, checkout and order
 operations remain outside the allowlist.
 
-The bridge creates a consistent SQLite backup before the first mutation in each
-session and appends a local audit record. Resetting a child archives/hides active
+The bridge creates one consistent SQLite backup before the first mutation in
+each repository/API-service lifetime, not each browser or parent session. Later
+mutations do not refresh that snapshot. Take an explicit fresh backup with
+Core's `manage_database.py backup` before a reset when immediate pre-reset
+recovery matters. Mutations append a local audit record. Resetting a child archives/hides active
 portal chores and starts a new reward cycle; achievement resets also preserve
 completed cycles and redemption history. Historical completion and reward rows
 are retained. Interview creation is idempotent by confirmation key. It cannot

@@ -33,7 +33,16 @@
 
 ## Supported flow
 
-The top-level `Oda` tab is available to all users who already have a valid
+Set `portal.features.oda: true` in the canonical config and validate. For an
+existing household, follow section 11 of Core's canonical `GETTING_STARTED.md`
+and its `REDEPLOY.md` preflight: stop all database users, retain explicit existing
+workspace/runtime paths and use `--upgrade --writers-stopped`. A plain installer
+rerun refuses an existing database. Set all four feature booleans deliberately
+(`oda`, `oda_ai`, `hellofresh`, `hellofresh_account`); set unused features to
+`false`. Oda AI requires separate external-processing consent. Omitted flags
+default to false; a managed upgrade rejects missing choices rather than silently
+changing previously implicit access.
+The enabled top-level `Oda` tab is available to all users who already have a valid
 local dashboard session. It supports:
 
 - connecting or disconnecting the household Oda account through OAuth;
@@ -58,7 +67,12 @@ allowlist maps only to `product_search`, `likely_to_buy`, `get_cart`,
 
 ## Dinner assistant boundary
 
-Oda exposes recipe tools, not a general chat model. The Portal therefore uses
+Set `portal.features.oda_ai: true` separately only with explicit consent to
+external model processing. This additionally needs the isolated OpenClaw dinner
+agent even if the household otherwise uses the Dashboard profile. Without it,
+direct recipe search/cart works without OpenClaw or an AI account.
+
+Oda exposes recipe tools, not a general chat model. When AI is enabled, the Portal uses
 an isolated `familybot-oda-dinner` OpenClaw agent with an OpenAI model and no
 tools or skills. It can only propose one to three bounded recipe search phrases
 and a short Norwegian reply. The model receives:
@@ -94,7 +108,7 @@ does not expose dependable browser-back controls.
 
 ## Account connection
 
-1. Deploy Portal and open `http://familie.local:3000/?oda=1`.
+1. Enable Oda, deploy Portal, and add `?oda=1` to the URL printed by the installer.
 2. Choose **Logg inn hos Oda**. Oda opens in the current browser window, so no
    popup permission is needed.
 3. Sign in to Oda and approve the connection.
@@ -102,8 +116,10 @@ does not expose dependable browser-back controls.
    connection. If automatic navigation is unavailable, the callback page also
    provides an explicit **Tilbake til Familieportalen** link.
 
-The OAuth callback defaults to
-`http://familie.local:8788/api/oda/oauth/callback`. A customized deployment may
+The OAuth callback is derived from `portal.hostname` and `portal.api_port`:
+`http://CONFIGURED-HOST:API-PORT/api/oda/oauth/callback`. Bonjour service
+advertisement does not create a hostname alias. Changing hostname/ports may
+require reconnecting Oda. A customized deployment may
 set `FAMILYBOT_ODA_CALLBACK_URL`, but that exact URL must be reachable from the
 browser used for Oda consent.
 

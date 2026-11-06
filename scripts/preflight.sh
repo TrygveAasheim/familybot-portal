@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WORKSPACE="${FAMILYBOT_WORKSPACE:-$HOME/.openclaw/workspace}"
+WORKSPACE="${FAMILYBOT_WORKSPACE:-${OPENCLAW_WORKSPACE:-$HOME/.familybot}}"
 PIN_FILE="${FAMILYBOT_PARENT_PIN_FILE:-$WORKSPACE/config/parent-pin.txt}"
 PYTHON_BIN="${FAMILYBOT_PYTHON:-python3}"
 if [[ ! -f "$PIN_FILE" && -f "$ROOT/runtime/parent-pin.txt" ]]; then

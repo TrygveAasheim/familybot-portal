@@ -39,10 +39,7 @@ DEFAULT_CACHE_DIR = Path(
         "FAMILYBOT_HELLOFRESH_IMAGE_CACHE",
         str(
             Path(
-                os.environ.get(
-                    "FAMILYBOT_WORKSPACE",
-                    str(Path.home() / ".openclaw/workspace"),
-                )
+                os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
             )
             / "cache/hellofresh-images"
         ),

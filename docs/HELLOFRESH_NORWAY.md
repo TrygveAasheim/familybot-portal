@@ -1,5 +1,9 @@
 # HelloFresh Norway experiment
 
+Provider observations and live probes dated below are historical evidence from
+the original installation, not validation of this installation candidate or a
+new household account. Revalidate only on an explicitly authorized test account.
+
 ## Change record
 
 - Change type: guarded feature increment behind existing disabled-by-default
@@ -49,7 +53,8 @@
   `portal.features.hellofresh_account` both default off. The household test
   enables both on `dev`. There is no Portal database migration.
 - Rollback: set `hellofresh_account` to `false` to retain only the public menu,
-  or set `hellofresh` to `false` to restore Oda in visible navigation. Removing
+  or set `hellofresh` to `false` to restore Oda in visible navigation only when
+  `portal.features.oda` is explicitly true. Removing
   the owner-only local credential disconnects the account.
 - Documentation: README, development guide, feature map, configuration, data
   boundary and acceptance contract are updated together.
@@ -104,7 +109,8 @@ the transport rejects every path outside the reviewed allowlist; it never
 accepts a browser-supplied URL. Fixture tests cover the expected response shapes
 and every write remains snapshot-guarded and read back.
 
-The daily image warm-up already exercises account weeks and published menus.
+When enabled, deployed and authenticated, the daily image warm-up exercises
+account weeks and published menus.
 For an explicit count-only live probe, run:
 
 ```bash
@@ -133,10 +139,15 @@ available. The current image host is asked for a 960-pixel bounded rendition,
 so full camera originals are never retained. Pruning keeps at most 600 images
 and 256 MB, ordered by recent use.
 
+When both the HelloFresh public and account flags are enabled and deployed,
 `ai.familybot.portal-images` runs at 04:45 and asks only for published upcoming
 menus. It downloads missing reviewed images with four workers, records counts
 only and leaves provider/menu failures isolated from the dashboard. This is a
 Portal add-on schedule rather than a Core briefing dependency.
+The job checks both flags on every invocation before reading retained credentials.
+Missing/invalid config fails closed. Disabling account access preserves tokens
+but prevents subsequent job invocations from using them; redeploy to remove the
+generated job. Work already in flight is not cancelled by editing configuration.
 
 Meal writes use the provider's full-cart contract, so the adapter re-reads the
 week immediately before each action. It derives the exact course indexes,

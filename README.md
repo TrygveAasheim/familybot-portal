@@ -18,21 +18,38 @@ deliberately unavailable._
 
 Do not configure this repository independently first. Clone it beside
 `familybot-core` and use the
-[canonical step-by-step Mac setup guide](https://github.com/TrygveAasheim/familybot-core/blob/main/GETTING_STARTED.md):
+[canonical step-by-step Mac setup guide](https://github.com/TrygveAasheim/familybot-core/blob/codex/readiness-review-fixes/GETTING_STARTED.md):
 
 ```bash
 mkdir -p "$HOME/FamilyBot" && cd "$HOME/FamilyBot"
-git clone https://github.com/TrygveAasheim/familybot-core.git
-git clone https://github.com/TrygveAasheim/familybot-portal.git
+git clone --branch codex/readiness-review-fixes https://github.com/TrygveAasheim/familybot-core.git
+git clone --branch codex/readiness-review-fixes https://github.com/TrygveAasheim/familybot-portal.git
 cd familybot-core
+git switch --detach REVIEWED_CORE_SHA
+git -C ../familybot-portal switch --detach REVIEWED_PORTAL_SHA
 uv run --python 3.12 scripts/install_familybot.py \
   --portal-repo ../familybot-portal
 ```
+
+Replace the two SHA placeholders with the full compatible commit IDs in the
+readiness PR handoff before running this block. They are not literal Git refs.
+
+These commands select the development installation candidate. `main` has not
+yet received the installer release. For pre-merge testing check out the exact
+paired commits from the readiness PRs in both repositories; do not assume moving
+`dev` contains unmerged fixes. See [review and test instructions](docs/READINESS_REVIEW.md).
 
 The Core installer owns onboarding, the canonical config and Core schema. It
 creates Portal schema version 2, builds this app, installs the local service and
 verifies it. The tested Portal baseline is Node.js `22.22.3` through `22.x` and
 Python 3.12.
+
+Existing households must use the canonical guide's explicit upgrade procedure,
+not the fresh-install command above. Preserve the actual workspace/runtime and
+stop all database users first. Upgrades no longer reseed archived chores or
+repair deliberately inactive rewards. Portal validates its owned schema before
+committing migrations and before API startup. Fixture/CI success does not certify
+your live installation; this candidate is not deployed by merging its source.
 
 For a privacy-safe prerequisite report before installation:
 
@@ -88,6 +105,9 @@ Both are disabled by default and independent of the product profiles.
 Provider changes can break either integration without affecting the family
 dashboard. Details are in [Oda groceries](docs/ODA_GROCERIES.md) and the
 [HelloFresh contract](docs/HELLOFRESH_NORWAY.md).
+Scheduled HelloFresh image prefetch requires both public-menu and account flags.
+Disabling either stops new prefetch invocations before they read retained tokens;
+redeployment also removes the generated image job. Stored tokens are not deleted.
 
 ## Security boundary
 
@@ -118,9 +138,10 @@ npm test
 TypeScript, the production build and rendered HTML contracts. The Core suite
 owns the cross-repository empty-install lifecycle and macOS clean-install CI.
 
-The live acceptance script uses private runtime state and must not be reported
-as passed unless it was actually run on an isolated test installation. A CI or
-simulated result is not a physical iPad result.
+The runtime probe requires explicit `--workspace` and `--host` arguments and
+must target an isolated test installation. Exit zero means only its automated
+probes passed, never full release acceptance. Unperformed browser, iPad and
+provider criteria remain `not_run`; disabled capabilities are `not_applicable`.
 
 For a cold engineering handoff, use
 [docs/NEW_SESSION_VERIFICATION.md](docs/NEW_SESSION_VERIFICATION.md). Feature

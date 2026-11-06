@@ -1,270 +1,139 @@
 #!/usr/bin/env python3
-"""Measure the release criteria against the running local production service."""
+"""Explicit-target read-only runtime probes, never historical browser evidence."""
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import http.client
 import json
-import os
-import sqlite3
-import subprocess
-import time
+import stat
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKSPACE = Path(
-    os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".familybot"))
-).expanduser()
-DB = WORKSPACE / "db/family.db"
-CONFIG = Path(os.environ.get("FAMILYBOT_FAMILY_CONFIG", WORKSPACE / "config/family.local.json")).expanduser()
-SETTINGS = json.loads(CONFIG.read_text(encoding="utf-8"))
-PORTAL = SETTINGS["portal"]
-HOST = str(PORTAL["hostname"])
-WEB_PORT = int(PORTAL["web_port"])
-API_PORT = int(PORTAL["api_port"])
-BONJOUR_NAME = str(PORTAL["bonjour_name"])
-ORIGIN = f"http://{HOST}:{WEB_PORT}"
-CONFIGURED_LINE = str(SETTINGS["integrations"]["transport"]["line"])
-EXPECTED_CHILDREN = sum(member.get("role") == "child" for member in SETTINGS["members"])
-results: list[dict[str, object]] = []
+def applicability(config: dict) -> dict[str, dict]:
+    records = {f"AC-{n:02}": {"status": "not_run", "evidence": "Full criterion not measured by runtime probes"}
+               for n in range(1, 21)}
+    children = any(m.get("role") == "child" for m in config["members"])
+    features = config["portal"].get("features", {})
+    enabled = {
+        **{f"AC-{n:02}": children for n in (2, 3, 4, 5, 6, 7, 12, 13, 14)},
+        "AC-16": children and config.get("profile", "agent") == "agent",
+        # Presentation remains available for retained plans after ingestion is
+        # disabled. Only a household without children makes this inapplicable.
+        "AC-17": children,
+        "AC-18": features.get("oda") is True,
+        "AC-19": features.get("hellofresh") is True,
+        "AC-20": features.get("hellofresh") is True and features.get("hellofresh_account") is True,
+    }
+    for criterion, active in enabled.items():
+        if not active:
+            records[criterion] = {"status": "not_applicable", "evidence": "Capability absent for this household/profile"}
+    return records
 
 
-def record(criterion: str, passed: bool, evidence: str, started: float) -> None:
-    results.append({"criterion": criterion, "status": "pass" if passed else "fail", "evidence": evidence, "duration_ms": round((time.monotonic()-started)*1000)})
+def request(host: str, port: int, path: str, origin: str, token: str = "") -> tuple[int, bytes]:
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+    try:
+        connection.request("GET", path, headers={"Origin": origin, "X-FamilyBot-Local-Token": token})
+        response = connection.getresponse()
+        raw = response.read(2_000_001)
+        if len(raw) > 2_000_000:
+            raise ValueError("Oversized response")
+        return response.status, raw
+    finally:
+        connection.close()
 
 
-def request(port: int, method: str, path: str, headers: dict[str,str] | None=None, body: dict[str,object] | None=None):
-    connection=http.client.HTTPConnection(HOST,port,timeout=5)
-    raw=json.dumps(body).encode() if body is not None else None
-    merged={"Origin":ORIGIN,**(headers or {})}
-    if raw is not None: merged["Content-Type"]="application/json"
-    connection.request(method,path,raw,merged)
-    response=connection.getresponse(); payload=response.read(); connection.close()
-    return response.status,payload
+def probe(workspace: Path, host: str, *, allow_integrations: bool = False) -> dict:
+    config_path = workspace / "config/family.local.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if not allow_integrations and any(
+        isinstance(v, dict) and v and v.get("enabled") is not False
+        for v in config.get("integrations", {}).values()
+    ):
+        raise ValueError("Configured integrations may make external requests; explicit consent required")
+    portal = config["portal"]
+    origin = f"http://{portal['hostname']}:{portal['web_port']}"
+    if origin not in portal["allowed_origins"]:
+        raise ValueError("Configured hostname origin is not allowlisted")
+    checks = []
+
+    def record(name: str, passed: bool) -> None:
+        checks.append({"check": name, "status": "pass" if passed else "fail"})
+
+    api_port = int(portal["api_port"])
+    status, web = request(host, int(portal["web_port"]), "/", origin)
+    record("web_identity", status == 200 and b"<html" in web.lower()
+           and any(m in web.lower() for m in (b"familybot", b"familieportalen")))
+    status, raw = request(host, api_port, "/api/health", origin)
+    health = json.loads(raw)
+    record("api_identity", status == 200 and health.get("ok") is True
+           and health.get("service") == "familybot-dashboard-api")
+    status, raw = request(host, api_port, "/api/session", origin)
+    session = json.loads(raw)
+    record("session_contract", status == 200 and session.get("api") == "familybot-local-v2"
+           and bool(session.get("token")))
+    status, raw = request(host, api_port, "/api/dashboard", origin, session.get("token", ""))
+    dashboard = json.loads(raw)
+    expected = {m["member_id"] for m in config["members"] if m.get("role") == "child"}
+    children = dashboard.get("children", [])
+    record("configured_children", status == 200 and {c["id"] for c in children} == expected)
+    record("reward_contract", all(
+        c.get("reward") is None or (
+            all(k in c["reward"] for k in ("earned", "remaining", "percent", "target_value", "title"))
+            and c["reward"]["target_value"] > 0
+        ) for c in children
+    ))
+    foreign, _ = request(host, api_port, "/api/session", "https://invalid.example")
+    unauthorized, _ = request(host, api_port, "/api/dashboard", origin)
+    record("foreign_origin_rejected", foreign == 403)
+    record("missing_session_rejected", unauthorized == 403)
+    record("private_file_modes", all(
+        stat.S_IMODE(p.stat().st_mode) == 0o600
+        for p in (config_path, workspace / "config/parent-pin.txt", workspace / "db/family.db")
+    ))
+    configured = portal.get("features", {})
+    for feature in ("oda", "oda_ai", "hellofresh", "hellofresh_account"):
+        active = configured.get(feature) is True
+        if feature == "oda_ai":
+            active = active and configured.get("oda") is True
+        if feature == "hellofresh_account":
+            active = active and configured.get("hellofresh") is True
+        record(f"feature_{feature}", session.get("features", {}).get(feature) is active)
+    # Never contact provider routes, open credentials, or count old browser JSON.
+    return {
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "evidence_class": "read-only HTTP/config probes",
+        "automated_checks_ok": all(c["status"] == "pass" for c in checks),
+        "release_ready": False,
+        "checks": checks,
+        "criteria": applicability(config),
+        "outstanding": ["fresh browser/layout evidence", "physical iPad and LAN Bonjour",
+                        "managed restart evidence", "enabled-provider acceptance"],
+    }
 
 
-def main() -> None:
-    started=time.monotonic()
-    web_status,_=request(WEB_PORT,"GET","/")
-    api_status,api_raw=request(API_PORT,"GET","/api/health")
-    launch=subprocess.run(["launchctl","print",f"gui/{os.getuid()}/ai.familybot.portal"],capture_output=True,text=True)
-    lookup=subprocess.Popen(["/usr/bin/dns-sd","-L",BONJOUR_NAME,"_http._tcp","local"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
-    time.sleep(2); lookup.terminate(); dns_output=lookup.communicate(timeout=3)[0]
-    record("AC-01",web_status==200 and api_status==200 and launch.returncode==0 and f"{HOST}.:{WEB_PORT}" in dns_output,f"web={web_status}, api={api_status}, Bonjour resolved, launchd={launch.returncode}",started)
-
-    browser=json.loads((ROOT/"tests/browser-acceptance.json").read_text())
-    direct=browser["direct_child_link"]; portrait=browser["portrait"]
-    started=time.monotonic(); record("AC-02",direct["survived_reload"] and portrait["family_information_cards"]==5 and portrait["child_entry_controls"]==EXPECTED_CHILDREN,f"family home=5 cards; {EXPECTED_CHILDREN} configured child entry controls; direct child URL survived reload",started)
-
-    started=time.monotonic()
-    with sqlite3.connect(DB) as connection:
-        child_cards=connection.execute(
-            """SELECT COUNT(*) FROM family_chore_meta m JOIN kanban_cards k ON k.id=m.card_id
-               WHERE m.visible_to_kids=1 AND k.archived_at IS NULL"""
-        ).fetchone()[0]
-        completion_unique=any(
-            index[2] and any(column[2]=="idempotency_key" for column in connection.execute(f"PRAGMA index_info('{index[1]}')"))
-            for index in connection.execute("PRAGMA index_list('chore_completions')")
-        )
-    source=(ROOT/"app/_components/FamilyConsole.tsx").read_text()
-    empty_ready="Klar for nye oppdrag" in source and "Lag de første oppdragene sammen" in source
-    record("AC-03",completion_unique and 'className="mission-card"' in source and 'onClick={()=>void complete(chore)}' in source and empty_ready,f"{child_cards} active kid cards; durable one-tap handler and guided empty state",started)
-
-    started=time.monotonic()
-    with sqlite3.connect(DB) as connection:
-        durable=all(connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone() for name in ("chore_completions","family_chore_meta","reward_goals"))
-    record("AC-04",durable and "history-list" in source,"SQLite tables present; history surface rendered",started)
-
-    started=time.monotonic()
-    status,session_raw=request(API_PORT,"GET","/api/session"); session=json.loads(session_raw); local=session.get("token","")
-    _,dashboard_raw=request(API_PORT,"GET","/api/dashboard",{"X-FamilyBot-Local-Token":local}); dashboard=json.loads(dashboard_raw)
-    first_child=dashboard["children"][0]["name"].lower()
-    rejected,_=request(API_PORT,"POST","/api/chores",{"X-FamilyBot-Local-Token":local},{"title":"must reject","assigned_to":first_child,"points":1})
-    record("AC-05",status==200 and rejected==403 and "decide_completion" in (ROOT/"local_api/familybot_api.py").read_text(),f"child admin attempt={rejected}; approval transition implemented",started)
-
-    started=time.monotonic()
-    rewards=[child.get("reward") for child in dashboard["children"]]
-    reward_ok=all(reward and all(key in reward for key in ("earned","remaining","percent","target_value","title")) and reward["target_value"]==30 for reward in rewards)
-    record("AC-06",reward_ok and "Sett nytt mål" in source,f"reward contract valid; {sum(reward is not None for reward in rewards)} active target(s)",started)
-
-    started=time.monotonic()
-    pin=ROOT/"runtime/parent-pin.txt"; mode=pin.stat().st_mode & 0o777
-    record("AC-07",mode==0o600 and all(text in source for text in ("Legg til gjøremål","Nylig registrert","Underkjenn","Sett nytt mål")),f"parent PIN mode={oct(mode)}; add/reject/reward controls present",started)
-
-    started=time.monotonic()
-    encoded=dashboard_raw.decode("utf-8",errors="replace").lower(); forbidden=[term for term in ("telegram_id","raw_json","source_ref","attachment","api_key") if term in encoded]
-    departures=dashboard.get("transport",{}).get("departures",[])
-    live_transport=bool(departures) and all(str(item.get("line"))==CONFIGURED_LINE for item in departures) and "TransportCountdown" in source and "1_000" in source
-    family_surface=all(text in source for text in ("Viktigst nå","Neste 5 dager","upcomingEventsFor","WeatherForecast","T-bane","Aktiviteter","FamilyBot","Skolen denne uken")) and "<h2>FamilyBot</h2>" not in source
-    current_plans=[plan["member"] for plan in dashboard.get("week_plans",[])]
-    plan_state=dashboard.get("week_plan_status",[])
-    record("AC-08",family_surface and live_transport and len(plan_state)==EXPECTED_CHILDREN and not forbidden,f"family surfaces; {len(departures)} configured-line departures with countdown; {len(current_plans)} week plan(s), {len(plan_state)} explicit child plan states; forbidden keys={forbidden}",started)
-
-    started=time.monotonic()
-    responsive=not portrait["horizontal_overflow"] and not browser["landscape"]["horizontal_overflow"] and not browser["zoom_200_equivalent"]["horizontal_overflow"] and portrait["minimum_visible_button_height"]>=48 and min(size[1] for size in browser["landscape"]["mission_card_sizes"])>=56
-    record("AC-09",responsive,"768x1024, 1024x768 and 384x512: no overflow; touch targets measured",started)
-
-    started=time.monotonic()
-    foreign=http.client.HTTPConnection(HOST,API_PORT,timeout=5);foreign.request("GET","/api/session",headers={"Origin":"https://evil.example:3000"});foreign_status=foreign.getresponse().status;foreign.close()
-    unauthorized_status,_=request(API_PORT,"GET","/api/dashboard")
-    record("AC-10",foreign_status==403 and unauthorized_status==403 and rejected==403 and not forbidden,f"foreign origin={foreign_status}; unauthenticated read={unauthorized_status}; parent auth={rejected}; PIN={oct(mode)}",started)
-
-    started=time.monotonic()
-    backups=sorted((WORKSPACE / "backups").glob("dashboard-service-*/family.db"))
-    tables_ok=False
-    with sqlite3.connect(DB) as connection: tables_ok=connection.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
-    supervisor=(ROOT/"local_service/run_service.py").is_file()
-    permissions_ok=(WORKSPACE / "backups").stat().st_mode & 0o777 == 0o700 and all(
-        backup.stat().st_mode & 0o777 == 0o600 and backup.parent.stat().st_mode & 0o777 == 0o700
-        for backup in backups
-    )
-    backup_evidence = f"<workspace>/backups/{backups[-1].parent.name}/family.db" if backups else None
-    record("AC-11",bool(backups) and tables_ok and permissions_ok and supervisor and launch.returncode==0,f"backup={backup_evidence}; integrity={tables_ok}; permissions={permissions_ok}; supervisor+launchd active",started)
-
-    started=time.monotonic()
-    recurring_api=(ROOT/"local_api/familybot_api.py").read_text()
-    recurring_contract=all(text in source for text in ("repeat_weekdays","mission-progress","repeat_completed")) and all(text in recurring_api for text in ("status IN ('awarded','pending')","awarded_points = int(row[\"points\"])") )
-    with sqlite3.connect(DB) as connection:
-        cycle_table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chore_cycles'").fetchone()
-    record("AC-12",recurring_contract and bool(cycle_table),"recurring chore fields, child progress bar and cycle table present",started)
-
-    started=time.monotonic()
-    reset_contract=all(text in source for text in ("Nullstill oppgaver","Nullstill poeng","Nullstill begge")) and "reset_child" in (ROOT/"local_api/familybot_api.py").read_text()
-    with sqlite3.connect(DB) as connection:
-        reset_table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dashboard_reset_operations'").fetchone()
-    record("AC-13",reset_contract and bool(reset_table),"parent reset controls and idempotency table present",started)
-
-    started=time.monotonic()
-    weekly_source=all(text in source for text in ("Samlet fremgang","full_tabs","Lagre nivå","Overraskelse tatt"))
-    with sqlite3.connect(DB) as connection:
-        weekly_tables=all(connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone() for name in ("weekly_achievement_cycles","weekly_surprise_levels","weekly_achievement_redemptions","weekly_achievement_reset_operations"))
-    record("AC-14",weekly_source and weekly_tables,"30-point block count, surprise ladder and parent redemption reset present",started)
-
-    started=time.monotonic()
-    api_source=(ROOT/"local_api/familybot_api.py").read_text()
-    kanban_source=all(text in source for text in ("Kanban","New","In Progress","Pause","Done","/api/kanban"))
-    kanban_api=all(text in api_source for text in ("LANES = {\"todo\", \"inprogress\", \"onhold\", \"done\"}","/api/kanban","NOT EXISTS (SELECT 1 FROM family_chore_meta"))
-    record("AC-15",kanban_source and kanban_api and "updated_at.localeCompare" in source and "Kanban er skrivebeskyttet" in source,"Parent-only Kanban separation, four lanes, CRUD and newest-first card ordering present",started)
-
-    started=time.monotonic()
-    interview=(ROOT/"scripts/child_chore.py").read_text()
-    core_bridge=Path(os.environ.get("FAMILYBOT_CORE_ROOT", ROOT.parent/"familybot-core"))/"scripts/kanban.py"
-    bridge_source=core_bridge.read_text() if core_bridge.is_file() else ""
-    with sqlite3.connect(DB) as connection:
-        operation_table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='child_chore_operations'").fetchone()
-    interview_contract=all(text in interview for text in ("confirmation_required", "--confirm", "idempotency_key", "telegram-interview"))
-    bridge_contract=all(text in bridge_source for text in ("chore-preview", "chore-create", "FAMILYBOT_PORTAL_ROOT"))
-    record("AC-16",bool(operation_table) and interview_contract and bridge_contract,"Telegram preview/confirmation bridge, portal-owned validation and idempotency table present",started)
-
-    started=time.monotonic()
-    detail_source=all(text in source for text in ("Se hele ukeplanen", "WeekPlanDetailPage", "Tilbake", "renderWeekPlanInterpretation", "week-plan-interpretation"))
-    detail_api=all(text in api_source for text in ("week_plan_detail", "/api/children/(\\d+)/week-plans/(\\d+)", "full_text", "interpretation", "week_plan_interpretations"))
-    detail_ok=False
-    if dashboard.get("week_plans"):
-        plan=dashboard["week_plans"][0]
-        child_id=next((child["id"] for child in dashboard["children"] if child["name"]==plan["member"]), None)
-        if child_id is not None:
-            detail_status,detail_raw=request(API_PORT,"GET",f"/api/children/{child_id}/week-plans/{plan['id']}",{"X-FamilyBot-Local-Token":local})
-            detail_payload=json.loads(detail_raw)
-            detail_text=detail_payload.get("week_plan",{}).get("full_text","")
-            detail_ok=detail_status==200 and detail_payload.get("week_plan",{}).get("member")==plan["member"] and bool(detail_text) and not any(marker in detail_text for marker in ("@", "From:", "To:", "Subject:", "[Attachment:"))
-    record("AC-17",detail_source and detail_api and detail_ok,"Child page keeps a compact Ukeplan link and full interpreted text opens through the scoped detail route",started)
-
-    started=time.monotonic()
-    unauthenticated_oda,_=request(API_PORT,"GET","/api/oda/status")
-    oda_status_code,oda_status_raw=request(API_PORT,"GET","/api/oda/status",{"X-FamilyBot-Local-Token":local})
-    oda_status=json.loads(oda_status_raw) if oda_status_code==200 else {}
-    oda_source=(ROOT/"local_api/oda_mcp.py").read_text()
-    dinner_source=(ROOT/"local_api/oda_dinner.py").read_text()
-    oda_ui=all(text in source for text in (">Oda</button>","Middagsassistent","oda-recipe-image","src={recipe.imageUrl}","oda-recipe-dialog","Tilbake til middagsforslag","recipe.ingredients","recipe.instructions","Legg alle ingrediensene i kurven","Hva trenger dere?","Dette kjøper dere ofte","Se gjennom og betal hos Oda","kan ikke betale eller fullføre bestillingen","/api/oda/dinner","/api/oda/search")) and "<a href={recipe.url}>" not in source
-    oda_api=all(text in api_source for text in ("/api/oda/oauth/callback","/api/oda/status","/api/oda/dinner","/api/oda/recipes/(\\d+)/cart","/api/oda/search","/api/oda/cart","OdaMcpClient")) and "/api/chat" not in api_source
-    oauth_boundary=all(text in oda_source for text in ("https://oda.com/mcp","code_challenge_method","Mcp-Session-Id","FAMILYBOT_WORKSPACE","credentials/oda-mcp.json","product_search","likely_to_buy","recipe_search","get_liked_recipes","get_purchased_recipes","fromRecipePortions","manipulate_cart","clear_cart"))
-    dinner_boundary=all(text in dinner_source for text in ("familybot-oda-dinner","MAX_HISTORY_MESSAGES = 6","MAX_PREFERENCE_TITLES = 16","DinnerPlannerUnavailable","_fallback","MAX_RECIPE_HTML_BYTES","images.oda.com","_allowed_recipe_url","application/ld+json","recipeIngredient","recipeInstructions"))
-    credential_path=WORKSPACE/"credentials/oda-mcp.json"
-    credentials_safe=not credential_path.exists() or credential_path.stat().st_mode & 0o777==0o600
-    record("AC-18",unauthenticated_oda==403 and oda_status_code==200 and oda_ui and oda_api and oauth_boundary and dinner_boundary and credentials_safe,f"Oda unauthenticated={unauthenticated_oda}; status={oda_status_code}, connected={oda_status.get('connected')}; in-portal recipe return path, bounded dinner planner, direct OAuth/MCP allowlist and local credential mode={credentials_safe}",started)
-
-    started=time.monotonic()
-    hellofresh_source=(ROOT/"local_api/hellofresh_norway.py").read_text()
-    hellofresh_image_source=(ROOT/"local_api/hellofresh_images.py").read_text()
-    configured_features=PORTAL.get("features",{}) if isinstance(PORTAL.get("features",{}),dict) else {}
-    hellofresh_enabled=configured_features.get("hellofresh") is True
-    hellofresh_status,hellofresh_raw=request(API_PORT,"GET","/api/hellofresh/menu",{"X-FamilyBot-Local-Token":local})
-    hellofresh_payload=json.loads(hellofresh_raw) if hellofresh_status==200 else {}
-    menu=hellofresh_payload.get("menu",{})
-    public_recipe_images=[item.get("image_url") for item in menu.get("recipes",[]) if isinstance(item,dict) and item.get("image_url")]
-    live_boundary=(
-        hellofresh_status==200
-        and menu.get("country")=="NO"
-        and menu.get("locale")=="nb-NO"
-        and menu.get("read_only") is True
-        and isinstance(menu.get("recipes"),list)
-        and all(value.startswith("/api/hellofresh/images/") for value in public_recipe_images)
-        and "access_token" not in hellofresh_raw.decode("utf-8",errors="replace")
-    ) if hellofresh_enabled else hellofresh_status==404
-    hellofresh_ui=all(text in source for text in ("features.hellofresh",">HelloFresh</button>","Kommende matkasser","Offentlig meny","/api/hellofresh/menu"))
-    hellofresh_boundary=all(text in hellofresh_source for text in ("https://www.hellofresh.no","MAX_HTML_BYTES","ALLOWED_IMAGE_HOSTS","systemCountry","nb-NO")) and all(text in hellofresh_image_source for text in ("MAX_IMAGE_BYTES","MAX_CACHE_BYTES","ALLOWED_CONTENT_TYPES","_safe_image_url","stale beats empty")) and not any(text in hellofresh_source for text in ("HELLOFRESH_EMAIL","HELLOFRESH_PASSWORD","playwright","selenium"))
-    record("AC-19",hellofresh_ui and hellofresh_boundary and live_boundary,f"HelloFresh flag={hellofresh_enabled}; route={hellofresh_status}; Norwegian public read-only boundary verified",started)
-
-    started=time.monotonic()
-    account_source="\n".join(
-        path.read_text()
-        for path in sorted((ROOT/"local_api").glob("hellofresh_account*.py"))
-    )
-    account_enabled=hellofresh_enabled and configured_features.get("hellofresh_account") is True
-    account_status_code,account_status_raw=request(API_PORT,"GET","/api/hellofresh/status",{"X-FamilyBot-Local-Token":local})
-    account_status=json.loads(account_status_raw) if account_status_code==200 else {}
-    account_weeks_status,account_weeks_raw=request(API_PORT,"GET","/api/hellofresh/account/weeks",{"X-FamilyBot-Local-Token":local})
-    account_menu_status,account_menu_raw=request(API_PORT,"GET","/api/hellofresh/account/menu",{"X-FamilyBot-Local-Token":local})
-    account_detail_status=None
-    account_detail_raw=b""
-    account_image_status=None
-    account_recipe_images=[]
-    if account_enabled and account_menu_status==200:
-        account_menu_payload=json.loads(account_menu_raw).get("menu",{})
-        account_recipes=account_menu_payload.get("recipes",[])
-        account_recipe_images=[item.get("image_url") for item in account_recipes if isinstance(item,dict) and item.get("image_url")]
-        if account_recipes:
-            account_recipe_id=account_recipes[0].get("id","")
-            account_servings=account_menu_payload.get("servings") or 4
-            account_detail_status,account_detail_raw=request(API_PORT,"GET",f"/api/hellofresh/account/recipes/{account_recipe_id}?servings={account_servings}",{"X-FamilyBot-Local-Token":local})
-        if account_recipe_images:
-            account_image_status,_=request(API_PORT,"GET",account_recipe_images[0])
-    detail_boundary=(
-        account_detail_status==200
-        and isinstance(json.loads(account_detail_raw).get("recipe",{}).get("ingredients"),list)
-        and "steps" not in json.loads(account_detail_raw).get("recipe",{})
-        and "subscriptionId" not in account_detail_raw.decode("utf-8",errors="replace")
-    ) if account_enabled and account_menu_status==200 else True
-    account_live=(
-        account_status_code==200
-        and account_status.get("credentials_local") is True
-        and account_status.get("read_only") is False
-        and account_status.get("provider_contract_version")==1
-        and set(account_status.get("allowed_writes",[]))=={"meal_selection","week_pause"}
-        and account_weeks_status in {200,401}
-        and account_menu_status in {200,401}
-        and (account_menu_status!=200 or all(value.startswith("/api/hellofresh/images/") for value in account_recipe_images))
-        and (not account_recipe_images or account_image_status==200)
-        and detail_boundary
-        and not any(secret in b"".join((account_status_raw,account_weeks_raw,account_menu_raw,account_detail_raw)).decode("utf-8",errors="replace") for secret in ("access_token","refresh_token","email","customerId","subscriptionId"))
-    ) if account_enabled else account_status_code==404
-    account_ui=all(text in source for text in ("features.hellofresh_account","Første gangs bruk","Logg inn hos HelloFresh","current-password","private hjemmenett","/api/hellofresh/auth/login","/api/hellofresh/account/menu","/api/hellofresh/account/weeks/","/api/hellofresh/account/recipes/","Deres matkasse","Bytt denne","Sett uken på pause","Se innhold","Skjul innhold","Filtrer på type rett","Koble fra")) and not any(text in source for text in ("window.open(","Send engangskobling","Kopier hele lenken","/api/hellofresh/auth/link/"))
-    account_boundary=all(text in account_source for text in ("/gw/auth/token","/gw/login","/gw/refresh","/gw/recipes/recipes/","recipe_detail","complete_login","curl_cffi","impersonate=\"chrome\"","verify=True","Origin","Sec-Fetch-Site","FAMILYBOT_WORKSPACE","credentials/hellofresh-no.json","0o600","challenge","/gw/v1/carts/","x-requested-by","_preserved_extras","_menu_snapshot","hasSeamlessDowngraded","_mutation_lock","PROVIDER_CONTRACT_VERSION","validate_provider_path")) and not any(text in account_source for text in ("passwordless","MAGIC_LINK","HELLOFRESH_PASSWORD","playwright","selenium"))
-    account_credentials=WORKSPACE/"credentials/hellofresh-no.json"
-    account_credentials_safe=not account_credentials.exists() or account_credentials.stat().st_mode & 0o777==0o600
-    image_prefetch_launch=subprocess.run(["launchctl","print",f"gui/{os.getuid()}/ai.familybot.portal-images"],capture_output=True,text=True)
-    image_schedule_ok=image_prefetch_launch.returncode==0 if account_enabled else True
-    record("AC-20",account_ui and account_boundary and account_live and account_credentials_safe and image_schedule_ok,f"HelloFresh account flag={account_enabled}; status={account_status_code}; weeks={account_weeks_status}; menu={account_menu_status}; detail={account_detail_status}; image={account_image_status}; local bounded image cache/prefetch, inline recipe detail/filter boundary, transient trusted-LAN password, bounded meal/week actions, stale-state and read-after-write controls, credential mode={account_credentials_safe}",started)
-
-    passed=sum(item["status"]=="pass" for item in results)
-    report={"generated_at":dt.datetime.now().astimezone().isoformat(timespec="seconds"),"passed":passed,"total":len(results),"release_ready":passed==len(results),"results":results}
-    result_dir=ROOT/"tests/results"; result_dir.mkdir(parents=True,exist_ok=True)
-    target=result_dir/"acceptance-results.json"; target.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
-    print(json.dumps(report,ensure_ascii=False,indent=2))
-    raise SystemExit(0 if report["release_ready"] else 1)
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--workspace", type=Path, required=True, help="explicit isolated test workspace")
+    parser.add_argument("--host", required=True, help="explicit target hostname or loopback address")
+    parser.add_argument("--allow-integrations", action="store_true",
+                        help="consent to dashboard-triggered configured external adapter reads")
+    parser.add_argument("--require-release", action="store_true", help="fail while full release evidence is outstanding")
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    try:
+        report = probe(args.workspace.expanduser(), args.host, allow_integrations=args.allow_integrations)
+    except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException) as exc:
+        report = {"automated_checks_ok": False, "release_ready": False,
+                  "error": f"Probe could not complete ({type(exc).__name__}); check explicit target/config"}
+    rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+    if args.output:
+        args.output.write_text(rendered, encoding="utf-8")
+    print(rendered, end="")
+    return 0 if report["automated_checks_ok"] and not args.require_release else 1
 
 
-if __name__=="__main__": main()
+if __name__ == "__main__":
+    raise SystemExit(main())

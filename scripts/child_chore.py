@@ -22,7 +22,7 @@ from familybot_api import WEEKDAY_NAMES, FamilyRepository, ValidationError  # no
 
 def repository() -> FamilyRepository:
     workspace = Path(
-        os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
+        os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
     ).expanduser()
     database = Path(
         os.environ.get("FAMILYBOT_DB_PATH", str(workspace / "db/family.db"))

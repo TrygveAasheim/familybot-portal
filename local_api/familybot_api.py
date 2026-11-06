@@ -26,11 +26,17 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
-from dashboard_migration import PORTAL_SCHEMA_VERSION, SUPPORTED_CORE_SCHEMA_VERSION
+from dashboard_migration import (
+    PORTAL_SCHEMA_VERSION,
+    SUPPORTED_CORE_SCHEMA_VERSION,
+    PortalMigrationError,
+    validate_runtime_schema,
+)
 from family_config import (
     family_settings,
     integration,
@@ -52,7 +58,7 @@ from oda_dinner import recommend as recommend_dinner
 from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable, OdaValidationError
 
 DEFAULT_WORKSPACE = Path(
-    os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
+    os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
 ).expanduser()
 DEFAULT_DB = DEFAULT_WORKSPACE / "db/family.db"
 LANES = {"todo", "inprogress", "onhold", "done"}
@@ -580,6 +586,10 @@ class FamilyRepository:
             ).fetchone()
             if not exists:
                 raise RuntimeError("FamilyBot database has no versioned schema contract")
+            try:
+                validate_runtime_schema(connection)
+            except (PortalMigrationError, sqlite3.Error) as exc:
+                raise RuntimeError("Incompatible FamilyBot schema; run both reviewed migrations") from exc
             versions = {
                 str(row[0]): int(row[1])
                 for row in connection.execute(
@@ -2275,6 +2285,13 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
 
 
 class FamilyApiServer(ThreadingHTTPServer):
+    def server_bind(self) -> None:
+        # HTTPServer otherwise resolves the bind address with getfqdn(). For
+        # 0.0.0.0 this resolves the machine hostname and can block startup when
+        # local DNS/mDNS is unavailable. This JSON API has no CGI/name use.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
     def __init__(self, address: tuple[str, int], repository: FamilyRepository, parent_pin: str,
                  allowed_origins: set[str] | None = None, oda_client: OdaMcpClient | None = None,
                  oda_enabled: bool | None = None, oda_ai_enabled: bool | None = None,
@@ -2297,14 +2314,14 @@ class FamilyApiServer(ThreadingHTTPServer):
         settings = portal_settings(repository.workspace)
         feature_settings = settings.get("features", {})
         configured_oda = (
-            feature_settings.get("oda", True) is not False
+            feature_settings.get("oda") is True
             if isinstance(feature_settings, dict)
-            else True
+            else False
         )
         configured_oda_ai = (
-            feature_settings.get("oda_ai", True) is not False
+            feature_settings.get("oda_ai") is True
             if isinstance(feature_settings, dict)
-            else True
+            else False
         )
         configured_hellofresh = (
             feature_settings.get("hellofresh") is True
@@ -2336,10 +2353,16 @@ class FamilyApiServer(ThreadingHTTPServer):
             "FAMILYBOT_ODA_CALLBACK_URL",
             f"http://{callback_host}:{callback_port}/api/oda/oauth/callback",
         )
-        self.oda = oda_client or OdaMcpClient(callback_url)
+        self.oda = oda_client or OdaMcpClient(callback_url, credentials_path=Path(os.environ.get(
+            "FAMILYBOT_ODA_CREDENTIALS", repository.workspace / "credentials/oda-mcp.json"
+        )).expanduser())
         self.hellofresh = hellofresh_client or HelloFreshNorwayClient()
-        self.hellofresh_account = hellofresh_account_client or HelloFreshAccountClient()
-        self.hellofresh_images = hellofresh_image_cache or HelloFreshImageCache()
+        self.hellofresh_account = hellofresh_account_client or HelloFreshAccountClient(credentials_path=Path(os.environ.get(
+            "FAMILYBOT_HELLOFRESH_CREDENTIALS", repository.workspace / "credentials/hellofresh-no.json"
+        )).expanduser())
+        self.hellofresh_images = hellofresh_image_cache or HelloFreshImageCache(cache_dir=Path(os.environ.get(
+            "FAMILYBOT_HELLOFRESH_IMAGE_CACHE", repository.workspace / "cache/hellofresh-images"
+        )).expanduser())
         self._hellofresh_login_attempts: dict[str, list[float]] = {}
         self._hellofresh_login_lock = threading.Lock()
         if dinner_planner is not None:
@@ -2392,11 +2415,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Serve the local FamilyBot console API")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8788)
-    parser.add_argument("--db", type=Path, default=Path(os.environ.get("FAMILYBOT_DB_PATH", DEFAULT_DB)))
+    parser.add_argument("--db", type=Path)
     parser.add_argument("--workspace", type=Path, default=Path(os.environ.get("FAMILYBOT_WORKSPACE", DEFAULT_WORKSPACE)))
     parser.add_argument("--lan", action="store_true")
-    parser.add_argument("--parent-pin-file", type=Path, default=Path(__file__).resolve().parent.parent / "runtime/parent-pin.txt")
+    parser.add_argument("--parent-pin-file", type=Path)
     args = parser.parse_args()
+    args.workspace = args.workspace.expanduser()
+    args.db = (args.db or Path(os.environ.get("FAMILYBOT_DB_PATH", args.workspace / "db/family.db"))).expanduser()
+    args.parent_pin_file = (args.parent_pin_file or Path(os.environ.get(
+        "FAMILYBOT_PARENT_PIN_FILE", args.workspace / "config/parent-pin.txt"
+    ))).expanduser()
     if args.host not in {"127.0.0.1", "localhost"} and not (args.lan and args.host == LAN_HOST):
         raise SystemExit("LAN bind requires --lan and --host 0.0.0.0.")
     if not args.db.is_file():

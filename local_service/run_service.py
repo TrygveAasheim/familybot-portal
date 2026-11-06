@@ -53,7 +53,7 @@ def main() -> None:
     environment["NODE_ENV"] = "production"
     environment["HOST"] = LAN_HOST
     workspace = Path(
-        environment.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
+        environment.get("FAMILYBOT_WORKSPACE") or environment.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
     ).expanduser()
     settings = portal_settings(workspace)
     web_port = int(settings.get("web_port") or 3000)

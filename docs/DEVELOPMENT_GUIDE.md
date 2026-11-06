@@ -136,10 +136,10 @@ negative tests for raw/private material.
 
 A school fact or delivery rule belongs in core. Its visual presentation belongs
 here. Chores, rewards and weekly achievement surprises are portal-owned
-add-ons. Smart Home is another add-on:
-Home Assistant owns vendor integrations, a server-side adapter exposes an
-allowlist, and the UI renders a separate `/smart-home` page. A Smart Home outage
-must leave the family overview and child pages usable.
+add-ons. Smart Home is a planned, unimplemented add-on: Home Assistant would own
+vendor integrations, a server-side adapter must expose an allowlist, and the UI
+would render a separate `/smart-home` page. Any future Smart Home outage must
+leave the family overview and child pages usable.
 
 ## Change workflow
 
@@ -150,7 +150,9 @@ must leave the family overview and child pages usable.
 4. Update the acceptance contract before or with user-visible behaviour.
 5. Implement the smallest curated API and touch-first UI surface.
 6. Run docs, lint, unit/build/rendered HTML and acceptance checks.
-7. Deploy only from verified `dev`; confirm Bonjour, API origin and iPad use.
+7. Deploy only when separately authorized, from verified `dev` or a reviewed
+   compatible Main release pair through the existing deployment guard; confirm
+   Bonjour, API origin and iPad use. Do not bypass tests or preflight.
 
 For cross-repository Ukeplan work, Core owns the source PDF, routing,
 normalized facts and interpretation status. Portal must consume the curated

@@ -67,7 +67,10 @@ Extend the acceptance contract before shipping a new user-visible capability.
 Commit on dedicated branches and review PRs into `dev`, the normal deployment
 track. Deployment requires separate authorization. `main` is the stable
 release branch and must only receive pull requests reviewed and approved by
-`@TrygveAasheim`; do not commit, push or deploy directly from `main`. Runtime
+`@TrygveAasheim`; do not commit or push directly to `main`. A separately
+authorized installation/deployment may use a reviewed compatible Main release
+pair through the existing deployment guard; source promotion alone is not
+deployment authorization. Runtime
 files, PINs, audit logs and databases never enter Git.
 
 ## Deployment invariant

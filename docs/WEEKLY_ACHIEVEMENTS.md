@@ -17,12 +17,12 @@ continuous block of points rather than a calendar week.
   Every 30 points fills one block; any remainder immediately starts the next
   progress bar. Rejected completions contribute zero.
 - The child-facing bar shows only the current remainder from 0 to 30. A new
-  bar starts immediately when the previous one reaches 30 points. A tally
-  counter between the child bar and aggregate view shows completed blocks in
-  groups of five, and the aggregate bar labels the same completed-block count.
+  bar starts immediately when the previous one reaches 30 points. A numeric
+  counter and the aggregate view show the same completed-block count; there is
+  no separate tally-mark counter.
   There is no Monday reset and no ISO-week grouping.
 - Parents can configure multiple active levels, each with a positive threshold
-  in full weeks, a title and an emoji. A level is ready when the count reaches
+  in full point blocks (30 points by default), a title and an emoji. A level is ready when the count reaches
   its threshold and it has not already been redeemed in the active cycle.
 - Redeeming a surprise ends the current cycle and starts a new one at zero. The
   prior cycle and redemption remain stored for history; configured levels stay

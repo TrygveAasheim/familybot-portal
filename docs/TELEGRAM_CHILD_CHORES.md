@@ -14,7 +14,9 @@ The agent should collect, in order:
 3. Points from 0 to 1000.
 4. Whether it is a one-time chore or repeats weekly. For weekly chores, ask
    which weekdays apply.
-5. Whether a parent must approve it before points are awarded.
+5. Whether parent approval is required. Pending points appear provisionally as
+   soon as the child completes the chore; approval retains them and rejection
+   removes them from progress.
 
 The agent then calls the preview command and presents the complete normalized
 summary. It must wait for an explicit confirmation before calling create.

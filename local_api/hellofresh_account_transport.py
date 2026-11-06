@@ -64,10 +64,7 @@ class HelloFreshTransportMixin:
                 "FAMILYBOT_HELLOFRESH_CREDENTIALS",
                 str(
                     Path(
-                        os.environ.get(
-                            "FAMILYBOT_WORKSPACE",
-                            str(Path.home() / ".openclaw/workspace"),
-                        )
+                        os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
                     )
                     / "credentials/hellofresh-no.json"
                 ),

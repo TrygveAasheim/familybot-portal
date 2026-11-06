@@ -5,15 +5,22 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ -x "$ROOT/.venv/bin/python" ]]; then
   export PATH="$ROOT/.venv/bin:$PATH"
 fi
-TARGET="${FAMILYBOT_PORTAL_RUNTIME:-$HOME/.openclaw/runtime/familybot-portal}"
-WORKSPACE="${FAMILYBOT_WORKSPACE:-$HOME/.openclaw/workspace}"
+WORKSPACE="${FAMILYBOT_WORKSPACE:-${OPENCLAW_WORKSPACE:-$HOME/.familybot}}"
+TARGET="${FAMILYBOT_PORTAL_RUNTIME:-$WORKSPACE/runtime/familybot-portal}"
 FAMILY_CONFIG="${FAMILYBOT_FAMILY_CONFIG:-$WORKSPACE/config/family.local.json}"
 PIN_FILE="${FAMILYBOT_PARENT_PIN_FILE:-$WORKSPACE/config/parent-pin.txt}"
 if [[ ! -f "$PIN_FILE" && -f "$ROOT/runtime/parent-pin.txt" ]]; then
   PIN_FILE="$ROOT/runtime/parent-pin.txt"
 fi
-PLIST="$HOME/Library/LaunchAgents/ai.familybot.portal.plist"
-IMAGE_PLIST="$HOME/Library/LaunchAgents/ai.familybot.portal-images.plist"
+LAUNCH_DIR="${FAMILYBOT_LAUNCHAGENT_DIR:-$HOME/Library/LaunchAgents}"
+SERVICE_LABEL="${FAMILYBOT_PORTAL_LABEL:-ai.familybot.portal}"
+if [[ ! "$SERVICE_LABEL" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]+$ ]]; then
+  echo "Invalid Portal LaunchAgent label." >&2
+  exit 1
+fi
+PLIST="$LAUNCH_DIR/$SERVICE_LABEL.plist"
+IMAGE_PLIST="$LAUNCH_DIR/$SERVICE_LABEL-images.plist"
+export FAMILYBOT_PORTAL_LABEL="$SERVICE_LABEL"
 UID_VALUE="$(id -u)"
 PLIST_TEMP="$(mktemp -t familybot-portal-plist)"
 IMAGE_PLIST_TEMP="$(mktemp -t familybot-portal-images-plist)"
@@ -63,12 +70,16 @@ def substitute(value):
 with source.open("rb") as handle:
     document = plistlib.load(handle)
 rendered = plistlib.dumps(substitute(document), fmt=plistlib.FMT_XML, sort_keys=False)
+document = plistlib.loads(rendered)
+document["Label"] = os.environ["FAMILYBOT_PORTAL_LABEL"] + ("-images" if "images" in source.name else "")
+rendered = plistlib.dumps(document, fmt=plistlib.FMT_XML, sort_keys=False)
 target.write_bytes(rendered)
 PY
 }
 
 cd "$ROOT"
 CURRENT_BRANCH="$(git branch --show-current)"
+CURRENT_BRANCH="${CURRENT_BRANCH:-$(git rev-parse HEAD)}"
 DEPLOY_BRANCH="${FAMILYBOT_DEPLOY_BRANCH:-dev}"
 if [[ "$CURRENT_BRANCH" != "$DEPLOY_BRANCH" ]]; then
   echo "Refusing deployment from '$CURRENT_BRANCH'. Expected '$DEPLOY_BRANCH'." >&2
@@ -85,6 +96,10 @@ if [[ -z "$UV_BIN" ]]; then
 fi
 if [[ -z "$NODE_BIN" ]]; then
   echo "Node.js is required to run the Portal service." >&2
+  exit 1
+fi
+if ! launchctl print "gui/$UID_VALUE" >/dev/null 2>&1; then
+  echo "No user GUI launchd domain. Log into the Mac desktop as this user before installation." >&2
   exit 1
 fi
 export VITE_FAMILYBOT_API_PORT
@@ -106,7 +121,7 @@ import sys
 from pathlib import Path
 config = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 features = config.get("portal", {}).get("features", {})
-print("oda_ai" if features.get("oda_ai", True) is not False else "")
+print("oda_ai" if features.get("oda") is True and features.get("oda_ai") is True else "")
 print("hellofresh" if features.get("hellofresh") is True else "")
 PY
 )"
@@ -116,6 +131,7 @@ fi
 "$PYTHON_BIN" local_api/dashboard_migration.py --repair-default-rewards
 "$PYTHON_BIN" local_api/dashboard_migration.py --status >/dev/null
 mkdir -p "$TARGET/local_api" "$TARGET/local_service" "$TARGET/scripts" "$TARGET/runtime"
+mkdir -p "$LAUNCH_DIR" "$HOME/Library/Logs"
 if [[ ! -x "$TARGET/.venv/bin/python" ]]; then
   "$UV_BIN" venv --python 3.12 "$TARGET/.venv"
 fi
@@ -133,8 +149,8 @@ fi
 # Stop the managed service before replacing its runtime tree. Updating files
 # underneath a running Node process can otherwise trigger a restart against a
 # half-copied node_modules directory.
-launchctl bootout "gui/$UID_VALUE/ai.familybot.portal" 2>/dev/null || true
-launchctl bootout "gui/$UID_VALUE/ai.familybot.portal-images" 2>/dev/null || true
+launchctl bootout "gui/$UID_VALUE/$SERVICE_LABEL" 2>/dev/null || true
+launchctl bootout "gui/$UID_VALUE/$SERVICE_LABEL-images" 2>/dev/null || true
 
 rm -f "$TARGET/local_api/familybot_chat.py"
 rsync -a --delete dist/standalone/ "$TARGET/dist/standalone/"
@@ -164,7 +180,7 @@ for attempt in 1 2 3; do
   fi
   sleep 2
 done
-launchctl kickstart -k "gui/$UID_VALUE/ai.familybot.portal"
+launchctl kickstart -k "gui/$UID_VALUE/$SERVICE_LABEL"
 if printf '%s\n' "$FEATURES" | grep -Fxq "hellofresh"; then
   for attempt in 1 2 3; do
     if launchctl bootstrap "gui/$UID_VALUE" "$IMAGE_PLIST"; then
@@ -177,4 +193,4 @@ if printf '%s\n' "$FEATURES" | grep -Fxq "hellofresh"; then
     sleep 2
   done
 fi
-echo "Familieportalen deployed: http://familie.local:3000/"
+echo "Familieportalen deployed using the hostname and ports in the selected family configuration."

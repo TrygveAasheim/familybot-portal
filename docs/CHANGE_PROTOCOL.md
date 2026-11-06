@@ -34,7 +34,9 @@ Documentation: README/spec/acceptance/data-boundary/runbook files updated
 - A UI and API change is tested together. Do not verify only the detail route
   when the family overview or child page also presents the same fact.
 - Run `npm run security:audit`, `npm run docs:check`, `npm run lint`, `npm test` and
-  `python3 tests/acceptance.py`; deploy only from verified `dev`.
+  `python3 tests/acceptance.py --workspace /exact/test/workspace --host TEST-MAC.local`.
+  Probe success is not complete hardware/provider acceptance. Deploy only from
+  verified `dev` when separately authorized; PR-only work stops before merge/deploy.
 
 ## Worked Ukeplan example
 

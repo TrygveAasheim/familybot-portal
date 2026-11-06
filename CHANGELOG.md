@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-11-06 — Installation review fixes (candidate, not deployed)
+
+- Use `.familybot` consistently while preserving explicit legacy overrides.
+  API database/PIN and provider credential/cache defaults follow the selected
+  household; another ambient workspace cannot redirect provider state.
+- Create missing per-user deployment directories and require a GUI launchd
+  domain before replacing services. Disposable CI supports unique labels/paths.
+- Require explicit Oda and Oda AI flags, with separate external-model consent.
+- Replace the owner-specific acceptance runner with explicit-target read-only
+  probes, configurable household/reward checks and honest unmeasured criteria.
+  Historical browser results never count as fresh acceptance evidence.
+- Reconcile README, configuration, security boundaries, grocery, release and
+  testing Markdown; see `docs/READINESS_REVIEW.md` for the separate hardware gate.
+
+No schema change, merge or runtime deployment. Roll back with the coordinated
+source pair, not a database restore. Existing configurations that omitted Oda
+flags must explicitly enable wanted capabilities before a later upgrade.
+
 Material security, user-facing and compatibility changes are recorded here.
 Household data, credentials and provider responses are never included.
 

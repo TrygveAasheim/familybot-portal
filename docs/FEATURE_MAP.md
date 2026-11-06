@@ -9,7 +9,7 @@
 - optional approval plus parent rejection of awarded or pending work;
 - parent creation/archive, reward goals, review queue and child routine resets;
 - family Kanban board with New, In Progress, Pause and Done lanes, parent-gated creation/movement/archive and newest-first Done history;
-- all-user Oda grocery tab with a bounded Norwegian dinner assistant, Oda
+- opt-in all-user Oda grocery tab with separately opted-in bounded dinner AI, Oda
   recipe preferences, hero images and kiosk-safe in-Portal recipe details with
   return navigation, explicit add-all-ingredients actions, direct OAuth/MCP
   product search, personal suggestions, cart editing and checkout handoff;

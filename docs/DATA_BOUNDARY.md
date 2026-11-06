@@ -52,7 +52,9 @@ the configured private workspace's `credentials` directory (normally
 `$HOME/.familybot/credentials`). Callback query values are redacted
 from API request logs.
 
-The dinner interface has one narrower model boundary. A dedicated tool-free
+Oda requires explicit `portal.features.oda`; dinner AI additionally requires
+`portal.features.oda_ai` and external-processing consent. All omitted flags
+are false. The dinner interface has one narrower model boundary. A dedicated tool-free
 OpenAI agent receives only the bounded dinner request, at most six dinner-chat
 messages, the portion count and at most sixteen liked/purchased Oda recipe
 titles. It receives no family dashboard facts, SQLite rows, OAuth tokens,
@@ -168,7 +170,8 @@ custom API token; all menu, account and recipe-detail routes remain protected.
 Browser responses carry an ETag and one-week cache lifetime. A valid prior image
 is retained if refresh fails.
 
-The Portal-owned 04:45 LaunchAgent reads only published upcoming menus, warms
+When the HelloFresh feature is enabled and deployed, the Portal-owned 04:45
+LaunchAgent reads only published upcoming menus, warms
 their allowlisted images with four bounded workers and writes count-only logs.
 It stores no menu/account payload and does not couple Core's ingestion or
 briefing schedules to this optional add-on.

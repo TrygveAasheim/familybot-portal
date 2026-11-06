@@ -43,5 +43,7 @@ Automated gates cover syntax, imports, React hooks, accessibility, dependency
 advisories, high-severity Python security patterns and CodeQL analysis. The
 HelloFresh implementation still depends on an unsupported provider web API;
 that compatibility risk is contained but cannot be eliminated without an
-official provider API. Reads are probed daily and on demand, while writes remain
+official provider API. Reads can be probed daily when enabled, deployed and
+authenticated, or explicitly on demand. This dated report is historical, not
+current installation evidence. Writes remain
 manual because an automated write can change a real order.

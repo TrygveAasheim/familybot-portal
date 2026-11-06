@@ -24,13 +24,13 @@ REQUIRED_README_LINKS = {
     "AGENTS.md",
     "docs/DEVELOPMENT_GUIDE.md",
     "docs/NEW_SESSION_VERIFICATION.md",
-    "familybot-core/blob/main/GETTING_STARTED.md",
+    "familybot-core/blob/dev/GETTING_STARTED.md",
 }
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 
 
 def markdown_files(root: Path) -> list[Path]:
-    return sorted(path for path in root.rglob("*.md") if ".git" not in path.parts and "node_modules" not in path.parts)
+    return sorted(path for path in root.rglob("*.md") if {".git", ".venv", "node_modules"}.isdisjoint(path.parts))
 
 
 def local_link_target(document: Path, raw_target: str) -> Path | None:

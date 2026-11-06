@@ -12,7 +12,7 @@ explicit workspace path.
 
 Optional Portal experiments are also declared in that canonical file. The
 Norwegian HelloFresh menu and account test are disabled by default and can be
-enabled independently with:
+enabled in stages (account access requires the public-menu flag) with:
 
 ```json
 "portal": {
@@ -36,3 +36,11 @@ access is limited to viewing future boxes, replacing/adding/removing selected
 meals and pausing or resuming one identified week after explicit confirmation.
 Subscription-plan, servings, address, payment, checkout and ordering controls
 remain unavailable. Both flags default to `false`.
+
+Oda is independently opt-in: set `portal.features.oda` to `true` for recipe,
+product and cart operations. `portal.features.oda_ai` defaults to false and
+requires Oda, an isolated OpenClaw dinner agent and consent to external model
+processing. Direct search/cart needs no AI. All omitted grocery flags are false,
+including in legacy files: add explicit flags to retain those capabilities on
+upgrade. Workspace precedence and explicit legacy overrides are documented in
+Core's CONFIGURATION.md; no private legacy state is discovered automatically.

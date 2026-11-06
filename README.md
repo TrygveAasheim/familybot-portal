@@ -18,16 +18,21 @@ deliberately unavailable._
 
 Do not configure this repository independently first. Clone it beside
 `familybot-core` and use the
-[canonical step-by-step Mac setup guide](https://github.com/TrygveAasheim/familybot-core/blob/main/GETTING_STARTED.md):
+[canonical step-by-step Mac setup guide](https://github.com/TrygveAasheim/familybot-core/blob/dev/GETTING_STARTED.md):
 
 ```bash
 mkdir -p "$HOME/FamilyBot" && cd "$HOME/FamilyBot"
-git clone https://github.com/TrygveAasheim/familybot-core.git
-git clone https://github.com/TrygveAasheim/familybot-portal.git
+git clone --branch dev https://github.com/TrygveAasheim/familybot-core.git
+git clone --branch dev https://github.com/TrygveAasheim/familybot-portal.git
 cd familybot-core
 uv run --python 3.12 scripts/install_familybot.py \
   --portal-repo ../familybot-portal
 ```
+
+These commands select the development installation candidate. `main` has not
+yet received the installer release. For pre-merge testing check out the exact
+paired commits from the readiness PRs in both repositories; do not assume moving
+`dev` contains unmerged fixes. See [review and test instructions](docs/READINESS_REVIEW.md).
 
 The Core installer owns onboarding, the canonical config and Core schema. It
 creates Portal schema version 2, builds this app, installs the local service and
@@ -118,9 +123,10 @@ npm test
 TypeScript, the production build and rendered HTML contracts. The Core suite
 owns the cross-repository empty-install lifecycle and macOS clean-install CI.
 
-The live acceptance script uses private runtime state and must not be reported
-as passed unless it was actually run on an isolated test installation. A CI or
-simulated result is not a physical iPad result.
+The runtime probe requires explicit `--workspace` and `--host` arguments and
+must target an isolated test installation. Exit zero means only its automated
+probes passed, never full release acceptance. Unperformed browser, iPad and
+provider criteria remain `not_run`; disabled capabilities are `not_applicable`.
 
 For a cold engineering handoff, use
 [docs/NEW_SESSION_VERIFICATION.md](docs/NEW_SESSION_VERIFICATION.md). Feature

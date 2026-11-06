@@ -2,6 +2,7 @@ import datetime as dt
 import http.client
 import io
 import json
+import os
 import sqlite3
 import tempfile
 import threading
@@ -247,7 +248,7 @@ class RepositoryTests(unittest.TestCase):
              "default_reward": {"title": "Card pack", "emoji": "🃏", "target_value": 30}},
             {"member_id": 4, "role": "child", "name": "Child Two", "slug": "child_2", "avatar": "🦋", "grade": 6,
              "default_reward": {"title": "Cinema", "emoji": "🎬", "target_value": 30}},
-        ], "integrations": {
+        ], "portal": {"features": {"oda": True, "oda_ai": True}}, "integrations": {
             "transport": {
                 "transport_mode": "metro", "stop_name": "Local Station", "stop_id": "NSR:StopPlace:test",
                 "direction_quay_id": "NSR:Quay:test", "line": "2",
@@ -756,6 +757,32 @@ class RepositoryTests(unittest.TestCase):
             self.assertFalse(server.parent_login_allowed("192.168.1.20"))
             server.record_parent_login("192.168.1.20", succeeded=True)
             self.assertTrue(server.parent_login_allowed("192.168.1.20"))
+        finally:
+            server.server_close()
+
+    def test_omitted_grocery_features_are_disabled_without_consent(self):
+        with patch("familybot_api.portal_settings", return_value={}):
+            server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        try:
+            self.assertEqual({"oda": False, "oda_ai": False, "hellofresh": False,
+                              "hellofresh_account": False}, server.features)
+        finally:
+            server.server_close()
+
+    def test_provider_state_uses_selected_repository_workspace(self):
+        with patch.dict(os.environ, {"FAMILYBOT_WORKSPACE": "/fictional/other-household",
+                                    "OPENCLAW_WORKSPACE": "/fictional/legacy"}, clear=True):
+            server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        try:
+            self.assertEqual(self.repo.workspace / "credentials/oda-mcp.json", server.oda.credentials_path)
+            self.assertEqual(self.repo.workspace / "credentials/hellofresh-no.json", server.hellofresh_account.credentials_path)
+            self.assertEqual(self.repo.workspace / "cache/hellofresh-images", server.hellofresh_images.cache_dir)
+        finally:
+            server.server_close()
+        with patch.dict(os.environ, {"FAMILYBOT_ODA_CREDENTIALS": "/fictional/explicit/oda.json"}, clear=True):
+            server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        try:
+            self.assertEqual(Path("/fictional/explicit/oda.json"), server.oda.credentials_path)
         finally:
             server.server_close()
 

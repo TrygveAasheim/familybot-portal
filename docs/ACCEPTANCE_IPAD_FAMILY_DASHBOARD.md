@@ -1,8 +1,9 @@
 # Acceptance criteria: iPad-first family dashboard
 
 These criteria are the release gate for the LAN dashboard. A criterion is only
-marked passed when its stated automated or browser check succeeds. All critical
-criteria must pass before the LaunchAgent is enabled.
+marked passed when its stated checks succeed. A test LaunchAgent must be running
+to measure runtime criteria. Release requires the criteria applicable to the
+selected profile, with fresh evidence; disabled integrations are not mandatory.
 
 ## Critical release criteria
 
@@ -84,8 +85,8 @@ Evidence: parent API authorization tests and iPad browser interaction.
   reminders and things to bring; these are not presented as reward chores.
 - Missing/stale sources are labelled honestly; raw email, Spond payloads and
   internal errors are not shown to children.
-- A grocery entry remains available: Oda by default, or HelloFresh when its
-  physical-test feature flags replace Oda in visible navigation.
+- Grocery entries appear only when explicitly enabled. Dashboard needs neither
+  Oda nor HelloFresh; enabled HelloFresh replaces the Oda navigation position.
 
 Evidence: sanitized API contract tests and browser content assertions.
 
@@ -101,7 +102,8 @@ Evidence: computed-layout browser checks at both viewports and zoom.
 
 ### AC-10 — LAN security and data boundary
 
-- Mutations require a short-lived session token; parent mutations additionally
+- Mutations require a random in-memory token valid until process restart;
+  parent tokens are also replaced by the next successful parent login. Parent mutations additionally
   require a valid parent session.
 - The API rejects missing/foreign origins and accepts only the exact origins in
   the canonical local configuration.
@@ -366,10 +368,16 @@ scheduled-prefetch registration; read-only live connected image probe.
 
 ## Release measurement
 
-The acceptance runner writes ignored `tests/results/acceptance-results.json` with one record per
-criterion (`pass`, `fail`, evidence, duration). Release requires **20/20 critical
-criteria passed**. Browser findings that cannot be safely automated are captured
-with viewport screenshots and explicitly reported rather than silently assumed.
+The acceptance runner requires explicit `--workspace` and `--host` arguments.
+It reports read-only runtime probes separately from complete release criteria.
+Exit zero means automated probes passed; it never means 20 physical/provider
+criteria passed. Unmeasured criteria remain `not_run`, disabled ones are
+`not_applicable`, and measured checks are `pass` or `fail`. Use `--output` for a
+privacy-safe report and `--require-release` to fail while evidence is incomplete.
+The committed browser JSON is historical and is never imported as current proof.
+Fresh browser screenshots/layout measurements, actual process lifecycle/CI
+results and manual iPad/provider checks must identify the tested commit pair.
+See [the test and review handoff](READINESS_REVIEW.md).
 
 These 20 criteria cover the currently deployed family dashboard, its Telegram
 child-chore add-on, week-plan detail view, Oda grocery tab and flagged

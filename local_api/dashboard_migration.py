@@ -17,7 +17,7 @@ from typing import Callable
 from family_config import child_profiles
 
 DEFAULT_WORKSPACE = Path(
-    os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
+    os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
 ).expanduser()
 DEFAULT_DB = DEFAULT_WORKSPACE / "db/family.db"
 DEFAULT_BACKUPS = DEFAULT_WORKSPACE / "backups"

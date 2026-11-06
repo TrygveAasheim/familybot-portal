@@ -54,12 +54,14 @@ When the sibling core repository is available, also read
 npm run docs:check
 npm run lint
 npm test
-python3 tests/acceptance.py
+python3 tests/acceptance.py --workspace /exact/test/workspace --host TEST-MAC.local
 git diff --check
 ```
 
-Run `npm run preflight` before deployment with the real ignored config, PIN and
-database available. All 20 current critical acceptance criteria must pass.
+Run `npm run preflight` before an explicitly authorized deployment with its
+selected config, PIN and database. Never probe a private installation during
+source review. Runtime probe success is not full acceptance: record applicable
+criteria and outstanding browser/iPad/provider evidence separately.
 Extend the acceptance contract before shipping a new user-visible capability.
 
 Normal work is committed and deployed from `dev` only. `main` is the stable

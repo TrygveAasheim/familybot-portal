@@ -194,6 +194,25 @@ PORTAL_REQUIRED_COLUMNS = {
 }
 
 
+# Consumer contract only: Core owns creation/migration of these tables. Keep
+# this aligned with the curated SQL in FamilyRepository, not raw Core payloads.
+REQUIRED_CORE_READ_COLUMNS = {
+    "family_members": {"id", "name", "role", "grade", "school", "teacher"},
+    "calendar_events": {"id", "member_id", "title", "event_date", "event_time", "end_date",
+                        "location", "bring", "requires_response", "response_deadline", "source"},
+    "spond_events": {"id", "member_id", "title", "event_date", "event_end", "location",
+                     "requires_response", "rsvp_deadline", "my_rsvp"},
+    "activities": {"id", "member_id", "name", "location", "schedule", "paused_until", "active"},
+    "kanban_cards": {"id", "title", "description", "assigned_to", "lane", "priority", "due_date",
+                     "created_at", "updated_at", "archived_at"},
+    "week_plans": {"id", "member_id", "week_number", "year", "summary", "teacher", "created_at", "raw_text"},
+    "week_plan_days": {"id", "week_plan_id", "day", "date", "subject", "note", "homework", "bring"},
+    "week_plan_interpretations": {"week_plan_id", "status", "structured_json"},
+    "email_log": {"id", "subject", "received_at", "processed_at", "summary", "member_id", "category"},
+    "school_calendar": {"id", "event_type", "name", "start_date", "end_date", "year_label"},
+}
+
+
 class PortalMigrationError(RuntimeError):
     """Raised when the Portal schema cannot be changed safely."""
 
@@ -283,11 +302,11 @@ def verify_core_compatibility(connection: sqlite3.Connection) -> None:
             f"Core schema version {version} is incompatible; expected "
             f"{SUPPORTED_CORE_SCHEMA_VERSION}. Run the matching Core migration first."
         )
-    for table in ("family_members", "kanban_cards", "week_plans", "week_plan_interpretations"):
-        if not connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
-        ).fetchone():
-            raise PortalMigrationError(f"Required Core table is missing: {table}")
+    for table, required in REQUIRED_CORE_READ_COLUMNS.items():
+        columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
+        missing = sorted(required - columns)
+        if missing:
+            raise PortalMigrationError(f"Required Core table {table} is missing column(s): {', '.join(missing)}")
 
 
 def validate_portal_schema(connection: sqlite3.Connection) -> None:

@@ -390,6 +390,28 @@ class RepositoryTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
 
+    def test_core_markers_cannot_hide_missing_consumed_schema(self):
+        snapshot = self.db.read_bytes()
+        tables = ("family_members", "calendar_events", "spond_events", "activities", "kanban_cards",
+                  "week_plans", "week_plan_days", "week_plan_interpretations", "email_log", "school_calendar")
+        statements = [f'DROP TABLE "{table}"' for table in tables] + [
+            "ALTER TABLE calendar_events DROP COLUMN bring",
+            "ALTER TABLE activities DROP COLUMN schedule",
+            "ALTER TABLE week_plans DROP COLUMN teacher",
+        ]
+        for statement in statements:
+            with self.subTest(statement=statement):
+                self.db.write_bytes(snapshot)
+                with sqlite3.connect(self.db) as connection:
+                    connection.execute(statement)
+                before = self.db.read_bytes()
+                self.assertFalse(migration_status(self.db)["current"])
+                with self.assertRaises(RuntimeError):
+                    FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+                with self.assertRaises(PortalMigrationError):
+                    migrate(self.db)
+                self.assertEqual(before, self.db.read_bytes())
+
     def test_migration_history_gap_is_not_silently_repaired(self):
         with sqlite3.connect(self.db) as connection:
             connection.execute("DELETE FROM familybot_schema_migrations WHERE component='portal' AND version=1")

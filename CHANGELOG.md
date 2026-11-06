@@ -6,6 +6,8 @@
   inside one transaction. A failed final check cannot leave current markers.
 - Validate required owned tables/columns, contiguous Portal history/checksums,
   Core version, foreign keys and SQLite integrity in both status and API startup.
+- Validate every consumed Core table/column before Portal migration/status/API
+  startup; a Core version marker alone must not conceal a missing calendar table.
 - Deployment no longer repairs deliberately deactivated rewards. Explicit
   starter seeding respects archived matching chores; Core upgrades do not seed.
 - Add rollback/status/startup/history/archived-chore regressions; coordinate

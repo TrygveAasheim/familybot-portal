@@ -84,7 +84,7 @@ Core-owned tables are read through explicit queries. Portal-owned chores,
 completions, reward goals and weekly achievement tables are created by
 versioned Portal migrations. The shared ledger currently requires Core schema
 1 and Portal schema 2. Before API bind, startup verifies the Core version
-contract, contiguous Portal history/names/checksums, required owned columns,
+contract and consumed Core tables/columns, contiguous Portal history/names/checksums, required owned columns,
 foreign keys and SQLite integrity. Status uses the same validation, not merely
 version numbers. All pending Portal DDL/markers and final validation run in one
 transaction; validation failure rolls them back together. This is not a full

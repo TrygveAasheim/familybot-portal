@@ -18,6 +18,11 @@ Core 1 / Portal 2. Follow Core's `REDEPLOY.md`; an ordinary installer rerun now
 refuses an existing database. All writers must be stopped, with explicit existing
 workspace/runtime and feature choices. No live upgrade has been performed here.
 
+The adversarial review also identified a pre-existing partial Core table check.
+Portal now validates all consumed Core tables/columns, without taking ownership
+of Core migrations. Missing calendar/Spond/activity/mail/plan/card/member schema
+must fail status/startup and must not be repaired or marked current by Portal.
+
 The focused fictional tests cover failed final validation with unchanged schema
 and ledger, missing schema, altered checksums, history gaps and archived chores.
 Core adds cross-repository preservation/recovery tests and disposable hosted

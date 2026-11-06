@@ -1,10 +1,13 @@
-# Installation candidate: review and test handoff
+# Published installation candidate: review and test handoff
 
 The coordinated plan and F1–F8 finding matrix live in Core's
-`docs/READINESS_FIX_PLAN.md` on the same candidate branch. Read the checked-out
-Core `GETTING_STARTED.md` for the canonical installation commands. Both PRs
-target `dev`; stop at reviewed PRs, with no merge or deployment to the existing
-household. Public `main` is not yet the installer release.
+`docs/READINESS_FIX_PLAN.md` (historical implementation plan). Read the checked-out
+Core `GETTING_STARTED.md` for canonical paired Main installation commands.
+The owner subsequently authorized the Dev train (Portal #31, Core #11, merged)
+and Main source promotion. No existing household deployment is included.
+Core's `docs/INSTALLATION_READINESS.md` records the implementation's green
+local/hosted CI evidence and outstanding physical/provider gates; final
+documentation and promotion checks belong in their PR records.
 
 ## Portal changes and compatibility
 
@@ -92,7 +95,7 @@ Neither is a physical iPad/router test.
 
 Record both Git SHAs, macOS/iPadOS versions and timestamp. With fictional data:
 
-1. Install in a new Mac account/machine using the paired PR commits.
+1. Install in a new Mac account/machine using the paired Main commits, recording both SHAs.
 2. Open the printed hostname on the Mac and an iPad on the same trusted LAN.
 3. Save a Home Screen shortcut; reload it and enter each child without typing.
 4. Check portrait/landscape, 200% zoom and large touch targets.
@@ -103,16 +106,18 @@ Record both Git SHAs, macOS/iPadOS versions and timestamp. With fictional data:
 
 Capture no PINs, provider credentials or private family content in public
 evidence. Plain HTTP, shared LAN trust, provider contracts and host/backup
-security remain residual risks. Do not promote `main` or call this generally
-released until the separate gate and owner decision are recorded.
+security remain residual risks. Owner-approved Main source publication is not
+physical acceptance: do not claim a generally verified household release until
+this separate gate is completed and its evidence recorded.
 
 ## Review order and rollback
 
 Portal PR first, then Core PR against the exact Portal head; record both SHAs
 in both PR descriptions. Re-run pairing checks after any review fix. Final
 independent affirmative/skeptical reviews are advice, not owner approval.
-No merge or deployment is part of this train. Source rollback is a paired
-revert; no database restore is required when no installer/data changes ran.
+Main merge is owner-authorized; runtime deployment remains separate. Source
+rollback is a paired revert; no database restore is required when no
+installer/data changes ran.
 If an upgrade ran elsewhere, preserve its state, stop every user of that
 household database and follow Core's `REDEPLOY.md`. Undoing data changes may
 require its full pre-upgrade snapshot and matching source/configuration pair;

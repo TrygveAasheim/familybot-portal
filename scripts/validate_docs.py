@@ -24,7 +24,7 @@ REQUIRED_README_LINKS = {
     "AGENTS.md",
     "docs/DEVELOPMENT_GUIDE.md",
     "docs/NEW_SESSION_VERIFICATION.md",
-    "familybot-core/blob/codex/readiness-review-fixes/GETTING_STARTED.md",
+    "familybot-core/blob/main/GETTING_STARTED.md",
 }
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 
@@ -51,6 +51,12 @@ def validate_repository(root: Path) -> list[str]:
     readme = root / "README.md"
     if readme.is_file():
         content = readme.read_text(encoding="utf-8")
+        for repo in ("familybot-core", "familybot-portal"):
+            command = f"git clone --branch main https://github.com/TrygveAasheim/{repo}.git"
+            if command not in content:
+                errors.append(f"README fresh install must clone {repo} from main")
+        if "REVIEWED_" in content or "codex/readiness-review-fixes" in content:
+            errors.append("README fresh install must not require review-only refs or SHA placeholders")
         for required_link in sorted(REQUIRED_README_LINKS):
             if required_link not in content:
                 errors.append(f"README does not link to {required_link}")

@@ -26,6 +26,7 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
@@ -2275,6 +2276,13 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
 
 
 class FamilyApiServer(ThreadingHTTPServer):
+    def server_bind(self) -> None:
+        # HTTPServer otherwise resolves the bind address with getfqdn(). For
+        # 0.0.0.0 this resolves the machine hostname and can block startup when
+        # local DNS/mDNS is unavailable. This JSON API has no CGI/name use.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
     def __init__(self, address: tuple[str, int], repository: FamilyRepository, parent_pin: str,
                  allowed_origins: set[str] | None = None, oda_client: OdaMcpClient | None = None,
                  oda_enabled: bool | None = None, oda_ai_enabled: bool | None = None,

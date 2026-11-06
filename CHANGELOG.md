@@ -7,6 +7,8 @@
   household; another ambient workspace cannot redirect provider state.
 - Create missing per-user deployment directories and require a GUI launchd
   domain before replacing services. Disposable CI supports unique labels/paths.
+- Avoid reverse-DNS lookup during API socket binding: unavailable host DNS must
+  not block local health/startup. Configured browser-host verification remains.
 - Require explicit Oda and Oda AI flags, with separate external-model consent.
 - Replace the owner-specific acceptance runner with explicit-target read-only
   probes, configurable household/reward checks and honest unmeasured criteria.

@@ -748,6 +748,24 @@ class RepositoryTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2)
 
+    def test_api_startup_does_not_require_reverse_dns(self):
+        with patch("socket.getfqdn", side_effect=AssertionError("DNS must not gate API startup")):
+            server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+        try:
+            self.assertEqual("127.0.0.1", server.server_name)
+            connection.request("GET", "/api/health")
+            response = connection.getresponse()
+            self.assertEqual(200, response.status)
+            self.assertTrue(json.loads(response.read())["ok"])
+        finally:
+            connection.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_parent_pin_attempts_are_rate_limited(self):
         server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
         try:

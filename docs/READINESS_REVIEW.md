@@ -21,6 +21,8 @@ household. Public `main` is not yet the installer release.
   isolated disposable CI; do not point test jobs at a live runtime or ports.
 - API CLI derives database and PIN from its selected workspace, unless those
   paths are explicitly supplied. No schema version changes are required.
+- API socket binding does not reverse-resolve the host name. Local DNS outages
+  must not block API startup; the installer still verifies the configured URL.
 
 ## Evidence, not inferred acceptance
 

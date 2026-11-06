@@ -11,6 +11,8 @@
 - Replace the owner-specific acceptance runner with explicit-target read-only
   probes, configurable household/reward checks and honest unmeasured criteria.
   Historical browser results never count as fresh acceptance evidence.
+- Isolate API fixture tests from inherited household configuration, including
+  when the deploy script runs the source test suite.
 - Reconcile README, configuration, security boundaries, grocery, release and
   testing Markdown; see `docs/READINESS_REVIEW.md` for the separate hardware gate.
 

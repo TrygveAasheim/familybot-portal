@@ -32,6 +32,10 @@ npm run lint
 npm test
 ```
 
+`npm test` runs Python fixtures through `scripts/test_api.py`, which strips
+inherited FamilyBot config/database/provider overrides and supplies a temporary
+workspace. Deployment's configured household must never become unit-test data.
+
 On an explicitly selected test installation only:
 
 ```bash

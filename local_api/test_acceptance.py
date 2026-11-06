@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,20 @@ spec.loader.exec_module(acceptance)
 
 
 class AcceptanceTests(unittest.TestCase):
+    def test_api_runner_does_not_inherit_household_overrides(self):
+        runner_spec = importlib.util.spec_from_file_location("test_api_runner", ROOT / "scripts/test_api.py")
+        assert runner_spec and runner_spec.loader
+        runner = importlib.util.module_from_spec(runner_spec)
+        runner_spec.loader.exec_module(runner)
+        with patch.dict(os.environ, {"FAMILYBOT_FAMILY_CONFIG": "/fictional/do-not-read.json",
+                                    "FAMILYBOT_DB_PATH": "/fictional/do-not-open.db",
+                                    "FAMILYBOT_ODA_CREDENTIALS": "/fictional/do-not-read-credentials.json",
+                                    "OPENCLAW_WORKSPACE": "/fictional/legacy"}):
+            environment = runner.test_environment(Path("/fictional/test-workspace"))
+        self.assertEqual({"FAMILYBOT_WORKSPACE": "/fictional/test-workspace"},
+                         {k: v for k, v in environment.items() if k.startswith("FAMILYBOT_")})
+        self.assertNotIn("OPENCLAW_WORKSPACE", environment)
+
     def test_explicit_target_required_before_runtime_access(self):
         result = subprocess.run([sys.executable, str(ROOT / "tests/acceptance.py")],
                                 capture_output=True, text=True, check=False)

@@ -30,7 +30,7 @@ MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 
 
 def markdown_files(root: Path) -> list[Path]:
-    return sorted(path for path in root.rglob("*.md") if ".git" not in path.parts and "node_modules" not in path.parts)
+    return sorted(path for path in root.rglob("*.md") if {".git", ".venv", "node_modules"}.isdisjoint(path.parts))
 
 
 def local_link_target(document: Path, raw_target: str) -> Path | None:
@@ -51,13 +51,21 @@ def validate_repository(root: Path) -> list[str]:
     readme = root / "README.md"
     if readme.is_file():
         content = readme.read_text(encoding="utf-8")
+        for repo in ("familybot-core", "familybot-portal"):
+            command = f"git clone --branch main https://github.com/TrygveAasheim/{repo}.git"
+            if command not in content:
+                errors.append(f"README fresh install must clone {repo} from main")
+        if "REVIEWED_" in content or "codex/readiness-review-fixes" in content:
+            errors.append("README fresh install must not require review-only refs or SHA placeholders")
         for required_link in sorted(REQUIRED_README_LINKS):
             if required_link not in content:
                 errors.append(f"README does not link to {required_link}")
         for marker, message in {
             "22.22.3": "README does not state the tested Node.js baseline",
             "scripts/check_setup.py --mode source": "README does not point to the readiness check",
-            "local Oda MCP server": "README does not clarify the hosted Oda dependency",
+            "hosted Oda MCP service": "README does not clarify the hosted Oda dependency",
+            "scripts/install_familybot.py": "README does not point to the supported installer",
+            "empty database": "README does not state clean-install support",
         }.items():
             if marker not in content:
                 errors.append(message)

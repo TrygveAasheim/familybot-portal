@@ -3,6 +3,13 @@
 The deployed portal presents a curated view of the running FamilyBot. It is not
 a general-purpose OpenClaw administration surface.
 
+Upgrade boundary: a source update is not permission to reseed chores, reactivate
+rewards, replace school dates or adopt another workspace. Core owns the explicit
+stopped-writer upgrade and full pre-upgrade backup. Portal validates its owned
+schema before committing migrations and before API startup. Recovery restores
+the matching source/state pair; it must not expose household backup contents in
+public review evidence. See Core's canonical `REDEPLOY.md`.
+
 ## Network boundary
 
 - Development defaults to `127.0.0.1`. The managed service deliberately binds
@@ -48,10 +55,13 @@ The Oda tab calls only `https://oda.com/mcp` through the server-side
 `OdaMcpClient`. There is no browser-visible bearer token, generic MCP endpoint,
 or arbitrary tool-name input. OAuth uses dynamic client registration, state and
 PKCE; tokens are written with mode `0600` beneath the owner-only
-`$HOME/.openclaw/credentials` directory. Callback query values are redacted
+the configured private workspace's `credentials` directory (normally
+`$HOME/.familybot/credentials`). Callback query values are redacted
 from API request logs.
 
-The dinner interface has one narrower model boundary. A dedicated tool-free
+Oda requires explicit `portal.features.oda`; dinner AI additionally requires
+`portal.features.oda_ai` and external-processing consent. All omitted flags
+are false. The dinner interface has one narrower model boundary. A dedicated tool-free
 OpenAI agent receives only the bounded dinner request, at most six dinner-chat
 messages, the portion count and at most sixteen liked/purchased Oda recipe
 titles. It receives no family dashboard facts, SQLite rows, OAuth tokens,
@@ -131,7 +141,7 @@ incorrectly restricted to JWT/base64url syntax. This accepts provider-defined
 refresh-token punctuation without permitting header or log-line injection.
 
 Renewable credentials are stored outside Git in
-`$HOME/.openclaw/credentials/hellofresh-no.json`, written atomically with mode
+`$HOME/.familybot/credentials/hellofresh-no.json`, written atomically with mode
 `0600`. Only fixed HelloFresh Norway endpoints are accepted. No popup is
 required and no email is requested. A Cloudflare HTML challenge or other
 non-JSON provider block is an
@@ -167,10 +177,15 @@ custom API token; all menu, account and recipe-detail routes remain protected.
 Browser responses carry an ETag and one-week cache lifetime. A valid prior image
 is retained if refresh fails.
 
-The Portal-owned 04:45 LaunchAgent reads only published upcoming menus, warms
+When both HelloFresh public and account features are enabled and deployed, the
+Portal-owned 04:45 LaunchAgent reads published upcoming account menus, warms
 their allowlisted images with four bounded workers and writes count-only logs.
 It stores no menu/account payload and does not couple Core's ingestion or
 briefing schedules to this optional add-on.
+Every invocation reloads those flags before client construction or credential
+access. A disabled/missing flag or unreadable configuration prevents account
+reads, including from a stale installed job. Redeployment removes that job when
+either flag is disabled. Tokens are preserved; in-flight work is not cancelled.
 
 The bounded write allowlist contains only meal replacement/add/remove and
 pause/resume for one exact ISO week. The server derives customer, subscription,
@@ -215,8 +230,11 @@ change only the connected HelloFresh account and never write FamilyBot SQLite.
 Provider subscription-plan, servings, address, payment, checkout and order
 operations remain outside the allowlist.
 
-The bridge creates a consistent SQLite backup before the first mutation in each
-session and appends a local audit record. Resetting a child archives/hides active
+The bridge creates one consistent SQLite backup before the first mutation in
+each repository/API-service lifetime, not each browser or parent session. Later
+mutations do not refresh that snapshot. Take an explicit fresh backup with
+Core's `manage_database.py backup` before a reset when immediate pre-reset
+recovery matters. Mutations append a local audit record. Resetting a child archives/hides active
 portal chores and starts a new reward cycle; achievement resets also preserve
 completed cycles and redemption history. Historical completion and reward rows
 are retained. Interview creation is idempotent by confirmation key. It cannot
@@ -238,6 +256,6 @@ must leave `/api/dashboard`, chores and school information available.
 ## Source and runtime separation
 
 Reviewed, non-private source lives in the `familybot-portal` repository. Deployment
-creates a separate runtime under `$HOME/.openclaw/runtime/familybot-portal` and
+creates a separate runtime under `$HOME/.familybot/runtime/familybot-portal` and
 installs `ai.familybot.portal` as a LaunchAgent. Private configuration, SQLite,
 PIN, logs and backups are never copied into Git.

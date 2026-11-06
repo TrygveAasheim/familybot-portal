@@ -37,7 +37,12 @@ CACHE_VARIANT = "w960-v1"
 DEFAULT_CACHE_DIR = Path(
     os.environ.get(
         "FAMILYBOT_HELLOFRESH_IMAGE_CACHE",
-        str(Path.home() / ".openclaw/cache/familybot-portal/hellofresh-images"),
+        str(
+            Path(
+                os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
+            )
+            / "cache/hellofresh-images"
+        ),
     )
 ).expanduser()
 ALLOWED_CONTENT_TYPES = {

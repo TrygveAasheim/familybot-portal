@@ -5,18 +5,37 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
+import json
 import os
 import sqlite3
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from family_config import child_profiles
 
 DEFAULT_WORKSPACE = Path(
-    os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
+    os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
 ).expanduser()
 DEFAULT_DB = DEFAULT_WORKSPACE / "db/family.db"
 DEFAULT_BACKUPS = DEFAULT_WORKSPACE / "backups"
+CORE_COMPONENT = "core"
+SUPPORTED_CORE_SCHEMA_VERSION = 1
+PORTAL_COMPONENT = "portal"
+PORTAL_SCHEMA_VERSION = 2
+
+MIGRATION_TABLE = """
+CREATE TABLE IF NOT EXISTS familybot_schema_migrations (
+    component TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK(version > 0),
+    name TEXT NOT NULL,
+    checksum TEXT NOT NULL,
+    applied_at TEXT NOT NULL,
+    PRIMARY KEY(component, version)
+)
+"""
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS family_chore_meta (
@@ -136,22 +155,79 @@ CREATE TABLE IF NOT EXISTS dashboard_reset_operations (
     created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS week_plan_interpretations (
-    id INTEGER PRIMARY KEY,
-    week_plan_id INTEGER NOT NULL UNIQUE REFERENCES week_plans(id) ON DELETE CASCADE,
-    status TEXT NOT NULL CHECK(status IN ('pending','processing','accepted','failed')),
-    source_hash TEXT NOT NULL,
-    parser_version TEXT NOT NULL,
-    model TEXT,
-    structured_json TEXT NOT NULL DEFAULT '{}',
-    attempts INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_week_plan_interpretations_status
-    ON week_plan_interpretations(status, updated_at);
 """
+
+PORTAL_REQUIRED_COLUMNS = {
+    "family_chore_meta": {
+        "card_id",
+        "icon",
+        "points",
+        "requires_approval",
+        "visible_to_kids",
+        "repeat_mode",
+        "repeat_weekdays",
+        "repeat_target",
+        "created_at", "updated_at",
+    },
+    "chore_completions": {
+        "id",
+        "card_id",
+        "member_id",
+        "status",
+        "points",
+        "cycle_id",
+        "occurrence_date",
+        "idempotency_key", "completed_at", "approved_by", "decided_at", "source",
+    },
+    "chore_cycles": {"id", "card_id", "member_id", "cycle_key", "status", "required_count",
+                     "completed_count", "points", "created_at", "decided_at"},
+    "reward_goals": {"id", "member_id", "title", "target_value", "active", "emoji",
+                     "goal_type", "unit_label", "created_at", "achieved_at"},
+    "weekly_achievement_cycles": {"id", "member_id", "target_points", "started_at", "ended_at"},
+    "child_chore_operations": {"id", "idempotency_key", "result_json", "source", "created_at"},
+    "weekly_surprise_levels": {"id", "member_id", "threshold_weeks", "title", "emoji",
+                               "active", "created_at", "updated_at"},
+    "weekly_achievement_redemptions": {"id", "member_id", "cycle_id", "full_weeks",
+                                      "threshold_weeks", "title", "created_at"},
+    "weekly_achievement_reset_operations": {"id", "member_id", "idempotency_key", "result_json", "created_at"},
+    "dashboard_reset_operations": {"id", "member_id", "scope", "idempotency_key", "result_json", "created_at"},
+}
+
+
+# Consumer contract only: Core owns creation/migration of these tables. Keep
+# this aligned with the curated SQL in FamilyRepository, not raw Core payloads.
+REQUIRED_CORE_READ_COLUMNS = {
+    "family_members": {"id", "name", "role", "grade", "school", "teacher"},
+    "calendar_events": {"id", "member_id", "title", "event_date", "event_time", "end_date",
+                        "location", "bring", "requires_response", "response_deadline", "source"},
+    "spond_events": {"id", "member_id", "title", "event_date", "event_end", "location",
+                     "requires_response", "rsvp_deadline", "my_rsvp"},
+    "activities": {"id", "member_id", "name", "location", "schedule", "paused_until", "active"},
+    "kanban_cards": {"id", "title", "description", "assigned_to", "lane", "priority", "due_date",
+                     "created_at", "updated_at", "archived_at"},
+    "week_plans": {"id", "member_id", "week_number", "year", "summary", "teacher", "created_at", "raw_text"},
+    "week_plan_days": {"id", "week_plan_id", "day", "date", "subject", "note", "homework", "bring"},
+    "week_plan_interpretations": {"week_plan_id", "status", "structured_json"},
+    "email_log": {"id", "subject", "received_at", "processed_at", "summary", "member_id", "category"},
+    "school_calendar": {"id", "event_type", "name", "start_date", "end_date", "year_label"},
+}
+
+
+class PortalMigrationError(RuntimeError):
+    """Raised when the Portal schema cannot be changed safely."""
+
+
+@dataclass(frozen=True)
+class Migration:
+    version: int
+    name: str
+    apply: Callable[[sqlite3.Connection], None]
+    fingerprint: str
+
+    @property
+    def checksum(self) -> str:
+        value = f"{PORTAL_COMPONENT}:{self.version}:{self.name}:{self.fingerprint}"
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 DEFAULT_CHORES = [
     ("Gjøre lekser", "📖", 10, 0),
@@ -160,8 +236,143 @@ DEFAULT_CHORES = [
 ]
 
 
+def _execute_script_transactionally(connection: sqlite3.Connection, script: str) -> None:
+    statement = ""
+    for line in script.splitlines(keepends=True):
+        statement += line
+        if sqlite3.complete_statement(statement):
+            if statement.strip():
+                connection.execute(statement)
+            statement = ""
+    if statement.strip():
+        raise PortalMigrationError("Portal schema contains an incomplete SQL statement")
+
+
+def _migration_001_portal_baseline(connection: sqlite3.Connection) -> None:
+    _execute_script_transactionally(connection, SCHEMA)
+
+
+RECURRENCE_COLUMNS = (
+    ("family_chore_meta", "repeat_mode", "TEXT NOT NULL DEFAULT 'once'"),
+    ("family_chore_meta", "repeat_weekdays", "TEXT NOT NULL DEFAULT ''"),
+    ("family_chore_meta", "repeat_target", "INTEGER NOT NULL DEFAULT 1"),
+    ("chore_completions", "cycle_id", "INTEGER REFERENCES chore_cycles(id)"),
+    ("chore_completions", "occurrence_date", "TEXT"),
+)
+
+
+def _migration_002_recurring_chores(connection: sqlite3.Connection) -> None:
+    for table, column, definition in RECURRENCE_COLUMNS:
+        columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
+        if column not in columns:
+            connection.execute(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {definition}')
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chore_completions_cycle_date "
+        "ON chore_completions(card_id, member_id, cycle_id, occurrence_date)"
+    )
+
+
+PORTAL_MIGRATIONS = (
+    Migration(1, "portal-baseline", _migration_001_portal_baseline, SCHEMA),
+    Migration(
+        2,
+        "recurring-chores",
+        _migration_002_recurring_chores,
+        repr(RECURRENCE_COLUMNS) + "|idx_chore_completions_cycle_date",
+    ),
+)
+
+
+def _schema_version(connection: sqlite3.Connection, component: str) -> int:
+    exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='familybot_schema_migrations'"
+    ).fetchone()
+    if not exists:
+        return 0
+    row = connection.execute(
+        "SELECT MAX(version) FROM familybot_schema_migrations WHERE component=?", (component,)
+    ).fetchone()
+    return int(row[0] or 0)
+
+
+def verify_core_compatibility(connection: sqlite3.Connection) -> None:
+    version = _schema_version(connection, CORE_COMPONENT)
+    if version != SUPPORTED_CORE_SCHEMA_VERSION:
+        raise PortalMigrationError(
+            f"Core schema version {version} is incompatible; expected "
+            f"{SUPPORTED_CORE_SCHEMA_VERSION}. Run the matching Core migration first."
+        )
+    for table, required in REQUIRED_CORE_READ_COLUMNS.items():
+        columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
+        missing = sorted(required - columns)
+        if missing:
+            raise PortalMigrationError(f"Required Core table {table} is missing column(s): {', '.join(missing)}")
+
+
+def validate_portal_schema(connection: sqlite3.Connection) -> None:
+    for table, expected in PORTAL_REQUIRED_COLUMNS.items():
+        columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
+        missing = sorted(expected - columns)
+        if missing:
+            raise PortalMigrationError(
+                f"Portal table {table} is missing column(s): {', '.join(missing)}"
+            )
+    if connection.execute("PRAGMA foreign_key_check").fetchone():
+        raise PortalMigrationError("Portal schema has foreign-key violations")
+
+
+def validate_migration_history(connection: sqlite3.Connection, *, require_current: bool = False) -> set[int]:
+    rows = connection.execute(
+        "SELECT version,name,checksum FROM familybot_schema_migrations WHERE component=? ORDER BY version",
+        (PORTAL_COMPONENT,),
+    ).fetchall()
+    known = {migration.version: migration for migration in PORTAL_MIGRATIONS}
+    existing = {int(row[0]) for row in rows}
+    unknown = sorted(existing - set(known))
+    if unknown:
+        raise PortalMigrationError(f"Database has unsupported future Portal migration(s): {unknown}")
+    if existing != set(range(1, max(existing, default=0) + 1)):
+        raise PortalMigrationError("Portal migration history has a gap")
+    for version, name, checksum in rows:
+        if name != known[version].name or checksum != known[version].checksum:
+            raise PortalMigrationError(f"Portal migration {version} does not match reviewed source")
+    if require_current and existing != set(known):
+        raise PortalMigrationError("Portal schema is not current; run both reviewed migrations")
+    return existing
+
+
+def validate_runtime_schema(connection: sqlite3.Connection) -> None:
+    verify_core_compatibility(connection)
+    validate_migration_history(connection, require_current=True)
+    validate_portal_schema(connection)
+    integrity = connection.execute("PRAGMA quick_check").fetchone()
+    if not integrity or integrity[0] != "ok":
+        raise PortalMigrationError("Portal database integrity check failed")
+
+
+def migration_status(db_path: Path) -> dict[str, int | bool]:
+    if not db_path.is_file():
+        return {"exists": False, "core": 0, "portal": 0, "current": False}
+    core = portal = 0
+    current = False
+    try:
+        with sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True) as connection:
+            core = _schema_version(connection, CORE_COMPONENT)
+            portal = _schema_version(connection, PORTAL_COMPONENT)
+            validate_runtime_schema(connection)
+            current = True
+    except (PortalMigrationError, sqlite3.Error):
+        pass
+    return {
+        "exists": True,
+        "core": core,
+        "portal": portal,
+        "current": current,
+    }
+
+
 def backup_database(db_path: Path, backup_root: Path) -> Path:
-    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     backup_root.mkdir(parents=True, exist_ok=True)
     os.chmod(backup_root, 0o700)
     target_dir = backup_root / f"dashboard-service-{stamp}"
@@ -179,6 +390,11 @@ def backup_database(db_path: Path, backup_root: Path) -> Path:
         destination.close()
         source.close()
     os.chmod(temporary_path, 0o600)
+    with sqlite3.connect(temporary_path) as verification:
+        integrity = verification.execute("PRAGMA integrity_check").fetchone()
+    if not integrity or integrity[0] != "ok":
+        temporary_path.unlink(missing_ok=True)
+        raise PortalMigrationError("Portal backup failed its SQLite integrity check")
     os.replace(temporary_path, target)
     os.chmod(target, 0o600)
     return target
@@ -189,22 +405,22 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
     created_rewards = 0
     with sqlite3.connect(db_path) as connection:
         connection.execute("PRAGMA foreign_keys=ON")
-        connection.executescript(SCHEMA)
-        for table, column, definition in (
-            ("family_chore_meta", "repeat_mode", "TEXT NOT NULL DEFAULT 'once'"),
-            ("family_chore_meta", "repeat_weekdays", "TEXT NOT NULL DEFAULT ''"),
-            ("family_chore_meta", "repeat_target", "INTEGER NOT NULL DEFAULT 1"),
-            ("chore_completions", "cycle_id", "INTEGER REFERENCES chore_cycles(id)"),
-            ("chore_completions", "occurrence_date", "TEXT"),
-            ("week_plans", "layout_json", "TEXT NOT NULL DEFAULT ''"),
-        ):
-            columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
-            if column not in columns:
-                connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_chore_completions_cycle_date "
-            "ON chore_completions(card_id, member_id, cycle_id, occurrence_date)"
-        )
+        # One transaction includes ALL pending DDL, markers, seeding and final
+        # validation. A failed final check must never persist a current marker.
+        connection.execute("BEGIN IMMEDIATE")
+        verify_core_compatibility(connection)
+        existing = validate_migration_history(connection)
+        for migration in PORTAL_MIGRATIONS:
+            if migration.version in existing:
+                continue
+            migration.apply(connection)
+            connection.execute(
+                """INSERT INTO familybot_schema_migrations
+                   (component,version,name,checksum,applied_at) VALUES(?,?,?,?,?)""",
+                (PORTAL_COMPONENT, migration.version, migration.name, migration.checksum,
+                 dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")),
+            )
+        validate_portal_schema(connection)
         if seed:
             workspace = db_path.parent.parent
             for profile in child_profiles(workspace):
@@ -220,8 +436,7 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
                 for title, icon, points, approval in DEFAULT_CHORES:
                     exists = connection.execute(
                         """SELECT 1 FROM kanban_cards k JOIN family_chore_meta m ON m.card_id=k.id
-                           WHERE lower(k.assigned_to)=lower(?) AND lower(k.title)=lower(?)
-                             AND k.archived_at IS NULL""",
+                           WHERE lower(k.assigned_to)=lower(?) AND lower(k.title)=lower(?)""",
                         (child_name, title),
                     ).fetchone()
                     if exists:
@@ -262,6 +477,7 @@ def migrate(db_path: Path, seed: bool = False) -> dict[str, int]:
                    )""",
                 (member_id, now, member_id),
             )
+        validate_runtime_schema(connection)
     return {"chores": created_chores, "rewards": created_rewards}
 
 
@@ -305,7 +521,8 @@ def clear_active_setup(db_path: Path) -> dict[str, int]:
     now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     with sqlite3.connect(db_path) as connection:
         connection.execute("PRAGMA foreign_keys=ON")
-        connection.executescript(SCHEMA)
+        verify_core_compatibility(connection)
+        validate_portal_schema(connection)
         active_chores = connection.execute(
             """SELECT COUNT(*) FROM kanban_cards k
                JOIN family_chore_meta m ON m.card_id=k.id
@@ -336,15 +553,27 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--seed", action="store_true")
     mode.add_argument("--clear-active-setup", action="store_true")
+    mode.add_argument("--status", action="store_true")
     parser.add_argument("--repair-default-rewards", action="store_true")
     parser.add_argument("--no-backup", action="store_true")
     args = parser.parse_args()
     if not args.db.is_file():
         raise SystemExit(f"Database not found: {args.db}")
+    if args.status:
+        status = migration_status(args.db)
+        print(json.dumps(status, sort_keys=True))
+        if not status["current"]:
+            raise SystemExit(1)
+        return
     backup = None if args.no_backup else backup_database(args.db, args.backup_root)
-    result = migrate(args.db, seed=args.seed)
-    repaired_rewards = ensure_default_rewards(args.db) if args.repair_default_rewards else 0
-    cleared = clear_active_setup(args.db) if args.clear_active_setup else None
+    try:
+        result = migrate(args.db, seed=args.seed)
+        repaired_rewards = ensure_default_rewards(args.db) if args.repair_default_rewards else 0
+        cleared = clear_active_setup(args.db) if args.clear_active_setup else None
+    except (PortalMigrationError, sqlite3.Error, ValueError) as exc:
+        raise SystemExit(
+            f"Portal migration failed safely; restore from the reported backup if needed: {type(exc).__name__}"
+        ) from exc
     if backup:
         print(f"[backup] {backup}")
     print(f"[migration] chores={result['chores']} rewards={result['rewards']}")

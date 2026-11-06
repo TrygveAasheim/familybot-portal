@@ -11,7 +11,9 @@ screen is a calm family overview. Children can open their own profiles and use
 chores/rewards without adult help. Parents can review and manage chores, reward
 goals, weekly full-week achievements, surprise redemptions and the family Kanban
 board.
-OpenClaw remains available for complex questions and operations.
+OpenClaw is optional: the AI/Telegram profile and separately opted-in Oda dinner
+AI use it; the dashboard
+must remain useful and deployable without it.
 For child-chore creation from Telegram, OpenClaw uses the two-step interview
 bridge documented in `docs/TELEGRAM_CHILD_CHORES.md`; the portal remains the
 owner of validation and writes.
@@ -72,11 +74,29 @@ Silicon is tested, but path discovery keeps Intel/custom Homebrew layouts
 diagnosable. The canonical host software and minimal OpenClaw instructions live
 in Core's `GETTING_STARTED.md`.
 
+New installations deploy beneath `$HOME/.familybot`; legacy paths remain
+supported only through explicit environment overrides. Do not reintroduce an
+OpenClaw workspace as a dashboard prerequisite.
+
 ## Data ownership
 
 Core-owned tables are read through explicit queries. Portal-owned chores,
-completions, reward goals and weekly achievement tables are created idempotently
-by the portal migration.
+completions, reward goals and weekly achievement tables are created by
+versioned Portal migrations. The shared ledger currently requires Core schema
+1 and Portal schema 2. Before API bind, startup verifies the Core version
+contract and consumed Core tables/columns, contiguous Portal history/names/checksums, required owned columns,
+foreign keys and SQLite integrity. Status uses the same validation, not merely
+version numbers. All pending Portal DDL/markers and final validation run in one
+transaction; validation failure rolls them back together. This is not a full
+security audit or an atomic transaction spanning Core and Portal.
+
+Starter chores/rewards belong to first installation. Deployment runs migrations
+without starter seeds or default-reward repair; those remain explicit maintenance
+operations. Archived matching chores count as existing even during an explicit
+seed. Upgrade through Core's canonical recovery guide, with all writers stopped
+and the installed workspace/runtime retained. A pre-upgrade backup covers data
+changes that happen before Portal migration; a Portal-only backup is too late
+to recover earlier Core/calendar changes.
 The portal may add a separate add-on schema, but it cannot reuse core ledgers or
 raw payload columns as a convenient storage area.
 
@@ -116,10 +136,10 @@ negative tests for raw/private material.
 
 A school fact or delivery rule belongs in core. Its visual presentation belongs
 here. Chores, rewards and weekly achievement surprises are portal-owned
-add-ons. Smart Home is another add-on:
-Home Assistant owns vendor integrations, a server-side adapter exposes an
-allowlist, and the UI renders a separate `/smart-home` page. A Smart Home outage
-must leave the family overview and child pages usable.
+add-ons. Smart Home is a planned, unimplemented add-on: Home Assistant would own
+vendor integrations, a server-side adapter must expose an allowlist, and the UI
+would render a separate `/smart-home` page. Any future Smart Home outage must
+leave the family overview and child pages usable.
 
 ## Change workflow
 
@@ -130,7 +150,9 @@ must leave the family overview and child pages usable.
 4. Update the acceptance contract before or with user-visible behaviour.
 5. Implement the smallest curated API and touch-first UI surface.
 6. Run docs, lint, unit/build/rendered HTML and acceptance checks.
-7. Deploy only from verified `dev`; confirm Bonjour, API origin and iPad use.
+7. Deploy only when separately authorized, from verified `dev` or a reviewed
+   compatible Main release pair through the existing deployment guard; confirm
+   Bonjour, API origin and iPad use. Do not bypass tests or preflight.
 
 For cross-repository Ukeplan work, Core owns the source PDF, routing,
 normalized facts and interpretation status. Portal must consume the curated

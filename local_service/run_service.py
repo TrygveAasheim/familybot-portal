@@ -12,6 +12,10 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "local_api"))
+
+from family_config import portal_settings  # noqa: E402
+
 PYTHON = sys.executable
 LAN_HOST = "0.0.0.0"  # nosec B104
 children: list[subprocess.Popen[bytes]] = []
@@ -48,21 +52,32 @@ def main() -> None:
     environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
     environment["NODE_ENV"] = "production"
     environment["HOST"] = LAN_HOST
-    environment["PORT"] = "3000"
+    workspace = Path(
+        environment.get("FAMILYBOT_WORKSPACE") or environment.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
+    ).expanduser()
+    settings = portal_settings(workspace)
+    web_port = int(settings.get("web_port") or 3000)
+    api_port = int(settings.get("api_port") or 8788)
+    bonjour_name = str(settings.get("bonjour_name") or "Familieportalen")
+    environment["PORT"] = str(web_port)
     node_binary = environment.get("FAMILYBOT_NODE") or shutil.which("node", path=environment["PATH"])
     if not node_binary:
         print("[familybot-portal] Node.js was not found; rerun scripts/deploy-local.sh", file=sys.stderr)
         raise SystemExit(78)
     start([
         PYTHON, str(ROOT / "local_api/familybot_api.py"), "--host", LAN_HOST, "--lan",
+        "--port", str(api_port), "--workspace", str(workspace),
         "--parent-pin-file", str(ROOT / "runtime/parent-pin.txt"),
     ], environment)
     start([node_binary, str(ROOT / "dist/standalone/server.js")], environment)
     start([
-        "/usr/bin/dns-sd", "-R", "Familieportalen", "_http._tcp", "local", "3000",
+        "/usr/bin/dns-sd", "-R", bonjour_name, "_http._tcp", "local", str(web_port),
         "path=/", "role=family-dashboard",
     ], environment)
-    print("[familybot-portal] web=:3000 api=:8788 bonjour=Familieportalen", flush=True)
+    print(
+        f"[familybot-portal] web=:{web_port} api=:{api_port} bonjour={bonjour_name}",
+        flush=True,
+    )
     try:
         while not stopping:
             for process in children:

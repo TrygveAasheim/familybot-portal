@@ -38,8 +38,10 @@ When the sibling core repository is available, also read
   then persists only owner-protected tokens. The password may exist only in the
   first-use form and transient request memory; it must never be stored, logged,
   returned or placed in model context. Provider tokens may exist only
-  transiently before the allowlisted handoff. It is read-only during physical
-  testing; provider writes require a new mutation security review and explicit
+  transiently before the allowlisted handoff. Provider writes are restricted to
+  reviewed exact-week meal selection and pause/resume actions, require explicit
+  UI confirmation, reject stale state and verify the resulting provider state.
+  New provider mutation shapes require a separate security review and explicit
   acceptance criteria.
 - User-visible unavailable/stale states are honest. Do not convert a missing
   source into a healthy or empty-looking result.
@@ -52,17 +54,23 @@ When the sibling core repository is available, also read
 npm run docs:check
 npm run lint
 npm test
-python3 tests/acceptance.py
+python3 tests/acceptance.py --workspace /exact/test/workspace --host TEST-MAC.local
 git diff --check
 ```
 
-Run `npm run preflight` before deployment with the real ignored config, PIN and
-database available. All 20 current critical acceptance criteria must pass.
+Run `npm run preflight` before an explicitly authorized deployment with its
+selected config, PIN and database. Never probe a private installation during
+source review. Runtime probe success is not full acceptance: record applicable
+criteria and outstanding browser/iPad/provider evidence separately.
 Extend the acceptance contract before shipping a new user-visible capability.
 
-Normal work is committed and deployed from `dev` only. `main` is the stable
+Commit on dedicated branches and review PRs into `dev`, the normal deployment
+track. Deployment requires separate authorization. `main` is the stable
 release branch and must only receive pull requests reviewed and approved by
-`@TrygveAasheim`; do not commit, push or deploy directly from `main`. Runtime
+`@TrygveAasheim`; do not commit or push directly to `main`. A separately
+authorized installation/deployment may use a reviewed compatible Main release
+pair through the existing deployment guard; source promotion alone is not
+deployment authorization. Runtime
 files, PINs, audit logs and databases never enter Git.
 
 ## Deployment invariant

@@ -77,7 +77,12 @@ class OdaMcpClient:
         self.credentials_path = credentials_path or Path(
             os.environ.get(
                 "FAMILYBOT_ODA_CREDENTIALS",
-                str(Path.home() / ".openclaw/credentials/oda-mcp.json"),
+                str(
+                    Path(
+                        os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
+                    )
+                    / "credentials/oda-mcp.json"
+                ),
             )
         ).expanduser()
         self.timeout = timeout

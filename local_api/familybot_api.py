@@ -26,11 +26,24 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
-from family_config import integration, member_profiles, portal_settings
+from dashboard_migration import (
+    PORTAL_SCHEMA_VERSION,
+    SUPPORTED_CORE_SCHEMA_VERSION,
+    PortalMigrationError,
+    validate_runtime_schema,
+)
+from family_config import (
+    family_settings,
+    integration,
+    load_family_config,
+    member_profiles,
+    portal_settings,
+)
 from hellofresh_account import (
     HelloFreshAccountAuthRequired,
     HelloFreshAccountClient,
@@ -45,7 +58,7 @@ from oda_dinner import recommend as recommend_dinner
 from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable, OdaValidationError
 
 DEFAULT_WORKSPACE = Path(
-    os.environ.get("FAMILYBOT_WORKSPACE", str(Path.home() / ".openclaw/workspace"))
+    os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
 ).expanduser()
 DEFAULT_DB = DEFAULT_WORKSPACE / "db/family.db"
 LANES = {"todo", "inprogress", "onhold", "done"}
@@ -251,8 +264,7 @@ WEATHER_LABELS = {
 TRANSPORT_MODES = {"metro", "bus", "tram", "rail", "water"}
 WEATHER_CACHE_VERSION = 3
 WEATHER_CACHE_TTL = dt.timedelta(minutes=10)
-WEATHER_TZ = ZoneInfo("Europe/Oslo")
-
+DEFAULT_WEATHER_TZ = ZoneInfo("Europe/Oslo")
 ENTUR_ENDPOINT = "https://api.entur.io/journey-planner/v3/graphql"
 LAN_HOST = "0.0.0.0"  # nosec B104
 
@@ -290,9 +302,12 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
         symbol = str(first.get("next_1_hours", {}).get("summary", {}).get("symbol_code", "cloudy")).split("_")[0]
         label = next((text for key, text in WEATHER_LABELS.items() if symbol.startswith(key)), "skiftende vær")
         precipitation = round(sum(float(item["data"].get("next_1_hours", {}).get("details", {}).get("precipitation_amount", 0)) for item in series[:6]), 1)
-        weather_now = dt.datetime.now(dt.timezone.utc).astimezone(WEATHER_TZ)
-        period_date = weather_period_date(series, weather_now)
-        periods = weather_periods(series, weather_now)
+        weather_zone = ZoneInfo(
+            str(family_settings(workspace).get("timezone") or "Europe/Oslo")
+        )
+        weather_now = dt.datetime.now(dt.timezone.utc).astimezone(weather_zone)
+        period_date = weather_period_date(series, weather_now, weather_zone)
+        periods = weather_periods(series, weather_now, weather_zone)
         result = {
             "status": f"{temperature} °C · {label}",
             "temperature": temperature,
@@ -301,7 +316,7 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
             "forecast_version": WEATHER_CACHE_VERSION,
             "period_date": period_date.isoformat() if period_date else None,
             "periods": periods,
-            "advice": weather_advice(series, period_date, periods),
+            "advice": weather_advice(series, period_date, periods, weather_zone),
             "updated_at": payload["properties"].get("meta", {}).get("updated_at") or iso_now(),
             "source": "MET Locationforecast",
             "stale": False,
@@ -316,9 +331,11 @@ def weather_summary(workspace: Path) -> dict[str, Any]:
         return {"status": "Værvarsel er midlertidig utilgjengelig", "updated_at": None, "source": "MET Locationforecast", "stale": True}
 
 
-def weather_periods(series: list[dict[str, Any]], now: dt.datetime) -> list[dict[str, Any]]:
+def weather_periods(
+    series: list[dict[str, Any]], now: dt.datetime, zone: ZoneInfo = DEFAULT_WEATHER_TZ
+) -> list[dict[str, Any]]:
     """Aggregate the hourly MET forecast into the three daytime bands shown in the UI."""
-    target_date = weather_period_date(series, now)
+    target_date = weather_period_date(series, now, zone)
     if target_date is None:
         return []
     parsed: list[tuple[dt.datetime, dict[str, Any]]] = []
@@ -327,7 +344,7 @@ def weather_periods(series: list[dict[str, Any]], now: dt.datetime) -> list[dict
             timestamp = dt.datetime.fromisoformat(str(item["time"]).replace("Z", "+00:00"))
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=dt.timezone.utc)
-            parsed.append((timestamp.astimezone(WEATHER_TZ), item["data"]))
+            parsed.append((timestamp.astimezone(zone), item["data"]))
         except (KeyError, TypeError, ValueError):
             continue
     periods: list[dict[str, Any]] = []
@@ -349,7 +366,9 @@ def weather_periods(series: list[dict[str, Any]], now: dt.datetime) -> list[dict
     return periods
 
 
-def weather_period_date(series: list[dict[str, Any]], now: dt.datetime) -> dt.date | None:
+def weather_period_date(
+    series: list[dict[str, Any]], now: dt.datetime, zone: ZoneInfo = DEFAULT_WEATHER_TZ
+) -> dt.date | None:
     """Choose today while a daytime band remains; otherwise choose the next forecast day."""
     local_times: list[dt.datetime] = []
     for item in series:
@@ -357,7 +376,7 @@ def weather_period_date(series: list[dict[str, Any]], now: dt.datetime) -> dt.da
             timestamp = dt.datetime.fromisoformat(str(item["time"]).replace("Z", "+00:00"))
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=dt.timezone.utc)
-            local_times.append(timestamp.astimezone(WEATHER_TZ))
+            local_times.append(timestamp.astimezone(zone))
         except (KeyError, TypeError, ValueError):
             continue
     dates = list(dict.fromkeys(timestamp.date() for timestamp in local_times))
@@ -373,7 +392,12 @@ def weather_period_date(series: list[dict[str, Any]], now: dt.datetime) -> dt.da
     return next((candidate for candidate in dates if candidate > today and band_count(candidate) == 3), next((candidate for candidate in dates if candidate > today), dates[0]))
 
 
-def weather_advice(series: list[dict[str, Any]], period_date: dt.date | None, periods: list[dict[str, Any]]) -> str:
+def weather_advice(
+    series: list[dict[str, Any]],
+    period_date: dt.date | None,
+    periods: list[dict[str, Any]],
+    zone: ZoneInfo = DEFAULT_WEATHER_TZ,
+) -> str:
     """Generate a short, child-focused recommendation from the displayed forecast."""
     if period_date is None or not periods:
         return "Sjekk værvarselet før dere går."
@@ -383,7 +407,7 @@ def weather_advice(series: list[dict[str, Any]], period_date: dt.date | None, pe
             timestamp = dt.datetime.fromisoformat(str(item["time"]).replace("Z", "+00:00"))
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=dt.timezone.utc)
-            local_timestamp = timestamp.astimezone(WEATHER_TZ)
+            local_timestamp = timestamp.astimezone(zone)
             if local_timestamp.date() == period_date:
                 rows.append((local_timestamp, item["data"]))
         except (KeyError, TypeError, ValueError):
@@ -553,6 +577,34 @@ class FamilyRepository:
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")
         return connection
+
+    def schema_contract(self) -> dict[str, int]:
+        with self.connect() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='familybot_schema_migrations'"
+            ).fetchone()
+            if not exists:
+                raise RuntimeError("FamilyBot database has no versioned schema contract")
+            try:
+                validate_runtime_schema(connection)
+            except (PortalMigrationError, sqlite3.Error) as exc:
+                raise RuntimeError("Incompatible FamilyBot schema; run both reviewed migrations") from exc
+            versions = {
+                str(row[0]): int(row[1])
+                for row in connection.execute(
+                    "SELECT component,MAX(version) FROM familybot_schema_migrations "
+                    "GROUP BY component"
+                )
+            }
+        core = versions.get("core", 0)
+        portal = versions.get("portal", 0)
+        if core != SUPPORTED_CORE_SCHEMA_VERSION or portal != PORTAL_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"Incompatible FamilyBot schema: core={core}, portal={portal}; "
+                "run both reviewed migrations"
+            )
+        return {"core": core, "portal": portal}
 
     def table_exists(self, connection: sqlite3.Connection, table: str) -> bool:
         return connection.execute(
@@ -908,16 +960,33 @@ class FamilyRepository:
             "familybot.briefing.weekend": file_timestamp(self.workspace / "logs/briefing.log"),
             "familybot.briefing.weekly": file_timestamp(self.workspace / "logs/briefing.log"),
         }
-        process_specs = [
-            ("E-post", "familybot.email", "Hvert 15. minutt"),
-            ("Spond", "familybot.spond", "Hver time"),
-            ("Helsesjekk", "familybot.health", "Hvert 30. minutt"),
-            ("Driftsstatus", "familybot.status", "Hvert 30. minutt"),
-            ("T-bane", "familybot.tbane", "Hvert 15. minutt"),
-            ("Morgenmelding", "familybot.briefing.weekday", "Hverdager 06:45"),
-            ("Helgemelding", "familybot.briefing.weekend", "Helg 08:00"),
-            ("Ukemelding", "familybot.briefing.weekly", "Søndag 21:00"),
-        ]
+        config = load_family_config(self.workspace)
+        profile = str(config.get("profile") or "agent")
+        integrations = config.get("integrations", {})
+        integrations = integrations if isinstance(integrations, dict) else {}
+        notifications = config.get("notifications", {})
+        notifications = notifications if isinstance(notifications, dict) else {}
+        process_specs = []
+        if profile in {"connected", "agent"}:
+            process_specs.extend(
+                [
+                    ("Helsesjekk", "familybot.health", "Hvert 30. minutt"),
+                    ("Driftsstatus", "familybot.status", "Hvert 30. minutt"),
+                ]
+            )
+            if integrations.get("email", {}).get("enabled", True) is not False and integrations.get("email"):
+                process_specs.append(("E-post", "familybot.email", "Hvert 15. minutt"))
+            if integrations.get("spond", {}).get("enabled", True) is not False and integrations.get("spond", {}).get("groups"):
+                process_specs.append(("Spond", "familybot.spond", "Hver time"))
+            if integrations.get("transport", {}).get("enabled", True) is not False and integrations.get("transport"):
+                process_specs.append(("Kollektiv", "familybot.tbane", "Hvert 15. minutt"))
+        if profile == "agent":
+            if notifications.get("weekday_briefing", True) is not False:
+                process_specs.append(("Morgenmelding", "familybot.briefing.weekday", f"Hverdager {notifications.get('weekday_time', '06:45')}"))
+            if notifications.get("weekend_briefing", True) is not False:
+                process_specs.append(("Helgemelding", "familybot.briefing.weekend", f"Helg {notifications.get('weekend_time', '08:00')}"))
+            if notifications.get("weekly_summary", True) is not False:
+                process_specs.append(("Ukemelding", "familybot.briefing.weekly", f"{notifications.get('weekly_weekday', 'sunday')} {notifications.get('weekly_time', '21:00')}"))
         processes = []
         for name, label, schedule in process_specs:
             state = self._launchd_state(label)
@@ -998,9 +1067,15 @@ class FamilyRepository:
         }
         if any((plan["year"], plan["week_number"]) == (target_year, target_week) for plan in plans) and week_plan_week["fallback"]:
             week_plan_week["mixed"] = True
+        family = family_settings(self.workspace)
         return {
             "generated_at": iso_now(),
             "date": today.isoformat(),
+            "family": {
+                "display_name": family.get("display_name") or "Familieportalen",
+                "locale": family.get("locale") or "nb-NO",
+                "timezone": family.get("timezone") or "Europe/Oslo",
+            },
             "annual_chore_summary": annual_chore_summary,
             "target_week": {"week": target_week, "year": target_year, "starts": monday.isoformat()},
             "week_plan_week": week_plan_week,
@@ -1843,6 +1918,9 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 self.respond(503, {"error": "Bildet er midlertidig utilgjengelig."})
             return
         if parsed.path == "/api/oda/oauth/callback":
+            if not self.app.features["oda"]:
+                self.respond(404, {"error": "Oda-integrasjonen er ikke aktivert."})
+                return
             try:
                 portal_origin = self.app.oda.finish_authorization(parse_qs(parsed.query))
                 self.respond_html(200, "Oda er koblet til", "Du blir sendt tilbake til Familieportalen.", portal_origin)
@@ -1859,6 +1937,7 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 "token": self.app.session_token,
                 "api": "familybot-local-v2",
                 "features": self.app.features,
+                "schema": self.app.schema,
             })
             return
         if not self.authorize_read():
@@ -1876,6 +1955,9 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                 self.respond(503, {"error": "Familiedata er midlertidig utilgjengelig."})
             return
         if parsed.path.startswith("/api/oda/"):
+            if not self.app.features["oda"]:
+                self.respond(404, {"error": "Oda-integrasjonen er ikke aktivert."})
+                return
             try:
                 if parsed.path == "/api/oda/status":
                     self.respond(200, self.app.oda.status())
@@ -1999,6 +2081,9 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
                     self.respond(403, {"error": "Feil foreldrekode."})
                 return
             if path.startswith("/api/oda/"):
+                if not self.app.features["oda"]:
+                    self.respond(404, {"error": "Oda-integrasjonen er ikke aktivert."})
+                    return
                 if method == "POST" and path == "/api/oda/connect":
                     origin = self.headers.get("Origin", "")
                     self.respond(200, {"authorization_url": self.app.oda.begin_authorization(origin)})
@@ -2200,16 +2285,26 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
 
 
 class FamilyApiServer(ThreadingHTTPServer):
+    def server_bind(self) -> None:
+        # HTTPServer otherwise resolves the bind address with getfqdn(). For
+        # 0.0.0.0 this resolves the machine hostname and can block startup when
+        # local DNS/mDNS is unavailable. This JSON API has no CGI/name use.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
     def __init__(self, address: tuple[str, int], repository: FamilyRepository, parent_pin: str,
                  allowed_origins: set[str] | None = None, oda_client: OdaMcpClient | None = None,
+                 oda_enabled: bool | None = None, oda_ai_enabled: bool | None = None,
                  dinner_planner: Any | None = None,
                  hellofresh_client: HelloFreshNorwayClient | None = None,
                  hellofresh_enabled: bool | None = None,
                  hellofresh_account_client: HelloFreshAccountClient | None = None,
                  hellofresh_account_enabled: bool | None = None,
                  hellofresh_image_cache: HelloFreshImageCache | None = None):
+        schema = repository.schema_contract()
         super().__init__(address, FamilyApiHandler)
         self.repository = repository
+        self.schema = schema
         self.session_token = secrets.token_urlsafe(32)
         self.parent_pin = parent_pin
         self.parent_token = ""
@@ -2218,6 +2313,16 @@ class FamilyApiServer(ThreadingHTTPServer):
         self._parent_failure_lock = threading.Lock()
         settings = portal_settings(repository.workspace)
         feature_settings = settings.get("features", {})
+        configured_oda = (
+            feature_settings.get("oda") is True
+            if isinstance(feature_settings, dict)
+            else False
+        )
+        configured_oda_ai = (
+            feature_settings.get("oda_ai") is True
+            if isinstance(feature_settings, dict)
+            else False
+        )
         configured_hellofresh = (
             feature_settings.get("hellofresh") is True
             if isinstance(feature_settings, dict)
@@ -2234,7 +2339,11 @@ class FamilyApiServer(ThreadingHTTPServer):
                 if hellofresh_account_enabled is None
                 else hellofresh_account_enabled
         )
+        effective_oda = configured_oda if oda_enabled is None else oda_enabled
+        effective_oda_ai = configured_oda_ai if oda_ai_enabled is None else oda_ai_enabled
         self.features = {
+            "oda": effective_oda,
+            "oda_ai": effective_oda and effective_oda_ai,
             "hellofresh": effective_hellofresh,
             "hellofresh_account": effective_hellofresh and requested_hellofresh_account,
         }
@@ -2244,13 +2353,26 @@ class FamilyApiServer(ThreadingHTTPServer):
             "FAMILYBOT_ODA_CALLBACK_URL",
             f"http://{callback_host}:{callback_port}/api/oda/oauth/callback",
         )
-        self.oda = oda_client or OdaMcpClient(callback_url)
+        self.oda = oda_client or OdaMcpClient(callback_url, credentials_path=Path(os.environ.get(
+            "FAMILYBOT_ODA_CREDENTIALS", repository.workspace / "credentials/oda-mcp.json"
+        )).expanduser())
         self.hellofresh = hellofresh_client or HelloFreshNorwayClient()
-        self.hellofresh_account = hellofresh_account_client or HelloFreshAccountClient()
-        self.hellofresh_images = hellofresh_image_cache or HelloFreshImageCache()
+        self.hellofresh_account = hellofresh_account_client or HelloFreshAccountClient(credentials_path=Path(os.environ.get(
+            "FAMILYBOT_HELLOFRESH_CREDENTIALS", repository.workspace / "credentials/hellofresh-no.json"
+        )).expanduser())
+        self.hellofresh_images = hellofresh_image_cache or HelloFreshImageCache(cache_dir=Path(os.environ.get(
+            "FAMILYBOT_HELLOFRESH_IMAGE_CACHE", repository.workspace / "cache/hellofresh-images"
+        )).expanduser())
         self._hellofresh_login_attempts: dict[str, list[float]] = {}
         self._hellofresh_login_lock = threading.Lock()
-        self.dinner_planner = dinner_planner or recommend_dinner
+        if dinner_planner is not None:
+            self.dinner_planner = dinner_planner
+        elif self.features["oda_ai"]:
+            self.dinner_planner = recommend_dinner
+        else:
+            self.dinner_planner = lambda oda, payload: recommend_dinner(
+                oda, payload, allow_model=False
+            )
         self.dinner_slots = threading.BoundedSemaphore(1)
         with repository.connect() as connection:
             parent = connection.execute("SELECT id FROM family_members WHERE role='parent' ORDER BY id LIMIT 1").fetchone()
@@ -2293,11 +2415,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Serve the local FamilyBot console API")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8788)
-    parser.add_argument("--db", type=Path, default=Path(os.environ.get("FAMILYBOT_DB_PATH", DEFAULT_DB)))
+    parser.add_argument("--db", type=Path)
     parser.add_argument("--workspace", type=Path, default=Path(os.environ.get("FAMILYBOT_WORKSPACE", DEFAULT_WORKSPACE)))
     parser.add_argument("--lan", action="store_true")
-    parser.add_argument("--parent-pin-file", type=Path, default=Path(__file__).resolve().parent.parent / "runtime/parent-pin.txt")
+    parser.add_argument("--parent-pin-file", type=Path)
     args = parser.parse_args()
+    args.workspace = args.workspace.expanduser()
+    args.db = (args.db or Path(os.environ.get("FAMILYBOT_DB_PATH", args.workspace / "db/family.db"))).expanduser()
+    args.parent_pin_file = (args.parent_pin_file or Path(os.environ.get(
+        "FAMILYBOT_PARENT_PIN_FILE", args.workspace / "config/parent-pin.txt"
+    ))).expanduser()
     if args.host not in {"127.0.0.1", "localhost"} and not (args.lan and args.host == LAN_HOST):
         raise SystemExit("LAN bind requires --lan and --host 0.0.0.0.")
     if not args.db.is_file():

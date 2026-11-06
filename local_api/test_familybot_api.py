@@ -2,14 +2,26 @@ import datetime as dt
 import http.client
 import io
 import json
+import os
 import sqlite3
 import tempfile
 import threading
+import time
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
-from dashboard_migration import clear_active_setup, ensure_default_rewards, migrate
+from dashboard_migration import (
+    MIGRATION_TABLE,
+    PORTAL_MIGRATIONS,
+    Migration,
+    PortalMigrationError,
+    clear_active_setup,
+    ensure_default_rewards,
+    migrate,
+    migration_status,
+)
 from familybot_api import (
     FamilyApiServer,
     FamilyRepository,
@@ -237,7 +249,7 @@ class RepositoryTests(unittest.TestCase):
              "default_reward": {"title": "Card pack", "emoji": "🃏", "target_value": 30}},
             {"member_id": 4, "role": "child", "name": "Child Two", "slug": "child_2", "avatar": "🦋", "grade": 6,
              "default_reward": {"title": "Cinema", "emoji": "🎬", "target_value": 30}},
-        ], "integrations": {
+        ], "portal": {"features": {"oda": True, "oda_ai": True}}, "integrations": {
             "transport": {
                 "transport_mode": "metro", "stop_name": "Local Station", "stop_id": "NSR:StopPlace:test",
                 "direction_quay_id": "NSR:Quay:test", "line": "2",
@@ -250,6 +262,27 @@ class RepositoryTests(unittest.TestCase):
         }}), encoding="utf-8")
         with sqlite3.connect(self.db) as connection:
             connection.executescript(SCHEMA)
+            connection.execute(MIGRATION_TABLE)
+            connection.execute(
+                """INSERT INTO familybot_schema_migrations
+                   (component,version,name,checksum,applied_at)
+                   VALUES('core',1,'test-core-contract','test-only','2026-01-01T00:00:00Z')"""
+            )
+            connection.execute(
+                """CREATE TABLE week_plan_interpretations(
+                       id INTEGER PRIMARY KEY,
+                       week_plan_id INTEGER UNIQUE REFERENCES week_plans(id),
+                       status TEXT NOT NULL,
+                       source_hash TEXT NOT NULL,
+                       parser_version TEXT NOT NULL,
+                       model TEXT,
+                       structured_json TEXT NOT NULL DEFAULT '{}',
+                       attempts INTEGER NOT NULL DEFAULT 0,
+                       last_error TEXT,
+                       created_at TEXT,
+                       updated_at TEXT
+                   )"""
+            )
             connection.executemany("INSERT INTO family_members(id,name,role,grade) VALUES(?,?,?,?)", [(1,"Parent One","parent",None),(3,"Child One","child",3),(4,"Child Two","child",6)])
             connection.execute("INSERT INTO email_log VALUES(1,'m1','Ukeplan og informasjon','school@example.no','2026-08-13','2026-08-13',NULL,'school',1,'Velkommen til 3A. Hemmelig råtekst')")
             connection.execute("INSERT INTO school_calendar VALUES(1,'2026-2027','first_day','Første skoledag','2026-08-17','2026-08-17','oslo',NULL)")
@@ -287,6 +320,132 @@ class RepositoryTests(unittest.TestCase):
         child_one = next(item for item in dashboard["week_plan_status"] if item["member"] == "Child One")
         self.assertTrue(child_one["inbox_candidate"])
         self.assertFalse(child_one["received"])
+
+    def test_portal_schema_is_versioned_and_failed_upgrade_rolls_back(self):
+        self.assertEqual(2, migration_status(self.db)["portal"])
+
+        def fail_after_write(connection):
+            connection.execute("CREATE TABLE portal_upgrade_must_rollback(id INTEGER PRIMARY KEY)")
+            raise RuntimeError("simulated migration interruption")
+
+        failed = Migration(3, "simulated-failure", fail_after_write, "test-only")
+        with patch("dashboard_migration.PORTAL_MIGRATIONS", (*PORTAL_MIGRATIONS, failed)):
+            with self.assertRaises(RuntimeError):
+                migrate(self.db)
+        with sqlite3.connect(self.db) as connection:
+            self.assertIsNone(
+                connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' "
+                    "AND name='portal_upgrade_must_rollback'"
+                ).fetchone()
+            )
+            self.assertIsNone(
+                connection.execute(
+                    "SELECT 1 FROM familybot_schema_migrations "
+                    "WHERE component='portal' AND version=3"
+                ).fetchone()
+            )
+
+    def test_api_refuses_an_incompatible_schema_contract(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute(
+                "DELETE FROM familybot_schema_migrations WHERE component='portal' AND version=2"
+            )
+        with self.assertRaises(RuntimeError):
+            FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+
+    def test_failed_final_schema_validation_rolls_back_all_pending_markers(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("DELETE FROM familybot_schema_migrations WHERE component='portal'")
+            connection.execute("DROP TABLE reward_goals")
+            connection.execute("CREATE TABLE reward_goals(id INTEGER PRIMARY KEY,member_id INTEGER,active INTEGER)")
+            before = list(connection.execute("SELECT type,name,sql FROM sqlite_master ORDER BY name"))
+        with self.assertRaises(PortalMigrationError):
+            migrate(self.db)
+        with sqlite3.connect(self.db) as connection:
+            self.assertEqual(before, list(connection.execute("SELECT type,name,sql FROM sqlite_master ORDER BY name")))
+            self.assertEqual(0, connection.execute(
+                "SELECT COUNT(*) FROM familybot_schema_migrations WHERE component='portal'"
+            ).fetchone()[0])
+        self.assertFalse(migration_status(self.db)["current"])
+
+    def test_current_markers_cannot_hide_missing_table_or_column(self):
+        snapshot = self.db.read_bytes()
+        for statement in (
+            "ALTER TABLE reward_goals DROP COLUMN title",
+            "DROP TABLE weekly_achievement_reset_operations",
+        ):
+            with self.subTest(statement=statement):
+                self.db.write_bytes(snapshot)
+                with sqlite3.connect(self.db) as connection:
+                    connection.execute(statement)
+                self.assertFalse(migration_status(self.db)["current"])
+                with self.assertRaises(RuntimeError):
+                    FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+
+    def test_status_and_startup_reject_changed_checksum(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("UPDATE familybot_schema_migrations SET checksum='tampered' WHERE component='portal'")
+        self.assertFalse(migration_status(self.db)["current"])
+        with self.assertRaises(RuntimeError):
+            FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+
+    def test_core_markers_cannot_hide_missing_consumed_schema(self):
+        snapshot = self.db.read_bytes()
+        tables = ("family_members", "calendar_events", "spond_events", "activities", "kanban_cards",
+                  "week_plans", "week_plan_days", "week_plan_interpretations", "email_log", "school_calendar")
+        statements = [f'DROP TABLE "{table}"' for table in tables] + [
+            "ALTER TABLE calendar_events DROP COLUMN bring",
+            "ALTER TABLE activities DROP COLUMN schedule",
+            "ALTER TABLE week_plans DROP COLUMN teacher",
+        ]
+        for statement in statements:
+            with self.subTest(statement=statement):
+                self.db.write_bytes(snapshot)
+                with sqlite3.connect(self.db) as connection:
+                    connection.execute(statement)
+                before = self.db.read_bytes()
+                self.assertFalse(migration_status(self.db)["current"])
+                with self.assertRaises(RuntimeError):
+                    FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+                with self.assertRaises(PortalMigrationError):
+                    migrate(self.db)
+                self.assertEqual(before, self.db.read_bytes())
+
+    def test_migration_history_gap_is_not_silently_repaired(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("DELETE FROM familybot_schema_migrations WHERE component='portal' AND version=1")
+        with self.assertRaisesRegex(PortalMigrationError, "gap"):
+            migrate(self.db)
+        self.assertFalse(migration_status(self.db)["current"])
+
+    def test_explicit_seed_does_not_resurrect_archived_starter_chores(self):
+        migrate(self.db, seed=True)
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("UPDATE kanban_cards SET archived_at='2026-11-01' WHERE title='Rydde rommet'")
+            count = connection.execute("SELECT COUNT(*) FROM kanban_cards").fetchone()[0]
+        migrate(self.db, seed=True)
+        with sqlite3.connect(self.db) as connection:
+            self.assertEqual(count, connection.execute("SELECT COUNT(*) FROM kanban_cards").fetchone()[0])
+
+    def test_portal_migration_refuses_database_without_core_contract(self):
+        empty = Path(self.temp.name) / "empty.db"
+        with sqlite3.connect(empty):
+            pass
+        with self.assertRaises(PortalMigrationError):
+            migrate(empty)
+
+    def test_portal_refuses_an_unreviewed_future_core_schema(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute(
+                """INSERT INTO familybot_schema_migrations
+                   (component,version,name,checksum,applied_at)
+                   VALUES('core',2,'future-core','test-only','2026-01-02T00:00:00Z')"""
+            )
+        with self.assertRaises(PortalMigrationError):
+            migrate(self.db)
+        with self.assertRaises(RuntimeError):
+            FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
 
     def test_week_plan_target_stays_current_until_weekend(self):
         for day in range(19, 26):
@@ -632,6 +791,38 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(child["chores"], [])
         self.assertEqual(child["reward"]["earned"], 0)
 
+    def test_dashboard_survives_slow_configured_adapters_without_cache(self):
+        for name in ("dashboard_weather.json", "dashboard_departures.json"):
+            (self.repo.workspace / "db" / name).unlink()
+        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456", {"http://localhost:3000"})
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+        budgets = []
+
+        def outage(_request, *, timeout):
+            budgets.append(timeout)
+            time.sleep(1.1)
+            raise TimeoutError("fictional provider outage")
+
+        try:
+            with patch("urllib.request.urlopen", side_effect=outage), \
+                    patch.object(self.repo, "_launchd_state", return_value={}):
+                connection.request("GET", "/api/dashboard", headers={
+                    "Origin": "http://localhost:3000", "X-FamilyBot-Local-Token": server.session_token})
+                response = connection.getresponse()
+                self.assertEqual(200, response.status)
+                dashboard = json.loads(response.read())
+            self.assertEqual([4, 4], budgets)
+            self.assertTrue(dashboard["weather"]["stale"])
+            self.assertFalse(dashboard["transport"]["ok"])
+            self.assertTrue(dashboard["children"])
+        finally:
+            connection.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_lan_origin_boundary(self):
         allowed = {"http://familie.local:3000", "http://localhost:3000"}
         self.assertTrue(trusted_portal_origin("http://familie.local:3000", allowed))
@@ -664,6 +855,24 @@ class RepositoryTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2)
 
+    def test_api_startup_does_not_require_reverse_dns(self):
+        with patch("socket.getfqdn", side_effect=AssertionError("DNS must not gate API startup")):
+            server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+        try:
+            self.assertEqual("127.0.0.1", server.server_name)
+            connection.request("GET", "/api/health")
+            response = connection.getresponse()
+            self.assertEqual(200, response.status)
+            self.assertTrue(json.loads(response.read())["ok"])
+        finally:
+            connection.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_parent_pin_attempts_are_rate_limited(self):
         server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
         try:
@@ -673,6 +882,32 @@ class RepositoryTests(unittest.TestCase):
             self.assertFalse(server.parent_login_allowed("192.168.1.20"))
             server.record_parent_login("192.168.1.20", succeeded=True)
             self.assertTrue(server.parent_login_allowed("192.168.1.20"))
+        finally:
+            server.server_close()
+
+    def test_omitted_grocery_features_are_disabled_without_consent(self):
+        with patch("familybot_api.portal_settings", return_value={}):
+            server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        try:
+            self.assertEqual({"oda": False, "oda_ai": False, "hellofresh": False,
+                              "hellofresh_account": False}, server.features)
+        finally:
+            server.server_close()
+
+    def test_provider_state_uses_selected_repository_workspace(self):
+        with patch.dict(os.environ, {"FAMILYBOT_WORKSPACE": "/fictional/other-household",
+                                    "OPENCLAW_WORKSPACE": "/fictional/legacy"}, clear=True):
+            server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        try:
+            self.assertEqual(self.repo.workspace / "credentials/oda-mcp.json", server.oda.credentials_path)
+            self.assertEqual(self.repo.workspace / "credentials/hellofresh-no.json", server.hellofresh_account.credentials_path)
+            self.assertEqual(self.repo.workspace / "cache/hellofresh-images", server.hellofresh_images.cache_dir)
+        finally:
+            server.server_close()
+        with patch.dict(os.environ, {"FAMILYBOT_ODA_CREDENTIALS": "/fictional/explicit/oda.json"}, clear=True):
+            server = FamilyApiServer(("127.0.0.1", 0), self.repo, "123456")
+        try:
+            self.assertEqual(Path("/fictional/explicit/oda.json"), server.oda.credentials_path)
         finally:
             server.server_close()
 
@@ -740,6 +975,42 @@ class RepositoryTests(unittest.TestCase):
             response.read()
             self.assertIn(("add_recipe", 42, 5), oda.calls)
             connection.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_disabled_oda_routes_do_not_reach_provider(self):
+        oda = FakeOdaClient()
+        server = FamilyApiServer(
+            ("127.0.0.1", 0),
+            self.repo,
+            "123456",
+            {"http://localhost:3000"},
+            oda,
+            oda_enabled=False,
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            headers = {
+                "Origin": "http://localhost:3000",
+                "X-FamilyBot-Local-Token": server.session_token,
+            }
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", server.server_address[1], timeout=2
+            )
+            connection.request("GET", "/api/oda/status", headers=headers)
+            self.assertEqual(connection.getresponse().status, 404)
+            connection.close()
+
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", server.server_address[1], timeout=2
+            )
+            connection.request("GET", "/api/oda/oauth/callback?code=secret&state=state")
+            self.assertEqual(connection.getresponse().status, 404)
+            connection.close()
+            self.assertEqual(oda.calls, [])
         finally:
             server.shutdown()
             server.server_close()
@@ -1229,6 +1500,21 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual([period["label"] for period in result["periods"]], ["08–12", "12–16", "16–20"])
         self.assertEqual(result["periods"][0]["precipitation_mm"], 0.4)
         self.assertIn("regnjakke", result["advice"])
+
+    def test_weather_and_transport_outages_degrade_without_breaking_dashboard(self):
+        root = Path(self.temp.name)
+        (root / "db/dashboard_weather.json").unlink()
+        (root / "db/dashboard_departures.json").unlink()
+        with patch(
+            "familybot_api.urllib.request.urlopen",
+            side_effect=urllib.error.URLError("simulated outage"),
+        ):
+            weather = weather_summary(root)
+            transport = transport_summary(root)
+        self.assertTrue(weather["stale"])
+        self.assertIn("utilgjengelig", weather["status"])
+        self.assertFalse(transport["ok"])
+        self.assertTrue(transport["stale"])
 
 
 if __name__ == "__main__":

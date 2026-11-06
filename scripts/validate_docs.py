@@ -24,7 +24,7 @@ REQUIRED_README_LINKS = {
     "AGENTS.md",
     "docs/DEVELOPMENT_GUIDE.md",
     "docs/NEW_SESSION_VERIFICATION.md",
-    "familybot-core/blob/dev/GETTING_STARTED.md",
+    "familybot-core/blob/codex/readiness-review-fixes/GETTING_STARTED.md",
 }
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 

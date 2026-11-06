@@ -222,6 +222,10 @@ live child navigation.
 
 ### AC-18 — Direct Oda grocery integration
 
+Applicable only with explicit `portal.features.oda: true`. The model-specific
+parts additionally require `portal.features.oda_ai: true` and external-processing
+consent; otherwise direct-search fallback is the supported path.
+
 - `Oda` is a top-level tab next to Kanban and is available to every valid local
   dashboard session without a parent PIN unless the HelloFresh physical-test
   flags intentionally replace it. Its implementation remains intact for

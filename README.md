@@ -18,16 +18,21 @@ deliberately unavailable._
 
 Do not configure this repository independently first. Clone it beside
 `familybot-core` and use the
-[canonical step-by-step Mac setup guide](https://github.com/TrygveAasheim/familybot-core/blob/dev/GETTING_STARTED.md):
+[canonical step-by-step Mac setup guide](https://github.com/TrygveAasheim/familybot-core/blob/codex/readiness-review-fixes/GETTING_STARTED.md):
 
 ```bash
 mkdir -p "$HOME/FamilyBot" && cd "$HOME/FamilyBot"
-git clone --branch dev https://github.com/TrygveAasheim/familybot-core.git
-git clone --branch dev https://github.com/TrygveAasheim/familybot-portal.git
+git clone --branch codex/readiness-review-fixes https://github.com/TrygveAasheim/familybot-core.git
+git clone --branch codex/readiness-review-fixes https://github.com/TrygveAasheim/familybot-portal.git
 cd familybot-core
+git switch --detach REVIEWED_CORE_SHA
+git -C ../familybot-portal switch --detach REVIEWED_PORTAL_SHA
 uv run --python 3.12 scripts/install_familybot.py \
   --portal-repo ../familybot-portal
 ```
+
+Replace the two SHA placeholders with the full compatible commit IDs in the
+readiness PR handoff before running this block. They are not literal Git refs.
 
 These commands select the development installation candidate. `main` has not
 yet received the installer release. For pre-merge testing check out the exact

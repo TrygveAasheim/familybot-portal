@@ -102,6 +102,22 @@ class OdaDinnerTests(unittest.TestCase):
         self.assertEqual(oda.queries, ["vegetarisk middag"])
         self.assertEqual(result["portions"], 3)
 
+    def test_disabled_ai_never_calls_planner(self):
+        oda = FakeOda()
+
+        def must_not_run(_prompt):
+            self.fail("model planner must stay disabled")
+
+        result = oda_dinner.recommend(
+            oda,
+            {"question": "fisk til middag", "portions": 4},
+            planner=must_not_run,
+            details_loader=lambda _url: {},
+            allow_model=False,
+        )
+        self.assertFalse(result["model_used"])
+        self.assertEqual(oda.queries, ["fisk til middag"])
+
     def test_invoke_uses_isolated_agent_and_accepts_fenced_json(self):
         stdout = json.dumps({"result": {"payloads": [{
             "text": '```json\n{"reply":"Hei","queries":["taco"]}\n```'

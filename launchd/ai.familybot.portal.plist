@@ -6,11 +6,11 @@
   <string>ai.familybot.portal</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/YOUR_ACCOUNT/.openclaw/runtime/familybot-portal/.venv/bin/python</string>
-    <string>/Users/YOUR_ACCOUNT/.openclaw/runtime/familybot-portal/local_service/run_service.py</string>
+    <string>__FAMILYBOT_RUNTIME__/.venv/bin/python</string>
+    <string>__FAMILYBOT_RUNTIME__/local_service/run_service.py</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/YOUR_ACCOUNT/.openclaw/runtime/familybot-portal</string>
+  <string>__FAMILYBOT_RUNTIME__</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -27,6 +27,10 @@
     <string>production</string>
     <key>FAMILYBOT_NODE</key>
     <string>__FAMILYBOT_NODE__</string>
+    <key>FAMILYBOT_WORKSPACE</key>
+    <string>__FAMILYBOT_WORKSPACE__</string>
+    <key>FAMILYBOT_FAMILY_CONFIG</key>
+    <string>__FAMILYBOT_CONFIG__</string>
   </dict>
   <key>StandardOutPath</key>
   <string>/Users/YOUR_ACCOUNT/Library/Logs/familybot-portal.log</string>

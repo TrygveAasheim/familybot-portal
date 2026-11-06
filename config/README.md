@@ -5,9 +5,10 @@ canonical template in the sibling `familybot-core` repository:
 
 `../familybot-core/config/family.example.json`
 
-See `../familybot-core/CONFIGURATION.md`. Both applications read
-`$HOME/.openclaw/workspace/config/family.local.json` unless an explicit
-`FAMILYBOT_FAMILY_CONFIG` override is set.
+See `../familybot-core/CONFIGURATION.md`. New installations use
+`$HOME/.familybot/config/family.local.json`; both applications receive its exact
+path through `FAMILYBOT_FAMILY_CONFIG`. Existing deployments may retain an older
+explicit workspace path.
 
 Optional Portal experiments are also declared in that canonical file. The
 Norwegian HelloFresh menu and account test are disabled by default and can be
@@ -29,8 +30,8 @@ the fixed HelloFresh Norway endpoint using a Chrome-fingerprinted, verified
 HTTPS transport. The password remains transient request data and is never
 stored, logged, returned or placed in model context. There is no email-link
 fallback: HelloFresh maps that flow to password reset for this market/account.
-Only refresh credentials are written to
-`$HOME/.openclaw/credentials/hellofresh-no.json` with mode `0600`. Account
+Only refresh credentials are written beneath the configured private workspace,
+normally `$HOME/.familybot/credentials/hellofresh-no.json`, with mode `0600`. Account
 access is limited to viewing future boxes, replacing/adding/removing selected
 meals and pausing or resuming one identified week after explicit confirmation.
 Subscription-plan, servings, address, payment, checkout and ordering controls

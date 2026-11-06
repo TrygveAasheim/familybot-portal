@@ -57,7 +57,9 @@ def validate_repository(root: Path) -> list[str]:
         for marker, message in {
             "22.22.3": "README does not state the tested Node.js baseline",
             "scripts/check_setup.py --mode source": "README does not point to the readiness check",
-            "local Oda MCP server": "README does not clarify the hosted Oda dependency",
+            "hosted Oda MCP service": "README does not clarify the hosted Oda dependency",
+            "scripts/install_familybot.py": "README does not point to the supported installer",
+            "empty database": "README does not state clean-install support",
         }.items():
             if marker not in content:
                 errors.append(message)

@@ -391,6 +391,8 @@ def recommend(
     payload: Any,
     planner: Callable[[str], dict[str, Any]] = invoke,
     details_loader: Callable[[str], dict[str, Any]] = recipe_details,
+    *,
+    allow_model: bool = True,
 ) -> dict[str, Any]:
     question, portions, history = validate_request(payload)
     liked: list[dict[str, Any]] = []
@@ -406,13 +408,17 @@ def recommend(
         pass
 
     preference_titles = _preference_titles(liked, purchased)
-    model_used = True
-    try:
-        planned = planner(build_prompt(question, portions, history, preference_titles))
-        reply, queries = _validated_plan(planned, question)
-    except DinnerPlannerUnavailable:
+    model_used = False
+    if not allow_model:
         model_used = False
         reply, queries = _fallback(question)
+    else:
+        try:
+            planned = planner(build_prompt(question, portions, history, preference_titles))
+            reply, queries = _validated_plan(planned, question)
+            model_used = True
+        except DinnerPlannerUnavailable:
+            reply, queries = _fallback(question)
 
     liked_ids = {int(item["id"]) for item in liked if str(item.get("id", "")).isdigit()}
     purchased_ids = {

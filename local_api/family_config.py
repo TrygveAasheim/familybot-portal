@@ -50,9 +50,16 @@ def child_profiles(workspace: Path) -> list[dict[str, Any]]:
 
 def integration(workspace: Path, name: str) -> dict[str, Any]:
     value = load_family_config(workspace).get("integrations", {}).get(name, {})
-    return value if isinstance(value, dict) else {}
+    if not isinstance(value, dict) or value.get("enabled") is False:
+        return {}
+    return value
 
 
 def portal_settings(workspace: Path) -> dict[str, Any]:
     value = load_family_config(workspace).get("portal", {})
+    return value if isinstance(value, dict) else {}
+
+
+def family_settings(workspace: Path) -> dict[str, Any]:
+    value = load_family_config(workspace).get("family", {})
     return value if isinstance(value, dict) else {}

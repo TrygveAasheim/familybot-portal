@@ -25,12 +25,14 @@
 - continuous 30-point block counting from pending and awarded completion points, with configurable surprise levels, parent redemption resets and a January annual summary; see [the achievement specification](WEEKLY_ACHIEVEMENTS.md);
 - curated read/write API, SQLite backup, audit and idempotency;
 - launchd supervision, Bonjour advertisement and local acceptance gate.
+- empty-database installation through Core's guided, idempotent installer;
+- explicit Core/Portal schema compatibility and pre-migration backups.
 
 ## Supplied by FamilyBot Core
 
 - email ingestion and `ukeplan` PDF parsing;
 - Spond events;
-- Norwegian/Oslo school calendar;
+- calculated Norwegian public holidays and configured municipality/school calendar;
 - scheduled briefings, Telegram delivery and health/freshness state.
 
 ## Explicitly not supported yet
@@ -43,9 +45,11 @@
 - HelloFresh subscription-plan, servings, address, payment, checkout and order
   management beyond the bounded meal and weekly pause controls;
 - automatic chore generation from school homework;
-- a clean-room core database installer. Core now supplies the complete
-  health-owned LaunchAgent set, but still requires a supported starter or
-  restored database.
+- automatic TLS or safe direct internet exposure. The supported default is
+  plain HTTP on a trusted LAN; remote access needs an authenticated VPN and TLS
+  when the network is not trusted;
+- guaranteed provider compatibility for unofficial Spond, hosted Oda MCP or
+  the unsupported HelloFresh Norway web contract.
 
 New features must preserve the data boundary in `DATA_BOUNDARY.md`, add an
 acceptance criterion when user-visible, and avoid putting private household

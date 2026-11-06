@@ -62,7 +62,15 @@ class HelloFreshTransportMixin:
         self.credentials_path = credentials_path or Path(
             os.environ.get(
                 "FAMILYBOT_HELLOFRESH_CREDENTIALS",
-                str(Path.home() / ".openclaw/credentials/hellofresh-no.json"),
+                str(
+                    Path(
+                        os.environ.get(
+                            "FAMILYBOT_WORKSPACE",
+                            str(Path.home() / ".openclaw/workspace"),
+                        )
+                    )
+                    / "credentials/hellofresh-no.json"
+                ),
             )
         ).expanduser()
         self.timeout = timeout

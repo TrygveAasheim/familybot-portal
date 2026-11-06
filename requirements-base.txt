@@ -1,0 +1,3 @@
+# Dashboard-only Portal runtime: Python standard library only.
+# Keep this file so `uv pip sync --allow-empty-requirements` can remove
+# provider-specific packages after a feature is disabled.

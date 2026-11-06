@@ -64,7 +64,8 @@ source review. Runtime probe success is not full acceptance: record applicable
 criteria and outstanding browser/iPad/provider evidence separately.
 Extend the acceptance contract before shipping a new user-visible capability.
 
-Normal work is committed and deployed from `dev` only. `main` is the stable
+Commit on dedicated branches and review PRs into `dev`, the normal deployment
+track. Deployment requires separate authorization. `main` is the stable
 release branch and must only receive pull requests reviewed and approved by
 `@TrygveAasheim`; do not commit, push or deploy directly from `main`. Runtime
 files, PINs, audit logs and databases never enter Git.

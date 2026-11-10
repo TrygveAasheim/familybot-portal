@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-10 — Compact home spacing (candidate, not deployed)
+
+- Reclaim whitespace below the menu and inside the overview cards, especially
+  beneath “Viktigst nå”; reduce the gap before children's progress cards.
+- Preserve text/icon sizes, child cards and tap targets. Keep content-driven
+  heights and scrolling for busy agendas or enlarged text; no clipping.
+- Verify two fictional children's progress bars above the fold in desktop
+  Safari frames at 768×1024 and 820×1180, plus narrow-screen stacking at 390×844.
+  Physical kiosk acceptance remains outstanding.
+
+Portal CSS only; no API, database, Core or runtime changes. Revert this change
+and redeploy the frontend to roll back. Acceptance/evidence are recorded in
+[the overview contract](docs/DASHBOARD_OVERVIEW.md).
+
 ## 2026-11-10 — Glanceable overview (candidate, not deployed)
 
 - Move transport to the top-left; retain weather at top-right and existing

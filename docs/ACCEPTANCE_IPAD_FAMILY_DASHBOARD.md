@@ -79,6 +79,22 @@ Evidence: parent API authorization tests and iPad browser interaction.
 
 ### AC-08 — Family information is glanceable
 
+- Transport occupies the top-left card with a large local train symbol,
+  larger title and live countdown. Weather stays top-right with a larger
+  forecast-derived local symbol, textual conditions and period forecasts.
+  Existing card widths/minimum heights remain at tablet sizes; content may
+  grow for accessibility rather than clipping at 200% zoom. Clothing advice is
+  absent from this card. Unknown symbols do not imply sunny weather.
+- “Viktigst nå” below them combines dated events for today plus four days with
+  only today's weekly routines, at most four chronologically ordered entries.
+  Pauses include their final date. Matching source/routine occurrences appear
+  once; different children and distinct times remain separate. Offset event
+  timestamps use the configured household timezone, not the browser timezone.
+- The standalone Activities card defaults off through
+  `overviewSettings.showActivitiesCard`; its component and child-page activity
+  view remain implemented. Ambiguous free-text schedules are not invented.
+  See [the detailed rules and limitations](DASHBOARD_OVERVIEW.md).
+
 - The same dashboard exposes today's school information, activities, weather,
   transport and household status without entering another add-on.
 - Each child has a separate weekly-plan surface for school goals, homework,

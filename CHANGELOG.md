@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — OpenClaw dinner-agent setup compatibility
+
+- Support both legacy list and current keyed agent rosters; preserve other
+  agents and fail closed on unreadable or ambiguous inventory.
+- Validate agent/model identifiers before filesystem or CLI actions, and deny
+  `session_status` in addition to privileged groups for tool-free dinner AI.
+- Add fake-CLI regression coverage to `npm test`; no provider calls or household
+  state access. The dashboard and non-AI groceries remain OpenClaw-independent.
+
+No UI/API/schema change or Portal service deployment. Roll back the setup script
+only if compatible with the installed OpenClaw roster; runtime downgrades require
+matching backed-up OpenClaw state, not a household database restore.
+
 ## 2026-11-10 — Compact home spacing (candidate, not deployed)
 
 - Reclaim whitespace below the menu and inside the overview cards, especially

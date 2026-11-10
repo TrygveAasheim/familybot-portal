@@ -19,7 +19,7 @@
     "preflight": "bash scripts/preflight.sh",
     "security:audit": "npm audit --audit-level=low && bash scripts/python-quality.sh security",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:overview && npm run security:audit && python3 scripts/test_api.py && npm run docs:check && npm run typecheck && npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run test:overview && npm run security:audit && python3 -m unittest discover -s tests -p test_agent_setup.py && python3 scripts/test_api.py && npm run docs:check && npm run typecheck && npm run build && node --test tests/rendered-html.test.mjs",
     "test:overview": "node --experimental-strip-types --test tests/dashboard-overview.test.mjs",
     "lint": "npm run lint:web && bash scripts/python-quality.sh lint",
     "lint:web": "oxlint --react-plugin --jsx-a11y-plugin --nextjs-plugin --deny-warnings -A jsx-a11y/prefer-tag-over-role -A unicorn/prefer-string-starts-ends-with -A unicorn/no-useless-fallback-in-spread -D react-hooks/rules-of-hooks -D react-hooks/exhaustive-deps --ignore-pattern dist --ignore-pattern .next ."

@@ -93,6 +93,12 @@ The browser never becomes an OpenClaw control surface. Raw email, provider
 credentials, Spond payloads, Telegram identifiers and arbitrary files are not
 returned by the API.
 
+Optional dinner-agent setup supports both legacy and current OpenClaw agent
+rosters and fails closed when inventory cannot be verified. Keep Portal's Node
+22 runtime separate from newer OpenClaw's Node requirements; follow Core's
+[stack maintenance guide](https://github.com/TrygveAasheim/familybot-core/blob/dev/docs/STACK_SECURITY.md)
+for version checks, managed Codex, backups and migration rollback.
+
 ## Grocery capabilities
 
 Both are disabled by default and independent of the product profiles.

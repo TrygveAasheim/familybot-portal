@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased — OpenClaw dinner-agent setup compatibility
+
+- Support both legacy list and current keyed agent rosters; preserve other
+  agents and fail closed on unreadable or ambiguous inventory.
+- Validate agent/model identifiers before filesystem or CLI actions, and deny
+  `session_status` in addition to privileged groups for tool-free dinner AI.
+- Deny all tool names with `*` as well, including newly introduced runtime tools;
+  the minimal profile alone does not guarantee tool-free inference.
+- Add fake-CLI regression coverage to `npm test`; no provider calls or household
+  state access. The dashboard and non-AI groceries remain OpenClaw-independent.
+
+No UI/API/schema change or Portal service deployment. Roll back the setup script
+only if compatible with the installed OpenClaw roster; runtime downgrades require
+matching backed-up OpenClaw state, not a household database restore.
+
+## 2026-11-10 — Compact home spacing (candidate, not deployed)
+
+- Reclaim whitespace below the menu and inside the overview cards, especially
+  beneath “Viktigst nå”; reduce the gap before children's progress cards.
+- Preserve text/icon sizes, child cards and tap targets. Keep content-driven
+  heights and scrolling for busy agendas or enlarged text; no clipping.
+- Verify two fictional children's progress bars above the fold in desktop
+  Safari frames at 768×1024 and 820×1180, plus narrow-screen stacking at 390×844.
+  Physical kiosk acceptance remains outstanding.
+
+Portal CSS only; no API, database, Core or runtime changes. Revert this change
+and redeploy the frontend to roll back. Acceptance/evidence are recorded in
+[the overview contract](docs/DASHBOARD_OVERVIEW.md).
+
+## 2026-11-10 — Glanceable overview (candidate, not deployed)
+
+- Move transport to the top-left; retain weather at top-right and existing
+  card minimum heights, with larger local SVG symbols and transport typography.
+- Remove clothing advice from the home card only; keep forecast periods,
+  timestamps and explicit stale/unavailable states.
+- Combine dated calendar/Spond events and today's scheduled routines under
+  “Viktigst nå”, deduplicate matching occurrences and retain distinct times and
+  children. Disable the separate Activities card through a source display flag.
+- Add fixture tests for date windows, day/time parsing, pauses, alternate weeks,
+  duplicate precedence, timezone/DST and weather-code classification.
+
+No API/schema change, Core change, live data access or deployment. Revert the
+source change and use the normal reviewed deployment with client refresh to
+roll back; no database restore is necessary. Free-text limitations and evidence
+are documented in [the overview contract](docs/DASHBOARD_OVERVIEW.md).
+
 ## 2026-11-06 — Main publication documentation
 
 - Publish the coordinated installation/upgrade candidate through reviewed PRs.

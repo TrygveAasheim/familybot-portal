@@ -50,6 +50,7 @@ the web service. The API and database remain on the Mac mini.
 | Area | Owning files | Risk notes |
 | --- | --- | --- |
 | Main family/child/parent UI | `app/_components/FamilyConsole.tsx` | User-visible; touch, accessibility and state-transition risk |
+| Home agenda and symbols | `app/_components/dashboardOverview.ts`, `OverviewSymbols.tsx` | Presentation-only day filtering and conservative deduplication; local SVGs, no provider calls; see `DASHBOARD_OVERVIEW.md` |
 | Global layout and responsive design | `app/globals.css` | Verify portrait, landscape, 200% zoom and no hover dependency |
 | Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist, including parent-gated Kanban mutations |
 | Oda groceries | `local_api/oda_mcp.py`, `local_api/oda_dinner.py`, Oda routes in `local_api/familybot_api.py` | OAuth secrecy, bounded model context, strict public recipe host/schema validation, kiosk return navigation, account-data exposure, explicit cart-mutation and provider-failure boundary |
@@ -73,6 +74,14 @@ Do not reintroduce `/opt/homebrew/bin` as an executable assumption; Apple
 Silicon is tested, but path discovery keeps Intel/custom Homebrew layouts
 diagnosable. The canonical host software and minimal OpenClaw instructions live
 in Core's `GETTING_STARTED.md`.
+
+The optional dinner-agent setup reads `agents` through OpenClaw's CLI and
+supports legacy `list` and current keyed `entries`. Malformed/failed inventory
+must stop before agent creation or configuration writes. Fake-CLI tests cover
+both formats without accessing a real agent workspace. The explicit tool deny
+list includes `session_status` and a deny-all `*` wildcard for new/future tools;
+the minimal profile alone is not tool-free. Check live smoke metadata for zero
+exposed tools after a runtime upgrade.
 
 New installations deploy beneath `$HOME/.familybot`; legacy paths remain
 supported only through explicit environment overrides. Do not reintroduce an

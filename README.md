@@ -6,6 +6,14 @@ blocks, parent approval and Kanban. Optional cards show MET weather, Entur
 departures, school Ukeplan data and Spond activities supplied by the sibling
 Core repository.
 
+The home overview places transport and weather side by side, with large local
+symbols and a shared “Viktigst nå” agenda below. Dated events cover five days;
+weekly routines appear only on their scheduled day. The separate Activities
+card is disabled, not deleted. Content-sized cards and tighter home-page spacing
+bring children's progress bars higher without reducing text or symbol sizes.
+See the [overview rules](docs/DASHBOARD_OVERVIEW.md)
+for duplicate handling, supported schedules and the display rollback flag.
+
 The dashboard works from an empty database and requires no OpenClaw, Telegram,
 mailbox, Spond, AI, Oda or HelloFresh account.
 
@@ -84,6 +92,12 @@ The cross-repository before/after assessment is maintained in Core's
 The browser never becomes an OpenClaw control surface. Raw email, provider
 credentials, Spond payloads, Telegram identifiers and arbitrary files are not
 returned by the API.
+
+Optional dinner-agent setup supports both legacy and current OpenClaw agent
+rosters and fails closed when inventory cannot be verified. Keep Portal's Node
+22 runtime separate from newer OpenClaw's Node requirements; follow Core's
+[stack maintenance guide](https://github.com/TrygveAasheim/familybot-core/blob/dev/docs/STACK_SECURITY.md)
+for version checks, managed Codex, backups and migration rollback.
 
 ## Grocery capabilities
 

@@ -25,6 +25,13 @@ public review evidence. See Core's canonical `REDEPLOY.md`.
 
 ## Read allowlist
 
+The shared home agenda derives presentation-only routine occurrences from the
+already curated activity name, schedule, paused-until date and member identity.
+It does not insert calendar facts or change Spond/Core records. Weather symbols
+use the existing allowlisted `symbol` field and local SVG artwork, not remote
+images. Clothing advice is still available in the API contract but no longer
+rendered on the home card. No new browser fields or write routes are required.
+
 `GET /api/dashboard` returns selected fields for family members, upcoming
 events, Spond events, activities, the active parent Kanban task list, child chores, compact current week plans, school dates,
   weekly achievement progress, configured surprise levels, redemption history,

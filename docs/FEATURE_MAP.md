@@ -3,6 +3,8 @@
 ## Supported now
 
 - iPad-first family home with school, activity, weather, Entur and health cards;
+- glanceable transport/weather row and shared relevant-event agenda; standalone
+  Activities card disabled but retained; [overview rules](DASHBOARD_OVERVIEW.md);
 - configured child profiles and direct Home Screen URLs;
 - touch-first chores, immediate durable progress and completion history;
 - weekly recurring chores with per-day progress and cycle completion;

@@ -50,6 +50,7 @@ the web service. The API and database remain on the Mac mini.
 | Area | Owning files | Risk notes |
 | --- | --- | --- |
 | Main family/child/parent UI | `app/_components/FamilyConsole.tsx` | User-visible; touch, accessibility and state-transition risk |
+| Home agenda and symbols | `app/_components/dashboardOverview.ts`, `OverviewSymbols.tsx` | Presentation-only day filtering and conservative deduplication; local SVGs, no provider calls; see `DASHBOARD_OVERVIEW.md` |
 | Global layout and responsive design | `app/globals.css` | Verify portrait, landscape, 200% zoom and no hover dependency |
 | Curated API and authorization | `local_api/familybot_api.py` | Security-critical field/action allowlist, including parent-gated Kanban mutations |
 | Oda groceries | `local_api/oda_mcp.py`, `local_api/oda_dinner.py`, Oda routes in `local_api/familybot_api.py` | OAuth secrecy, bounded model context, strict public recipe host/schema validation, kiosk return navigation, account-data exposure, explicit cart-mutation and provider-failure boundary |

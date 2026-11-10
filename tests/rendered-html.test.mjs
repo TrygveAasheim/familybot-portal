@@ -82,7 +82,12 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.doesNotMatch(consoleSource, /<pre>\{detail\.full_text\}<\/pre>/);
   assert.match(consoleSource, /Neste 5 dager/);
   assert.match(consoleSource, /function upcomingEventsFor/);
-  assert.match(consoleSource, /slice\(0,4\)/);
+  assert.match(consoleSource, /return upcomingOverview\(data\)/);
+  assert.match(consoleSource, /overviewSettings\.showActivitiesCard&&<ActivitiesCard/);
+  assert.match(consoleSource, /<WeatherSymbol symbol=\{data.weather.symbol\}/);
+  assert.match(consoleSource, /<MetroSymbol/);
+  assert.doesNotMatch(consoleSource, /className="weather-advice"/);
+  assert.ok(consoleSource.indexOf('className="overview-card transport-card"') < consoleSource.indexOf('className="overview-card weather-card"'));
   assert.match(consoleSource, /Kanban/);
   assert.match(consoleSource, /New/);
   assert.match(consoleSource, /In Progress/);

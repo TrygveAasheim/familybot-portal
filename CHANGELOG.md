@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-10 — Glanceable overview (candidate, not deployed)
+
+- Move transport to the top-left; retain weather at top-right and existing
+  card minimum heights, with larger local SVG symbols and transport typography.
+- Remove clothing advice from the home card only; keep forecast periods,
+  timestamps and explicit stale/unavailable states.
+- Combine dated calendar/Spond events and today's scheduled routines under
+  “Viktigst nå”, deduplicate matching occurrences and retain distinct times and
+  children. Disable the separate Activities card through a source display flag.
+- Add fixture tests for date windows, day/time parsing, pauses, alternate weeks,
+  duplicate precedence, timezone/DST and weather-code classification.
+
+No API/schema change, Core change, live data access or deployment. Revert the
+source change and use the normal reviewed deployment with client refresh to
+roll back; no database restore is necessary. Free-text limitations and evidence
+are documented in [the overview contract](docs/DASHBOARD_OVERVIEW.md).
+
 ## 2026-11-06 — Main publication documentation
 
 - Publish the coordinated installation/upgrade candidate through reviewed PRs.

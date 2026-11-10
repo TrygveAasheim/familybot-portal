@@ -75,6 +75,14 @@ Silicon is tested, but path discovery keeps Intel/custom Homebrew layouts
 diagnosable. The canonical host software and minimal OpenClaw instructions live
 in Core's `GETTING_STARTED.md`.
 
+The optional dinner-agent setup reads `agents` through OpenClaw's CLI and
+supports legacy `list` and current keyed `entries`. Malformed/failed inventory
+must stop before agent creation or configuration writes. Fake-CLI tests cover
+both formats without accessing a real agent workspace. The explicit tool deny
+list includes `session_status` and a deny-all `*` wildcard for new/future tools;
+the minimal profile alone is not tool-free. Check live smoke metadata for zero
+exposed tools after a runtime upgrade.
+
 New installations deploy beneath `$HOME/.familybot`; legacy paths remain
 supported only through explicit environment overrides. Do not reintroduce an
 OpenClaw workspace as a dashboard prerequisite.

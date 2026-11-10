@@ -49,7 +49,7 @@ else:
 "$OPENCLAW_BIN" config set "$AGENT_PATH.tools.allow" '[]' --strict-json >/dev/null
 "$OPENCLAW_BIN" config set "$AGENT_PATH.tools.alsoAllow" '[]' --strict-json >/dev/null
 "$OPENCLAW_BIN" config set "$AGENT_PATH.tools.elevated.enabled" 'false' --strict-json >/dev/null
-"$OPENCLAW_BIN" config set "$AGENT_PATH.tools.deny" '["group:runtime","group:fs","group:web","group:memory","group:ui","group:automation","group:messaging","group:nodes","group:agents","group:media","group:plugins","cron","gateway","session_status"]' --strict-json >/dev/null
+"$OPENCLAW_BIN" config set "$AGENT_PATH.tools.deny" '["*","group:runtime","group:fs","group:web","group:memory","group:ui","group:automation","group:messaging","group:nodes","group:agents","group:media","group:plugins","cron","gateway","session_status"]' --strict-json >/dev/null
 "$OPENCLAW_BIN" config set "$AGENT_PATH.skills" '[]' --strict-json >/dev/null
 "$OPENCLAW_BIN" config validate >/dev/null
 

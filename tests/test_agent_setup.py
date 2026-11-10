@@ -88,7 +88,7 @@ class AgentSetupTests(unittest.TestCase):
                     self.assertEqual(values[prefix + ".tools.allow"], [])
                     self.assertEqual(values[prefix + ".skills"], [])
                     self.assertFalse(values[prefix + ".tools.elevated.enabled"])
-                    for tool in ("group:fs", "group:runtime", "group:agents", "session_status"):
+                    for tool in ("*", "group:fs", "group:runtime", "group:agents", "session_status"):
                         self.assertIn(tool, values[prefix + ".tools.deny"])
                 self.assertTrue(all(not c[2].startswith("agents.entries.main.") for c in writes))
 

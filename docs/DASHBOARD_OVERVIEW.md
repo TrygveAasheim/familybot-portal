@@ -3,8 +3,11 @@
 ## Layout and relevance contract
 
 Transport is top-left, weather top-right, and the combined “Viktigst nå” agenda
-spans the next row. The layout keeps two equal columns and existing card minimum
-heights on tablets, then stacks on narrow screens. Content can grow at large
+spans the next row. The layout keeps two equal columns on tablets, then stacks
+on narrow screens. Home cards are content-sized rather than reserving a minimum
+height. Compact header/section spacing brings children's progress higher without
+shrinking the icons, fonts, child cards or touch targets. The agenda date column
+has room for date/time wrapping instead of wasting vertical space. Content can grow at large
 text sizes instead of being clipped. The train symbol and weather artwork are
 local vectors; temperature/conditions remain readable text. The forecast-derived
 weather symbol replaces the fixed emoji. Clothing advice is hidden only here,
@@ -51,7 +54,7 @@ Child pages and their existing activity lists are unchanged.
 - Scope/owner: Portal presentation only. No database migration, private data
   access, provider calls, new browser fields or Core changes.
 - Acceptance: AC-08 and AC-09; large truthful symbols/countdown, stable tablet
-  footprint, reversible Activities hiding, date-scoped and deduplicated agenda.
+  columns, reversible Activities hiding, date-scoped and deduplicated agenda.
 - Tests: `npm run test:overview`, `npm run lint`, `npm test`. Fixtures cover
   schedule/day/time, pauses, alternate weeks, five-day bounds, timezone/DST,
   distinct appointments and weather symbols. API tests continue unchanged.
@@ -75,3 +78,34 @@ despite three matching inputs, and omission of a different-day routine. The
 temporary preview servers and tab were stopped afterward. Exact iPad dimensions,
 200% zoom and physical touch acceptance remain unverified. No live deployment
 or runtime acceptance probe was performed.
+
+### Compact-spacing follow-up, 2026-11-10
+
+The follow-up changes only home-scoped CSS, tests and documentation. It removes
+the large header/card minimum heights and auto-pushed holiday footer, reduces
+card padding and the gap before children's cards, and gives dates a wider column.
+No information, fonts, symbols, child-card dimensions or interaction targets are
+removed or reduced. Other tabs and the agenda selection rules are unchanged.
+
+A desktop Safari preview rendered the actual dashboard with a fictional,
+read-only loopback API in fixed-size frames. The fixture had two children with
+12/30 points, two timed activities with school locations, a holiday footer,
+three forecast periods and live-style departure times. Measured results:
+
+| CSS viewport | Bottom of both progress bars | Horizontal overflow |
+| --- | --- | --- |
+| 768×1024 | 1011px (both visible) | None |
+| 820×1180 | 1013px (both visible; entire child cards also fit) | None |
+| 390×844 | Below fold; expected single-column scrolling | None |
+
+These are desktop browser layout measurements, not physical iPad acceptance.
+At 768×1024 the arrows/bottom of the child cards still extend below the fold.
+More/longer events, more children, enabled navigation items, browser chrome and
+larger text can require scrolling; content must never be hidden to force a fit.
+The new source-contract test guards spacing, home-only scope and the absence
+of clipping/font-size changes; it does not replace browser geometry checks.
+`npm run lint` and `npm test` passed: 114 Python API tests, 8 overview tests,
+3 rendered/source-contract tests, docs, TypeScript, production build, Bandit
+and dependency audits. No live API or household database was used.
+Confirm on the household kiosk after a separately approved deployment. Rollback
+is a CSS revert and frontend redeploy, with no database or Core change.

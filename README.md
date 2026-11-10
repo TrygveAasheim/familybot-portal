@@ -9,7 +9,9 @@ Core repository.
 The home overview places transport and weather side by side, with large local
 symbols and a shared “Viktigst nå” agenda below. Dated events cover five days;
 weekly routines appear only on their scheduled day. The separate Activities
-card is disabled, not deleted. See the [overview rules](docs/DASHBOARD_OVERVIEW.md)
+card is disabled, not deleted. Content-sized cards and tighter home-page spacing
+bring children's progress bars higher without reducing text or symbol sizes.
+See the [overview rules](docs/DASHBOARD_OVERVIEW.md)
 for duplicate handling, supported schedules and the display rollback flag.
 
 The dashboard works from an empty database and requires no OpenClaw, Telegram,

@@ -14,6 +14,25 @@ async function render() {
     : handler.fetch(request, environment, context);
 }
 
+test("home density reclaims whitespace without shrinking content or clipping cards", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const density = styles.split("/* Home-only density:")[1]?.split("*/")[1]?.split(".weekly-achievement{")[0];
+  assert.ok(density, "Home density rules must remain explicit and scoped");
+  assert.match(density, /\.page-family \.family-hero\{min-height:0;padding:16px 0 12px/);
+  assert.match(density, /\.page-family \.overview-card\{min-height:0;/);
+  assert.match(density, /\.page-family \.combined-important \.info-strip\{margin-top:8px;/);
+  assert.match(density, /\.page-family \.family-members\{padding:16px 0 20px/);
+  assert.match(density, /grid-template-columns:92px minmax\(0,1fr\)/);
+  assert.match(density, /flex-wrap:wrap/);
+  // No new fixed heights, clipping, hidden content, font/icon resizing or zoom hacks.
+  assert.doesNotMatch(density, /(?:^|[;{])(?:height|max-height|overflow(?:-[xy])?|font-size|transform|zoom|display)\s*:/m);
+  assert.doesNotMatch(density, /\.child-account|\.mini-balance|\.account-avatar|header>span/);
+  for (const match of density.matchAll(/([^{}]+)\{/g)) {
+    const selector = match[1].trim();
+    if (!selector.startsWith("@media")) assert.ok(selector.startsWith(".page-family "), selector);
+  }
+});
+
 test("server-renders the iPad family dashboard shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);

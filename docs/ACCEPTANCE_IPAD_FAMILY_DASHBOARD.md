@@ -82,8 +82,9 @@ Evidence: parent API authorization tests and iPad browser interaction.
 - Transport occupies the top-left card with a large local train symbol,
   larger title and live countdown. Weather stays top-right with a larger
   forecast-derived local symbol, textual conditions and period forecasts.
-  Existing card widths/minimum heights remain at tablet sizes; content may
-  grow for accessibility rather than clipping at 200% zoom. Clothing advice is
+  Existing card columns remain at tablet sizes; home cards are content-sized
+  with compact header/section spacing. Content may grow for accessibility
+  rather than clipping at 200% zoom. Clothing advice is
   absent from this card. Unknown symbols do not imply sunny weather.
 - “Viktigst nå” below them combines dated events for today plus four days with
   only today's weekly routines, at most four chronologically ordered entries.
@@ -113,6 +114,12 @@ Evidence: sanitized API contract tests and browser content assertions.
   least 48×48 CSS pixels.
 - Core actions work using tap/click only and do not rely on hover.
 - Essential text and status are usable at 200% browser zoom.
+- With two children and two ordinary agenda entries, both home progress bars
+  should be above the fold at 768×1024 and 820×1180 CSS-pixel portrait viewports
+  at normal text size. Preserve symbol/font sizes and child touch targets.
+  Busier agendas, enlarged text and smaller viewports may scroll; never clip
+  information to enforce a one-screen layout. See the measured fixture and
+  remaining physical-device checks in [the overview contract](DASHBOARD_OVERVIEW.md).
 
 Evidence: computed-layout browser checks at both viewports and zoom.
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased — readable Ukeplan sections
+
+- Separate interpreted days, adjacent categories, weekly tasks and general
+  information; display explicit subject labels as headings in all plan text.
+- Preserve paragraphs, lists, numbered starts and instruction order, including
+  flattened `Norsk: … Matematikk: …` text; never infer missing source structure.
+- Move the existing summary into a native disclosure beneath the main plan.
+- Add fictional parsing and actual-component HTML regressions, including unsafe
+  HTML, bounded nesting and source immutability. Update AC-17 and the
+  [presentation contract](docs/UKEPLAN_PRESENTATION.md).
+
+Portal presentation only: no Core/API/schema changes, PDF replay, model calls
+or household data access. Not deployed by this source change. Rollback is a
+source revert followed by the normal reviewed Portal deployment and client
+refresh; no data restoration is needed.
+
 ## Unreleased — OpenClaw dinner-agent setup compatibility
 
 - Support both legacy list and current keyed agent rosters; preserve other

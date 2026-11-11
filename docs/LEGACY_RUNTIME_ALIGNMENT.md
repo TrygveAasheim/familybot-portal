@@ -93,6 +93,26 @@ The live database was not migrated and the Ukeplan frontend backport remains
 in service. Restore evidence here is a real private-copy test, not a live
 rollback or physical device test.
 
+### Compatibility fix verification — 2026-11-11
+
+[Core PR #20](https://github.com/TrygveAasheim/familybot-core/pull/20), commit
+`0036a0f`, fixes the adoption gap and adds historical-shape regression tests.
+Historical quarantine values remain NULL/unknown; new routing decisions record
+their actual flag. Existing rows, migration checksums and schema versions remain
+intact. This is a source candidate, not a deployed migration.
+
+The private-copy rehearsal was repeated against that commit with Portal
+`ec0f303`: full installer data upgrade reached Core 1 / Portal 2; a repeated run
+made no further changes. Original fields in all 27 tables were preserved except
+the documented national-holiday refresh. All historical new flags were NULL.
+The upgraded Portal API served four plans, enforced parent authorization and
+passed fictional chore create/complete/approve; the completion remained after
+API shutdown. Supported restore recovered the exact original schema and rows,
+and the restored legacy API started successfully. No provider credentials,
+scheduled workers or live mutations were used. Hosted CI and the remaining
+staged-runtime/maintenance/physical acceptance gates are separate from this
+private-copy evidence; the earlier migration blocker is now fixed in source.
+
 ### PR group 1 — Inventory and release identity (Core + Portal)
 
 Extend existing setup/status tools; do not create another orchestration layer.

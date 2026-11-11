@@ -55,6 +55,44 @@ SQLite for this presentation-only rollback.
 
 ## Sequenced work and acceptance gates
 
+### Authorized dry run — 2026-11-11: live upgrade blocked
+
+The owner subsequently authorized a dry run followed by live execution only
+when the acceptance gates pass. The dry run used a consistent private SQLite
+copy, explicit copied configuration/PIN, and the supported installer with
+`--upgrade --writers-stopped --no-deploy`. Python network connections were
+disabled in rehearsal subprocesses. No credentials for external providers,
+schedulers, mail readers, inference or delivery workers were started.
+Selected source pair: Core `711e6b0`, Portal `ec0f303`.
+
+| Acceptance criterion | Result |
+| --- | --- |
+| Preserve effective feature settings and legacy PIN in the private proposal | Prepared; legacy Oda/AI are unconditional backend capabilities, not flags in its session response |
+| Supported upgrade accepts the actual legacy schema | **Failed**: `routing_audit.quarantine` is missing |
+| Failed migration leaves original data/schema untouched | Passed: all 27 original tables unchanged; no new table/ledger committed |
+| Supported restore recovers the snapshot | Passed: exact schema and all table rows compared by local hashes |
+| Legacy API starts from the restored copy | Passed: health/session, four plan detail routes and missing-token/foreign-origin rejection |
+| Upgrade preservation/migration fixture suite | 23 tests passed; those fixtures did not expose this legacy schema gap |
+| Live service/configuration remain intact | Passed: web/API healthy; protected runtime/config/PIN hashes unchanged |
+| New API activation, repeated upgrade, live chores and physical iPad | Not run: blocked at schema adoption |
+
+Root cause of the dry-run failure: `CREATE TABLE IF NOT EXISTS` does not add
+columns to a pre-existing table. Core's baseline validates the required
+`routing_audit.quarantine` column, but its adoption path only explicitly repairs
+`week_plans.layout_json`. The existing legacy audit table has no quarantine
+column. Validation correctly rolls back rather than claiming migration success.
+
+Required before another attempt: implement and review an additive legacy-schema
+adoption fix in Core, with a fictional fixture reproducing the real table shape,
+preservation, idempotency, validation-failure and restore regressions. Specify
+the treatment of historical audit rows explicitly; do not guess that a missing
+flag means a message was safely processed, and do not alter ingestion/outbox
+state. Preserve existing migration checksums and keep malformed/unknown schemas
+fail-closed. Then rerun the complete private rehearsal and remaining gates.
+The live database was not migrated and the Ukeplan frontend backport remains
+in service. Restore evidence here is a real private-copy test, not a live
+rollback or physical device test.
+
 ### PR group 1 — Inventory and release identity (Core + Portal)
 
 Extend existing setup/status tools; do not create another orchestration layer.

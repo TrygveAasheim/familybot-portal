@@ -2,6 +2,10 @@
 
 ## 2026-11-11 — Ukeplan backport and runtime alignment plan
 
+- Subsequent authorized private-copy upgrade rehearsal found a missing legacy
+  `routing_audit.quarantine` column. Migration rolled back; exact restore and
+  legacy API recovery passed. Live upgrade was withheld at the failed gate;
+  the working backport remains deployed. See the alignment plan's AC results.
 - Separately authorized deployment of the reviewed Ukeplan frontend, retaining
   the installed legacy API/supervisor and database. Managed restart, session
   rotation, served assets, curated plan preservation and LAN probes passed.

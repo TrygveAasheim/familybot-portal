@@ -1,7 +1,9 @@
 # Plan: converge a legacy installation onto a reproducible release
 
-Status: proposed follow-up, not authorization to upgrade a household. The
-Ukeplan presentation backport below is deployed; the full upgrade is not.
+Status: full runtime convergence remains a proposed follow-up, not authorization
+to upgrade a household. The Ukeplan presentation backport is deployed. A separately
+authorized narrow schema adoption now reached Core 1 / Portal 2; the existing
+legacy API/supervisor remain installed, so the full runtime upgrade is not done.
 Core's [canonical recovery guide](https://github.com/TrygveAasheim/familybot-core/blob/main/REDEPLOY.md)
 remains authoritative. This plan adds release tracking and verification, not a
 new architecture or a second installer.
@@ -112,6 +114,40 @@ and the restored legacy API started successfully. No provider credentials,
 scheduled workers or live mutations were used. Hosted CI and the remaining
 staged-runtime/maintenance/physical acceptance gates are separate from this
 private-copy evidence; the earlier migration blocker is now fixed in source.
+
+### Narrow schema rollout completed — 2026-11-11
+
+The owner subsequently authorized deployment and retry. Core `0036a0f` supplied
+the routing-writer fix and migration tools; Portal `ec0f303` supplied its owned
+migrations. An additional fresh-copy rehearsal tested schema-only commands and
+the **retained legacy API on the upgraded database**, plus repeat and restore.
+No provider credentials or external connections were used in that rehearsal.
+
+All inventoried writers were stopped and the Unix cron writer temporarily paused.
+A fresh verified SQLite backup preceded Core migration then Portal migration,
+without seeds, member synchronization, reward repair or calendar refresh. The
+live database validated as Core 1 / Portal 2; all original fields/rows in 27
+original tables were preserved, and repeat migration made no further changes.
+Only the Core routing writer changed in the active legacy scripts. The Portal
+runtime, feature settings, private configuration/PIN, credentials and service
+definitions stayed unchanged.
+
+After restarting the retained Portal, LAN web/API access, four unchanged curated
+plan responses, session rotation, rejection of the old token and negative
+authorization passed. Original services/cron were restored. Gateway RPC and
+Telegram credential probes passed, without a briefing replay or synthetic
+household mutation. Preliminary shutdown gates stopped two attempts before
+migration because operational backup/verification code retained SQLite handles;
+explicit verifier closes and the supported short-lived backup CLI resolved the
+rollout path. See Core's
+[deployment evidence and remaining library limitation](https://github.com/TrygveAasheim/familybot-core/blob/fix/legacy-routing-audit-adoption/docs/LEGACY_SCHEMA_ADOPTION.md).
+
+The source/schema adoption blocker is now closed for this installation, but
+this is still a deliberate mixed runtime. The staged release work below is not
+implicitly complete. Physical iPad acceptance, a normal scheduled-cycle
+observation, full API/supervisor convergence and Main promotion remain separate.
+Rollback requires stopped writers and the recorded pre-migration state/source
+pair, with review of any household writes made since services resumed.
 
 ### PR group 1 — Inventory and release identity (Core + Portal)
 

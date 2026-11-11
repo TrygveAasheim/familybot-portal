@@ -59,6 +59,10 @@ stop all database users first. Upgrades no longer reseed archived chores or
 repair deliberately inactive rewards. Portal validates its owned schema before
 committing migrations and before API startup. Fixture/CI success does not certify
 your live installation; this candidate is not deployed by merging its source.
+For installations that retained a legacy backend while receiving newer UI
+builds, see the [runtime alignment plan](docs/LEGACY_RUNTIME_ALIGNMENT.md).
+It distinguishes a temporary presentation backport from a full schema/runtime
+upgrade; do not bypass version checks to make deployment succeed.
 
 For a privacy-safe prerequisite report before installation:
 

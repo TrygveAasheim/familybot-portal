@@ -54,6 +54,12 @@ This was an isolated presentation fixture, not a live-data or physical iPad test
 The runtime acceptance probe, managed deployment and physical kiosk acceptance
 remain outstanding for the separately authorized rollout.
 
+Subsequent owner-authorized rollout: the frontend was backported with a managed
+API/web restart onto the existing legacy backend. Read-only plan preservation,
+served assets, LAN and session-rotation checks passed; full-versioned-stack and
+physical kiosk acceptance remain outstanding. See the
+[deployment evidence and permanent alignment plan](LEGACY_RUNTIME_ALIGNMENT.md).
+
 No migration or reprocessing is needed: existing plans use the new display after
 a separately authorized Portal deployment. Deploy through the normal supervisor
 and API generation/client-refresh mechanism; do not copy only a web bundle into

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-11 — Ukeplan backport and runtime alignment plan
+
+- Separately authorized deployment of the reviewed Ukeplan frontend, retaining
+  the installed legacy API/supervisor and database. Managed restart, session
+  rotation, served assets, curated plan preservation and LAN probes passed.
+- Full Dev runtime adoption remains pending: the installed legacy database is
+  unversioned. No migration or model/agent configuration change was performed.
+- Document the root cause, sequenced PR work, preservation/rollback gates and
+  remaining physical-device checks in the [alignment plan](docs/LEGACY_RUNTIME_ALIGNMENT.md).
+
+The source-only entries below describe their original publication boundary;
+this entry records the later bounded Ukeplan deployment, not a full-stack release.
+
 ## Unreleased — readable Ukeplan sections
 
 - Separate interpreted days, adjacent categories, weekly tasks and general

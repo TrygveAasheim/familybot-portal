@@ -3,6 +3,13 @@
 The deployed portal presents a curated view of the running FamilyBot. It is not
 a general-purpose OpenClaw administration surface.
 
+Ukeplan formatting operates only on the already curated detail response. It
+adds subject/day/category headings and spacing, preserving content and source
+order. It does not infer missing subjects/dates, call a model, rewrite stored
+plans, or change child/week attribution. Text is React-escaped, never rendered
+as provider HTML; nested bullet formatting is bounded. See
+[the presentation contract](UKEPLAN_PRESENTATION.md).
+
 Upgrade boundary: a source update is not permission to reseed chores, reactivate
 rewards, replace school dates or adopt another workspace. Core owns the explicit
 stopped-writer upgrade and full pre-upgrade backup. Portal validates its owned

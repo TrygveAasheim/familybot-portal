@@ -247,6 +247,17 @@ this criterion `not_run` until its presentation checks have fresh evidence.
 - The full plan text is rendered as readable structured content: original line
   breaks are retained, bullet/numbered lines become lists, and clear section or
   weekday labels become headings instead of one large text blob.
+- Explicit subject labels such as `Norsk:`, `Matematikk:` and `Engelsk:` become
+  separate headings even inside a flattened text line or bullet. Blank paragraphs,
+  numbered-list starts and instruction order are retained. Ordinary prose,
+  clock times and URLs are not treated as subject boundaries.
+- Interpreted days have distinct panels and consecutive category headings;
+  weekly tasks and general information are separate. Existing summary text is
+  available through a keyboard/touch-accessible disclosure below the main plan,
+  not a dense duplicate paragraph above it. The compact child entry is unchanged.
+- Long words wrap on narrow screens; no fixed height or clipping hides content.
+  Existing source fields and child/week attribution remain unchanged, with no
+  reprocessing or model call. See [formatting and tests](UKEPLAN_PRESENTATION.md).
 - When a validated interpretation is available, the detail view groups
   source-backed items under weekdays and categories; if interpretation is
   unavailable, the detail view falls back to deterministic structured text/day

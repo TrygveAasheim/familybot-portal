@@ -1,9 +1,11 @@
 "use client";
 
-import { Fragment, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { overviewSettings, upcomingOverview } from "./dashboardOverview";
 import type { OverviewActivity } from "./dashboardOverview";
 import { MetroSymbol, WeatherSymbol } from "./OverviewSymbols";
+import { WeekPlanInterpreted, WeekPlanText } from "./WeekPlanContent";
+import type { WeekPlanInterpretation } from "./WeekPlanContent";
 
 const configuredApiPort=import.meta.env.VITE_FAMILYBOT_API_PORT||"8788";
 const apiBase = () => `${window.location.protocol}//${window.location.hostname}:${configuredApiPort}`;
@@ -21,8 +23,6 @@ type Transport={ok?:boolean|null;status:string;stop:string;updated_at?:string|nu
 type WeatherPeriod={label:string;temperature_min?:number|null;temperature_max?:number|null;precipitation_mm:number;summary:string;symbol:string};
 type HealthState="ok"|"degraded"|"stopped";
 type AnnualChoreSummary={year:number;children:Array<{id:number;name:string;count:number}>};
-type WeekPlanInterpretationItem={category:"homework"|"bring"|"event"|"subject"|"notice"|"general";text:string;source_blocks:string[];confidence:number};
-type WeekPlanInterpretation={version:number;week:number;year:number;days:Array<{date:string;weekday:string;items:WeekPlanInterpretationItem[]}>;weekly_tasks?:Array<{text:string;source_blocks:string[]}>;general_info?:Array<{text:string;source_blocks:string[]}>;general_notes?:Array<{text:string;source_blocks:string[]}>};
 type WeekPlanDetail={id:number;member_id:number;member:string;week_number:number;year:number;summary?:string|null;full_text:string;interpretation?:WeekPlanInterpretation|null;days:Array<{id:number;week_plan_id:number;day:string;date?:string|null;subject?:string|null;note?:string|null;homework?:string|null;bring?:string|null}>};
 type OdaProduct={id:number;name:string;description:string;price:string;unitPrice:string;unitName:string;brand?:string|null;url?:string|null;availability?:{isAvailable:boolean;description:string;code:string}|null};
 type OdaCartItem={product:OdaProduct;quantity:number;totalGrossAmount:string};
@@ -97,48 +97,6 @@ function OdaRecipeDetail({recipe,portions,busy,onBack,onAdd}:{recipe:OdaRecipe;p
     </div>:<p className="oda-recipe-detail-empty">Oda har ikke gjort oppskriftsdetaljene tilgjengelige akkurat nå.</p>}
     <div className="oda-recipe-detail-actions"><button type="button" onClick={onAdd} disabled={busy}>{busy?"Legger til …":`Legg alle ingrediensene i kurven · ${portions} porsjoner`}</button><button type="button" className="back-button" onClick={onBack}>Tilbake</button></div>
   </article></div>;
-}
-const weekPlanBullet=/^\s*([-–—*•·▪◦‣]|\d+[.)]|[A-Za-zÆØÅæøå][.)])\s+(.+)$/;
-function weekPlanHeading(line:string){return line.length<=100&&(/:$/.test(line)||/^(?:mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag|ukeplan|uke\s+\d+|lekser|husk|beskjeder|dette skjer|læringsmål)\b/i.test(line)||/^[A-ZÆØÅ0-9][A-ZÆØÅ0-9\s–—-]{3,}$/.test(line))}
-function renderWeekPlanText(text:string){
-  const lines=text.replace(/\r\n?/g,"\n").split("\n").map(line=>line.trim());
-  const blocks:ReactNode[]=[];
-  let index=0;
-  while(index<lines.length){
-    if(!lines[index]){index+=1;continue}
-    const bullet=lines[index].match(weekPlanBullet);
-    if(bullet){
-      const items:string[]=[];const ordered=/^\d/.test(bullet[1]);
-      while(index<lines.length){
-        const match=lines[index].match(weekPlanBullet);
-        if(!match||/^\d/.test(match[1])!==ordered)break;
-        items.push(match[2]);index+=1;
-      }
-      const List=ordered?"ol":"ul";
-      blocks.push(<List className="week-plan-list" key={`list-${index}`}>{items.map((item,itemIndex)=><li key={`${index}-${itemIndex}`}>{item}</li>)}</List>);
-      continue;
-    }
-    if(weekPlanHeading(lines[index])){blocks.push(<h3 className="week-plan-heading" key={`heading-${index}`}>{lines[index]}</h3>);index+=1;continue}
-    const prose:string[]=[];
-    while(index<lines.length&&lines[index]&&!weekPlanBullet.test(lines[index])&&!weekPlanHeading(lines[index])){prose.push(lines[index]);index+=1}
-    blocks.push(<p key={`paragraph-${index}`}>{prose.map((line,lineIndex)=><Fragment key={`${index}-${lineIndex}`}>{line}{lineIndex<prose.length-1&&<br/>}</Fragment>)}</p>);
-  }
-  return <div className="week-plan-rich-text" aria-label="Strukturert ukeplan">{blocks.length?blocks:<p className="empty-text">Ingen plantekst er tilgjengelig.</p>}</div>;
-}
-const interpretationLabels:Record<WeekPlanInterpretationItem["category"],string>={homework:"Lekse",bring:"Husk",event:"Dette skjer",subject:"Fag",notice:"Beskjed",general:"Info"};
-function renderWeekPlanInterpretation(interpretation:WeekPlanInterpretation){
-  const days=interpretation.days.filter(day=>day.items.length>0);
-  const weeklyTasks=interpretation.weekly_tasks||[];
-  const generalInfo=interpretation.general_info||interpretation.general_notes||[];
-  return <div className="week-plan-interpretation" aria-label="Tolkede ukeplanpunkter">
-    {days.map(day=><section className="week-plan-interpretation-day" key={day.date}>
-      <h3>{day.weekday}</h3>
-      <ul>{day.items.map((item,index)=><li key={`${day.date}-${index}`}><span className="week-plan-item-category">{interpretationLabels[item.category]}</span>{item.text}</li>)}</ul>
-    </section>)}
-    {weeklyTasks.length>0&&<section className="week-plan-weekly-tasks"><h3>Dette må gjøres denne uken</h3><ul>{weeklyTasks.map((note,index)=><li key={index}>{note.text}</li>)}</ul></section>}
-    {generalInfo.length>0&&<section className="week-plan-general-info"><h3>Generell informasjon</h3><ul>{generalInfo.map((note,index)=><li key={index}>{note.text}</li>)}</ul></section>}
-    {days.length===0&&weeklyTasks.length===0&&generalInfo.length===0&&<p className="empty-text">Ingen strukturerte punkter er tilgjengelige.</p>}
-  </div>;
 }
 function completionKey(childId:number,choreId:number){
   const webCrypto=globalThis.crypto;
@@ -459,7 +417,10 @@ function WeekPlanDetailPage({child,planId,token,onBack}:{child:Child;planId:numb
   useEffect(()=>{let cancelled=false;void fetch(`${apiBase()}/api/children/${child.id}/week-plans/${planId}`,{headers:{"X-FamilyBot-Local-Token":token},cache:"no-store"}).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||"Ukeplanen kunne ikke leses.");if(!cancelled)setDetail(result.week_plan)}).catch(cause=>{if(!cancelled)setError(cause instanceof Error?cause.message:"Ukeplanen kunne ikke leses.")});return()=>{cancelled=true}},[child.id,planId,token]);
   if(error)return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake</button><p className="error-text">{error}</p></section>;
   if(!detail)return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake</button><div className="loading-inline"><div className="spinner"/><p>Ukeplanen åpnes …</p></div></section>;
-  return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake til {child.name}</button><header><p className="eyebrow">Skolen denne uken</p><h1>Ukeplan · uke {detail.week_number}</h1><p className="week-detail-child">{detail.member}</p></header><p className="week-detail-summary">{detail.summary}</p><article className="week-detail-text"><h2>{detail.interpretation?"Ukeplanen strukturert":"Hele ukeplanen"}</h2>{detail.interpretation?renderWeekPlanInterpretation(detail.interpretation):renderWeekPlanText(detail.full_text)}</article>{detail.days.length>0&&<section className="week-detail-days"><h2>Dagene</h2><div className="week-items">{detail.days.map(item=><article key={item.id}><div><span>{item.day}</span>{item.date&&<time>{dateFormat.format(asDate(item.date)!)}</time>}</div>{item.subject&&<h3>{item.subject}</h3>}{item.homework&&<p><b>📚 Oppgave:</b> {item.homework}</p>}{item.note&&<p><b>ℹ️ Dette skjer:</b> {item.note}</p>}{item.bring&&<p><b>🎒 Husk:</b> {item.bring}</p>}</article>)}</div></section>}</section>
+  return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake til {child.name}</button><header><p className="eyebrow">Skolen denne uken</p><h1>Ukeplan · uke {detail.week_number}</h1><p className="week-detail-child">{detail.member}</p></header>
+    <article className="week-detail-text"><h2>{detail.interpretation?"Ukeplanen strukturert":"Hele ukeplanen"}</h2>{detail.interpretation?<WeekPlanInterpreted interpretation={detail.interpretation}/>:<WeekPlanText text={detail.full_text}/>}</article>
+    {detail.summary&&<details className="week-detail-summary"><summary>Vis oppsummering</summary><WeekPlanText text={detail.summary}/></details>}
+    {detail.days.length>0&&<section className="week-detail-days"><h2>Dagene</h2><div className="week-items">{detail.days.map(item=><article key={item.id}><div><span>{item.day}</span>{item.date&&<time>{dateFormat.format(asDate(item.date)!)}</time>}</div>{item.subject&&<h3>{item.subject}</h3>}{item.homework&&<WeekPlanText text={`Lekser: ${item.homework}`} headingLevel={4}/>} {item.note&&<WeekPlanText text={`Dette skjer: ${item.note}`} headingLevel={4}/>} {item.bring&&<WeekPlanText text={`Ta med: ${item.bring}`} headingLevel={4}/>}</article>)}</div></section>}</section>
 }
 function eventLabel(item:EventItem,today:string){if(!item.event_time&&String(item.id).startsWith("activity-"))return "Tid kommer";if(item.event_date.slice(0,10)===today)return eventTime(item);const parsed=asDate(item.event_date);const day=parsed?dateFormat.format(parsed):item.event_date.slice(0,10);const time=item.event_time?item.event_time.slice(0,5):parsed&&item.event_date.includes("T")?timeFormat.format(parsed):"";return time?`${day} · ${time}`:day}
 function upcomingEventsFor(data:Dashboard){return upcomingOverview(data)}

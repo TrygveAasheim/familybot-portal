@@ -62,11 +62,12 @@ test("unknown headings and unlabeled content remain visible", () => {
 });
 
 test("real text component renders headings, lists and escaped untrusted text", () => {
-  const html = renderText("Norsk: Les <script>alert(1)</script>. Matematikk: Regn.\n• Ta med bok.");
+  const html = renderText("Norsk: Les <script>alert(1)</script> og <SCRIPT>alert(2)</SCRIPT>. Matematikk: Regn.\n• Ta med bok.");
   assert.match(html, /<h3 class="week-plan-heading">Norsk<\/h3><p>Les &lt;script&gt;/);
   assert.match(html, /<h3 class="week-plan-heading">Matematikk<\/h3><p>Regn\.<\/p>/);
   assert.match(html, /<ul class="week-plan-list"><li><div[^>]*><p>Ta med bok\.<\/p><\/div><\/li><\/ul>/);
-  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /&lt;SCRIPT&gt;alert\(2\)&lt;\/SCRIPT&gt;/);
+  assert.doesNotMatch(html, /<script\b/i);
   assert.match(renderText(""), /Ingen plantekst er tilgjengelig/);
 });
 

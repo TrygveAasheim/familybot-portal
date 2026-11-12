@@ -14,10 +14,11 @@ bring children's progress bars higher without reducing text or symbol sizes.
 See the [overview rules](docs/DASHBOARD_OVERVIEW.md)
 for duplicate handling, supported schedules and the display rollback flag.
 
-Ukeplan details use separated day/category sections and explicit school-subject
-headings instead of a single dense text block. Existing plans are formatted on
-display without reprocessing PDFs or calling a model; see
-[the Ukeplan presentation contract](docs/UKEPLAN_PRESENTATION.md).
+Ukeplan details show the original school PDF inside the portal, with page and
+zoom controls and no popup or external viewer. Extracted text remains available
+in a secondary disclosure; Core continues reading plans independently for
+Telegram and future dashboard features. Missing PDFs have an honest text
+fallback. See [the document contract](docs/UKEPLAN_PRESENTATION.md).
 
 The dashboard works from an empty database and requires no OpenClaw, Telegram,
 mailbox, Spond, AI, Oda or HelloFresh account.

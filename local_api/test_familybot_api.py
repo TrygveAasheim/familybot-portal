@@ -237,6 +237,55 @@ class FakeHelloFreshAccountClient:
 
 
 class RepositoryTests(unittest.TestCase):
+    def test_original_document_route_requires_origin_token_and_child_plan_mapping(self):
+        root = self.db.parent.parent
+        attachments = root / "db/attachments"
+        attachments.mkdir()
+        source = attachments / "private-school-filename.pdf"
+        body = b"%PDF-1.4\nfictional source for exact-byte transport test\n%%EOF"
+        source.write_bytes(body)
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("ALTER TABLE week_plans ADD COLUMN layout_json TEXT DEFAULT ''")
+            connection.execute("INSERT INTO week_plans(id,member_id,week_number,year,raw_text,layout_json) VALUES(1,3,46,2026,?,?)",
+                               ("Source text retained for briefings", json.dumps({"source_pdf": str(source.resolve())})))
+        server = FamilyApiServer(("127.0.0.1", 0), self.repo, "1234")
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        def get(path, token=server.session_token, origin="http://localhost:3000"):
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=3)
+            try:
+                connection.request("GET", path, headers={"Origin": origin, "X-FamilyBot-Local-Token": token})
+                response = connection.getresponse()
+                return response.status, dict(response.getheaders()), response.read()
+            finally:
+                connection.close()
+        try:
+            path = "/api/children/3/week-plans/1/document"
+            code, headers, data = get(path)
+            self.assertEqual((code, data), (200, body))
+            self.assertEqual(headers["Content-Type"], "application/pdf")
+            self.assertEqual(headers["Cache-Control"], "no-store")
+            self.assertEqual(headers["Content-Disposition"], 'attachment; filename="ukeplan.pdf"')
+            self.assertIn("sandbox", headers["Content-Security-Policy"])
+            self.assertEqual(get(path, token="")[0], 403)
+            self.assertEqual(get(path, token="old-session")[0], 403)
+            self.assertEqual(get(path, origin="https://invalid.example")[0], 403)
+            for invalid in ("/api/children/4/week-plans/1/document", "/api/children/1/week-plans/1/document",
+                            "/api/children/3/week-plans/999/document", path + "?path=/etc/passwd"):
+                code, _, data = get(invalid)
+                self.assertEqual(code, 404)
+                self.assertNotIn(str(root).encode(), data)
+            detail = self.repo.week_plan_detail(3, 1)
+            self.assertEqual(detail["full_text"], "Source text retained for briefings")
+            self.assertNotIn("source_pdf", json.dumps(detail))
+            source.unlink()
+            self.assertEqual(get(path)[0], 404)
+            self.assertEqual(get("/api/children/3/week-plans/1")[0], 200)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)

@@ -7,12 +7,12 @@
   },
   "scripts": {
     "docs:check": "python3 scripts/validate_docs.py",
-    "dev": "vite dev",
-    "dev:web": "vite dev",
+    "dev": "node scripts/prepare-pdf-assets.mjs && vite dev",
+    "dev:web": "node scripts/prepare-pdf-assets.mjs && vite dev",
     "dev:api": "python3 local_api/familybot_api.py",
     "dev:family": "bash scripts/dev-family.sh",
     "hellofresh:contract:check": "python3 scripts/check_hellofresh_contract.py",
-    "build": "vite build",
+    "build": "node scripts/prepare-pdf-assets.mjs && vite build",
     "start": "vinext start",
     "start:lan": "vinext start --hostname 0.0.0.0 --port 3000",
     "start:service": "python3 local_service/run_service.py",
@@ -20,12 +20,13 @@
     "security:audit": "npm audit --audit-level=low && bash scripts/python-quality.sh security",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:overview && npm run security:audit && python3 -m unittest discover -s tests -p test_agent_setup.py && python3 scripts/test_api.py && npm run docs:check && npm run typecheck && npm run build && node --test tests/rendered-html.test.mjs",
-    "test:overview": "node --experimental-strip-types --test tests/dashboard-overview.test.mjs tests/week-plan-text.test.mjs",
+    "test:overview": "node --experimental-strip-types --test tests/dashboard-overview.test.mjs tests/week-plan-text.test.mjs tests/week-plan-document.test.mjs",
     "lint": "npm run lint:web && bash scripts/python-quality.sh lint",
     "lint:web": "oxlint --react-plugin --jsx-a11y-plugin --nextjs-plugin --deny-warnings -A jsx-a11y/prefer-tag-over-role -A unicorn/prefer-string-starts-ends-with -A unicorn/no-useless-fallback-in-spread -D react-hooks/rules-of-hooks -D react-hooks/exhaustive-deps --ignore-pattern dist --ignore-pattern .next ."
   },
   "dependencies": {
     "@dnb/eufemia": "^11.16.1",
+    "pdfjs-dist": "6.5.438",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

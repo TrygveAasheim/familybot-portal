@@ -228,6 +228,22 @@ live deployed runtime script.
 
 ### AC-17 — Full child week-plan detail
 
+Primary view: show the registered original PDF faithfully with all pages,
+previous/next and fit-width/zoom controls, retaining the in-page back button and
+authoritative child/week header. No popup, CDN, model or PDF browser plugin is
+required. Passive rendering must not execute PDF actions, forms or attachment
+links. Verify portrait/narrow layouts, enlarged document scrolling, missing and
+malformed documents, and navigation to another child's plan without stale pages.
+The scoped PDF route independently enforces Origin/session and child/plan binding,
+fixed-root no-symlink access, size/type limits and recorded fingerprint checks.
+The original school document is the explicit attachment exception below; paths,
+mail transport and unrelated attachments remain private. No database/interpretation
+mutation occurs on read. Original PDF and stored reading data must remain available
+independently; ingestion/Telegram must not depend on viewer availability.
+The formatting criteria below apply only to the secondary **Tekst fra ukeplanen**
+disclosure, never replace the original PDF. Remove empty day cards and duplicate
+summaries. Unsupported/missing originals show an honest error plus retained text.
+
 Applicable whenever the household has children: disabling or removing email
 ingestion does not remove retained plans or the detail UI. Runtime probes leave
 this criterion `not_run` until its presentation checks have fresh evidence.
@@ -242,9 +258,9 @@ this criterion `not_run` until its presentation checks have fresh evidence.
 - Each child page keeps a compact Ukeplan entry with the week number and one
   clear action to open the dedicated plan page; it does not render the full
   summary inline.
-- The detail view is scoped to that child’s plan, preserves structured day
-  details, and provides a “Tilbake” action to return to the child page.
-- The full plan text is rendered as readable structured content: original line
+- The detail view is scoped to that child’s plan, preserves the original PDF,
+  and provides a “Tilbake” action to return to the child page.
+- Secondary plan text is rendered as readable structured content: original line
   breaks are retained, bullet/numbered lines become lists, and clear section or
   weekday labels become headings instead of one large text blob.
 - Explicit subject labels such as `Norsk:`, `Matematikk:` and `Engelsk:` become
@@ -252,17 +268,16 @@ this criterion `not_run` until its presentation checks have fresh evidence.
   numbered-list starts and instruction order are retained. Ordinary prose,
   clock times and URLs are not treated as subject boundaries.
 - Interpreted days have distinct panels and consecutive category headings;
-  weekly tasks and general information are separate. Existing summary text is
-  available through a keyboard/touch-accessible disclosure below the main plan,
-  not a dense duplicate paragraph above it. The compact child entry is unchanged.
+  weekly tasks and general information are separate. This text is available in
+  a keyboard/touch-accessible disclosure below the PDF, without a duplicate
+  summary. The compact child entry is unchanged.
 - Long words wrap on narrow screens; no fixed height or clipping hides content.
   Existing source fields and child/week attribution remain unchanged, with no
   reprocessing or model call. See [formatting and tests](UKEPLAN_PRESENTATION.md).
-- When a validated interpretation is available, the detail view groups
-  source-backed items under weekdays and categories; if interpretation is
-  unavailable, the detail view falls back to deterministic structured text/day
-  facts. The child overview remains a compact link in either case.
-- The detail route excludes source email identifiers, attachments and raw
+- When a validated interpretation is available, the secondary disclosure groups
+  source-backed items under weekdays and categories; otherwise it shows stored
+  text. The PDF remains primary and the child overview remains a compact link.
+- The JSON detail route excludes source email identifiers, attachment paths and raw
   integration payloads. When a PDF is present, plan text comes only from the
   parsed PDF context; email headers, addresses and body text are not used as a
   fallback.

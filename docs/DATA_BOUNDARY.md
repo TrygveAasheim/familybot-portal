@@ -3,7 +3,7 @@
 The deployed portal presents a curated view of the running FamilyBot. It is not
 a general-purpose OpenClaw administration surface.
 
-Ukeplan formatting operates only on the already curated detail response. It
+Secondary Ukeplan text formatting operates only on the curated detail response. It
 adds subject/day/category headings and spacing, preserving content and source
 order. It does not infer missing subjects/dates, call a model, rewrite stored
 plans, or change child/week attribution. Text is React-escaped, never rendered
@@ -18,6 +18,15 @@ the matching source/state pair; it must not expose household backup contents in
 public review evidence. See Core's canonical `REDEPLOY.md`.
 
 ## Network boundary
+
+The original Ukeplan PDF is now an explicit document exception to the curated
+text boundary. Only a registered child/plan pair can fetch it, using the same
+Origin/session checks as plan details; no arbitrary path/URL or generic mailbox
+attachment endpoint is provided. Fixed-root no-symlink opens, byte/type limits,
+optional stored fingerprint verification and `no-store` responses protect this
+route. The original school content is intentionally visible to trusted household
+sessions. PDF.js renders passive pages locally without actions, forms or links;
+see [document limits and fallback](UKEPLAN_PRESENTATION.md).
 
 - Development defaults to `127.0.0.1`. The managed service deliberately binds
   to the LAN only when started with the explicit `--lan` flag.

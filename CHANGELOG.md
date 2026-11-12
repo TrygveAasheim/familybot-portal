@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — original Ukeplan document viewer
+
+- Show the original school PDF as the primary plan view with local PDF.js,
+  page navigation, zoom/fit-width and the existing in-page back button. No popup,
+  CDN, document upload or model call; keep reading text in a secondary disclosure.
+- Add a session/Origin-protected child/plan-bound PDF endpoint with confined
+  no-symlink access, size/type limits and optional source fingerprint validation.
+- Bundle pinned worker/fonts/decoder assets locally. Add file/HTTP regressions
+  and document the explicit school-PDF exception to the curated data boundary.
+
+No schema migration, interpretation retry or message replay. Deploy API, document
+module and web/assets together; rollback restores the previous code/build without
+restoring household data. See [presentation and acceptance](docs/UKEPLAN_PRESENTATION.md).
+
 ## Unreleased — readable Ukeplan sections
 
 - Separate interpreted days, adjacent categories, weekly tasks and general

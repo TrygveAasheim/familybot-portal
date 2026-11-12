@@ -24,7 +24,9 @@ When the sibling core repository is available, also read
 - The portal is a family appliance, not an OpenClaw or SQLite administration
   console. Browser contracts expose curated fields only.
 - Raw email, raw Spond JSON, Telegram identifiers, credentials, attachments and
-  arbitrary filesystem paths never enter browser responses.
+  arbitrary filesystem paths never enter browser responses. The sole document
+  exception is the original school PDF registered to a child/week-plan pair,
+  served through its authenticated bounded route, never a generic attachment URL.
 - The portal cannot mark ingestion complete, mutate the delivery outbox, trigger
   scheduled jobs or send Telegram messages.
 - Children need large, tap-first controls and no typing for normal chore use.

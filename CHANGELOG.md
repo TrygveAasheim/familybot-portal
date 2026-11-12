@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased — original Ukeplan document viewer
+
+- Show the original school PDF as the primary plan view with local PDF.js,
+  page navigation, zoom/fit-width and the existing in-page back button. No popup,
+  CDN, document upload or model call; keep reading text in a secondary disclosure.
+- Add a session/Origin-protected child/plan-bound PDF endpoint with confined
+  no-symlink access, size/type limits and optional source fingerprint validation.
+- Bundle pinned worker/fonts/decoder assets locally. Add file/HTTP regressions
+  and document the explicit school-PDF exception to the curated data boundary.
+
+No schema migration, interpretation retry or message replay. Deploy API, document
+module and web/assets together; rollback restores the previous code/build without
+restoring household data. See [presentation and acceptance](docs/UKEPLAN_PRESENTATION.md).
+
+## Unreleased — readable Ukeplan sections
+
+- Separate interpreted days, adjacent categories, weekly tasks and general
+  information; display explicit subject labels as headings in all plan text.
+- Preserve paragraphs, lists, numbered starts and instruction order, including
+  flattened `Norsk: … Matematikk: …` text; never infer missing source structure.
+- Move the existing summary into a native disclosure beneath the main plan.
+- Add fictional parsing and actual-component HTML regressions, including unsafe
+  HTML, bounded nesting and source immutability. Update AC-17 and the
+  [presentation contract](docs/UKEPLAN_PRESENTATION.md).
+
+Portal presentation only: no Core/API/schema changes, PDF replay, model calls
+or household data access. Not deployed by this source change. Rollback is a
+source revert followed by the normal reviewed Portal deployment and client
+refresh; no data restoration is needed.
+
 ## Unreleased — OpenClaw dinner-agent setup compatibility
 
 - Support both legacy list and current keyed agent rosters; preserve other

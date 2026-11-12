@@ -23,7 +23,11 @@
   cache prefetched each morning; see
   [the experiment contract](HELLOFRESH_NORWAY.md);
 - Telegram/OpenClaw child-chore interview bridge with preview, explicit confirmation and idempotent creation;
-- child-specific week-plan detail view with structured full plan text, optional validated day/category interpretation, preserved line breaks and bullets, structured days and return navigation;
+- child-specific original-PDF week-plan viewer with local page/zoom controls and
+  return navigation, plus secondary extracted/accepted text; reading for Telegram
+  remains independent of display;
+- [readable Ukeplan sections](UKEPLAN_PRESENTATION.md) with explicit subject
+  headings, day/category panels and a disclosure for the existing summary;
 - continuous 30-point block counting from pending and awarded completion points, with configurable surprise levels, parent redemption resets and a January annual summary; see [the achievement specification](WEEKLY_ACHIEVEMENTS.md);
 - curated read/write API, SQLite backup, audit and idempotency;
 - launchd supervision, Bonjour advertisement and local acceptance gate.

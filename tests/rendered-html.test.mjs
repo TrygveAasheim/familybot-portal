@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -13,6 +13,16 @@ async function render() {
     ? handler(request, environment, context)
     : handler.fetch(request, environment, context);
 }
+
+test("standalone release includes local PDF worker, fonts, decoders and licenses", async () => {
+  const release = new URL("../dist/standalone/", import.meta.url);
+  for (const path of ["pdf-assets/LICENSE", "pdf-assets/standard_fonts/LiberationSans-Regular.ttf",
+    "pdf-assets/wasm/openjpeg.wasm", "pdf-assets/cmaps/Adobe-Japan1-UCS2.bcmap"]) {
+    assert.ok((await stat(new URL(`public/${path}`, release))).size > 0, path);
+  }
+  const media = await readdir(new URL("dist/client/_next/static/media/", release));
+  assert.ok(media.some(name => /^pdf\.worker\.min\..*\.mjs$/.test(name)), "PDF worker must be local in the deployed client bundle");
+});
 
 test("home density reclaims whitespace without shrinking content or clipping cards", async () => {
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
@@ -91,13 +101,12 @@ test("source keeps the data boundary and functional surfaces explicit", async ()
   assert.match(consoleSource, /sessionToken\.current&&sessionToken\.current!==nextToken/);
   assert.match(consoleSource, /window\.location\.reload\(\)/);
   assert.match(consoleSource, /Skolen denne uken/);
-  assert.match(consoleSource, /function renderWeekPlanText/);
-  assert.match(consoleSource, /function renderWeekPlanInterpretation/);
-  assert.match(consoleSource, /week-plan-interpretation/);
-  assert.match(consoleSource, /week-plan-weekly-tasks/);
-  assert.match(consoleSource, /week-plan-general-info/);
-  assert.match(consoleSource, /week-plan-rich-text/);
-  assert.match(consoleSource, /week-plan-list/);
+  assert.match(consoleSource, /<WeekPlanText text=\{detail.full_text\}/);
+  assert.match(consoleSource, /<WeekPlanInterpreted interpretation=\{detail.interpretation\}/);
+  assert.match(consoleSource, /<details className="week-detail-summary"><summary>Tekst fra ukeplanen<\/summary>/);
+  assert.match(consoleSource, /<WeekPlanDocument/);
+  assert.match(consoleSource, /week-plans\/\$\{planId\}\/document/);
+  assert.doesNotMatch(consoleSource, /<section className="week-detail-days"/);
   assert.doesNotMatch(consoleSource, /<pre>\{detail\.full_text\}<\/pre>/);
   assert.match(consoleSource, /Neste 5 dager/);
   assert.match(consoleSource, /function upcomingEventsFor/);

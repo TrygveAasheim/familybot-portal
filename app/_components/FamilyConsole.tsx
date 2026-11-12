@@ -5,6 +5,7 @@ import { overviewSettings, upcomingOverview } from "./dashboardOverview";
 import type { OverviewActivity } from "./dashboardOverview";
 import { MetroSymbol, WeatherSymbol } from "./OverviewSymbols";
 import { WeekPlanInterpreted, WeekPlanText } from "./WeekPlanContent";
+import { WeekPlanDocument } from "./WeekPlanDocument";
 import type { WeekPlanInterpretation } from "./WeekPlanContent";
 
 const configuredApiPort=import.meta.env.VITE_FAMILYBOT_API_PORT||"8788";
@@ -418,9 +419,9 @@ function WeekPlanDetailPage({child,planId,token,onBack}:{child:Child;planId:numb
   if(error)return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake</button><p className="error-text">{error}</p></section>;
   if(!detail)return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake</button><div className="loading-inline"><div className="spinner"/><p>Ukeplanen åpnes …</p></div></section>;
   return <section className="week-plan-detail"><button type="button" className="back-button" onClick={onBack}>← Tilbake til {child.name}</button><header><p className="eyebrow">Skolen denne uken</p><h1>Ukeplan · uke {detail.week_number}</h1><p className="week-detail-child">{detail.member}</p></header>
-    <article className="week-detail-text"><h2>{detail.interpretation?"Ukeplanen strukturert":"Hele ukeplanen"}</h2>{detail.interpretation?<WeekPlanInterpreted interpretation={detail.interpretation}/>:<WeekPlanText text={detail.full_text}/>}</article>
-    {detail.summary&&<details className="week-detail-summary"><summary>Vis oppsummering</summary><WeekPlanText text={detail.summary}/></details>}
-    {detail.days.length>0&&<section className="week-detail-days"><h2>Dagene</h2><div className="week-items">{detail.days.map(item=><article key={item.id}><div><span>{item.day}</span>{item.date&&<time>{dateFormat.format(asDate(item.date)!)}</time>}</div>{item.subject&&<h3>{item.subject}</h3>}{item.homework&&<WeekPlanText text={`Lekser: ${item.homework}`} headingLevel={4}/>} {item.note&&<WeekPlanText text={`Dette skjer: ${item.note}`} headingLevel={4}/>} {item.bring&&<WeekPlanText text={`Ta med: ${item.bring}`} headingLevel={4}/>}</article>)}</div></section>}</section>
+    <WeekPlanDocument key={`${child.id}-${planId}`} url={`${apiBase()}/api/children/${child.id}/week-plans/${planId}/document`} token={token}/>
+    <details className="week-detail-summary"><summary>Tekst fra ukeplanen</summary><p className="parent-help">Automatisk uttrekk kan miste tabeller og sammenhenger. Originalen over er fasiten. Teksten beholdes separat for informasjonstjenestene.</p>{detail.interpretation?<WeekPlanInterpreted interpretation={detail.interpretation}/>:<WeekPlanText text={detail.full_text}/>}</details>
+    </section>
 }
 function eventLabel(item:EventItem,today:string){if(!item.event_time&&String(item.id).startsWith("activity-"))return "Tid kommer";if(item.event_date.slice(0,10)===today)return eventTime(item);const parsed=asDate(item.event_date);const day=parsed?dateFormat.format(parsed):item.event_date.slice(0,10);const time=item.event_time?item.event_time.slice(0,5):parsed&&item.event_date.includes("T")?timeFormat.format(parsed):"";return time?`${day} · ${time}`:day}
 function upcomingEventsFor(data:Dashboard){return upcomingOverview(data)}

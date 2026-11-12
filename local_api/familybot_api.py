@@ -56,6 +56,7 @@ from hellofresh_norway import HelloFreshNorwayClient, HelloFreshUnavailable
 from oda_dinner import DinnerValidationError
 from oda_dinner import recommend as recommend_dinner
 from oda_mcp import OdaAuthRequired, OdaMcpClient, OdaUnavailable, OdaValidationError
+from week_plan_document import DocumentUnavailable, read_document
 
 DEFAULT_WORKSPACE = Path(
     os.environ.get("FAMILYBOT_WORKSPACE") or os.environ.get("OPENCLAW_WORKSPACE") or str(Path.home() / ".familybot")
@@ -1144,6 +1145,19 @@ class FamilyRepository:
             ))
             return result
 
+    def week_plan_document(self, child_id: int, plan_id: int) -> bytes:
+        # Child/plan association is checked independently of the detail route.
+        with self.connect() as connection:
+            row = connection.execute(
+                """SELECT w.layout_json FROM week_plans w
+                   JOIN family_members m ON m.id=w.member_id
+                   WHERE w.id=? AND w.member_id=? AND m.role='child'""",
+                (plan_id, child_id),
+            ).fetchone()
+        if row is None:
+            raise DocumentUnavailable()
+        return read_document(self.workspace, row[0] or "{}")
+
     @staticmethod
     def validate_chore(payload: dict[str, Any], partial: bool = False) -> dict[str, Any]:
         clean: dict[str, Any] = {}
@@ -2020,6 +2034,29 @@ class FamilyApiHandler(BaseHTTPRequestHandler):
             except HelloFreshUnavailable as exc:
                 self.log_error("hellofresh read unavailable: %s", type(exc).__name__)
                 self.respond(503, {"error": str(exc)})
+            return
+        document = re.fullmatch(r"/api/children/(\d{1,10})/week-plans/(\d{1,10})/document", parsed.path)
+        if document:
+            try:
+                if parsed.query:
+                    raise DocumentUnavailable()
+                body = self.app.repository.week_plan_document(int(document.group(1)), int(document.group(2)))
+                self.send_response(200)
+                self.cors()
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Content-Disposition", 'attachment; filename="ukeplan.pdf"')
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("X-Frame-Options", "DENY")
+                self.send_header("Content-Security-Policy", "sandbox; default-src 'none'")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.end_headers()
+                self.wfile.write(body)
+            except DocumentUnavailable:
+                self.respond(404, {"error": "Originaldokumentet er ikke tilgjengelig."})
+            except sqlite3.Error:
+                self.respond(503, {"error": "Ukeplanen er midlertidig utilgjengelig."})
             return
         week_plan = re.fullmatch(r"/api/children/(\d+)/week-plans/(\d+)", parsed.path)
         if week_plan:
